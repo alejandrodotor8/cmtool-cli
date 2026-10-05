@@ -1,6 +1,7 @@
 {
   "name": "ctf-migrate",
   "version": "0.1.0",
+  "private": true,
   "description": "Migra entries de Contentful entre ambientes de forma interactiva, dejándolas en draft",
   "type": "module",
   "bin": {

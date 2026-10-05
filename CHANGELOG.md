@@ -17,6 +17,9 @@
 
 ### Cambiado
 
+- **pnpm** como gestor de paquetes (`pnpm-lock.yaml`, `packageManager`). El comando global se instala con `pnpm add -g "link:$PWD"`.
+- README con instalación separada para **macOS** y **Windows** (PowerShell, permisos de scripts, terminal recomendada, token por sistema) y cómo pasarle el proyecto a otra persona.
+
 - Un **texto enlazado** en un rich text ya no se considera hijo: no se migra.
 - Código dividido por capas (`src/`), en TypeScript que Node ejecuta sin compilar. Requiere Node 22.18 o superior.
 - Menos llamadas a la API: content types en 2 llamadas y entries por nivel, en lotes.

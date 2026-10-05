@@ -1,7 +1,7 @@
 import type { ContentType, Field } from '../contentful/types.ts';
 
 /** Firma del tipo de un campo: si cambia entre ambientes, los valores no son compatibles. */
-export const fieldSig = (f: Field): string => [f.type, f.linkType, f.items?.type, f.items?.linkType].join('|');
+const fieldSig = (f: Field): string => [f.type, f.linkType, f.items?.type, f.items?.linkType].join('|');
 
 export const fieldType = (f: Field): string =>
   f.type === 'Link'

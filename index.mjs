@@ -3,7 +3,7 @@
  * ctf-migrate — migra entries de Contentful (padre + hijos) entre ambientes.
  * Entries e imágenes quedan en DRAFT. Los comandos están en src/commands/
  *
- * Este archivo es JavaScript para que el comando enlazado con `npm link` no cambie;
+ * Este archivo es JavaScript para que el comando global (enlazado con pnpm o npm) no cambie;
  * Node (>= 22.18) carga los módulos .ts directamente, sin compilar.
  */
 import pc from 'picocolors';

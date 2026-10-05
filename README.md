@@ -4,30 +4,95 @@ Migra entries de Contentful entre ambientes (por ejemplo, un banner de `develop`
 
 ## Requisitos
 
-- Node 22.18+ (corre TypeScript directo, sin compilar). Con fnm, `.node-version` elige Node 24.
-- Una sesión de Contentful (ver abajo)
+- **Node 22.18 o superior** (recomendado 24). Corre TypeScript directo, sin compilar.
+- **pnpm** (el proyecto usa pnpm 12; `packageManager` en `package.json`).
+- Una **sesión de Contentful** (`contentful login`) o un token de administración.
 
 ## Instalación (una sola vez)
 
-1. Instala el Contentful CLI e inicia sesión. Se abre el navegador para autorizar y la sesión queda guardada en `~/.contentfulrc.json`:
+### macOS
+
+1. **Node.** Con [fnm](https://github.com/Schniz/fnm): `fnm install 24`. El proyecto trae `.node-version`, así que fnm elige Node 24 al entrar a la carpeta.
+2. **pnpm** y su carpeta de comandos globales (abre una terminal nueva después de `pnpm setup`):
+
+   ```bash
+   corepack enable pnpm   # o: brew install pnpm
+   pnpm setup
+   ```
+
+3. **Contentful CLI** e inicio de sesión. Se abre el navegador para autorizar y la sesión queda en `~/.contentfulrc.json`:
 
    ```bash
    npm install -g contentful-cli
    contentful login
    ```
 
-2. Instala la herramienta desde esta carpeta:
+4. **La herramienta**, desde la carpeta del proyecto:
 
    ```bash
-   npm install
-   npm link        # deja disponible el comando `ctf-migrate` globalmente
+   pnpm install
+   pnpm add -g "link:$PWD"   # deja el comando ctf-migrate disponible en cualquier carpeta
    ```
 
-> **Sin el CLI:** también puedes crear un token en Contentful (*Settings → CMA tokens*) y exportarlo antes de correr: `export CONTENTFUL_MANAGEMENT_TOKEN=<token>`.
->
-> **Si usas fnm o nvm:** `npm link` queda atado a la versión de Node activa. Si cambias de versión, repite `npm link`.
->
-> **Si sale un error 401:** la sesión expiró. Vuelve a correr `contentful login`.
+   Si antes la instalaste con `npm link`, quita esa versión para no tener dos comandos: `npm rm -g ctf-migrate`.
+
+### Windows
+
+Usa **Windows Terminal con PowerShell** (viene en Windows 11). En el `cmd` antiguo la herramienta funciona, pero algunos símbolos de las tablas (✔ ✖ ≠ ↗) pueden verse como cuadritos.
+
+1. **Permitir scripts** (una sola vez). Sin esto, PowerShell bloquea los comandos de pnpm y npm con *"running scripts is disabled on this system"*:
+
+   ```powershell
+   Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+   ```
+
+2. **Node y pnpm** (cierra y abre la terminal después de `pnpm setup`):
+
+   ```powershell
+   winget install OpenJS.NodeJS.LTS
+   winget install pnpm.pnpm
+   pnpm setup
+   ```
+
+3. **Contentful CLI** e inicio de sesión. La sesión queda en `C:\Users\<usuario>\.contentfulrc.json`:
+
+   ```powershell
+   npm install -g contentful-cli
+   contentful login
+   ```
+
+4. **La herramienta**, desde la carpeta del proyecto:
+
+   ```powershell
+   pnpm install
+   pnpm add -g "link:$PWD"
+   ```
+
+### Sin el Contentful CLI
+
+Crea un token en Contentful (*Settings → CMA tokens*) y defínelo en la terminal antes de correr:
+
+| Sistema | Comando |
+| --- | --- |
+| macOS | `export CONTENTFUL_MANAGEMENT_TOKEN=<token>` |
+| Windows (PowerShell) | `$env:CONTENTFUL_MANAGEMENT_TOKEN = "<token>"` |
+
+### Notas
+
+- **Sin instalar el comando global**: desde la carpeta del proyecto, `pnpm start` (con opciones: `pnpm start --dry-run`).
+- **Los cambios al código se aplican al instante**: el comando global es un enlace a esta carpeta, no una copia. Por eso hay que instalarlo con `link:`; una copia dentro de la carpeta global de pnpm no funcionaría, porque Node no ejecuta `.ts` dentro de `node_modules`.
+- **Cambiar de versión de Node** no rompe el comando: usa el `node` activo (22.18 o superior).
+- **Desinstalar**: `pnpm rm -g ctf-migrate`.
+- **Error 401**: la sesión expiró. Vuelve a correr `contentful login`.
+
+### Pasarle el proyecto a otra persona
+
+No hay repositorio remoto, así que se comparte como archivo:
+
+- **Con historial de git** (recomendado): `git bundle create ctf-migrate.bundle --all`. La otra persona lo clona con `git clone ctf-migrate.bundle ctf-migrate`.
+- **Sin historial**: un zip de la carpeta **sin** `node_modules`.
+
+Después sigue los pasos de instalación de su sistema.
 
 ## Uso
 
@@ -113,7 +178,7 @@ Cada migración guarda un respaldo en `~/.ctf-migrate/backups/` (en Windows, `C:
 
 ## Seguridad
 
-- **Un solo módulo escribe**: [src/contentful/write.ts](src/contentful/write.ts). Queda atado al ambiente destino y no tiene forma de borrar, archivar, despublicar ni escribir en origen. Lo verifica [test/security.test.ts](test/security.test.ts) sobre el código fuente: si alguien agrega una escritura en otro archivo, `npm test` falla.
+- **Un solo módulo escribe**: [src/contentful/write.ts](src/contentful/write.ts). Queda atado al ambiente destino y no tiene forma de borrar, archivar, despublicar ni escribir en origen. Lo verifica [test/security.test.ts](test/security.test.ts) sobre el código fuente: si alguien agrega una escritura en otro archivo, `pnpm test` falla.
 - **El token solo va a Contentful**: se lee de `CONTENTFUL_MANAGEMENT_TOKEN` o de `~/.contentfulrc.json` y solo se envía a `api.contentful.com` o `api.eu.contentful.com`. Si el archivo de sesión apunta a otro host, la herramienta se detiene. Los mensajes de error nunca imprimen la request (que lleva el token).
 - **Las imágenes solo se copian desde el CDN de Contentful** (`*.ctfassets.net`, por https).
 - **Nada se escribe antes de confirmar**: todo lo anterior al resumen es solo lectura.
@@ -124,7 +189,7 @@ Cada migración guarda un respaldo en `~/.ctf-migrate/backups/` (en Windows, `C:
 Cada comando se lee de arriba abajo en [src/commands/](src/commands/). El código está separado por responsabilidad: lo que lee, lo que decide, lo que muestra y lo que escribe.
 
 ```text
-index.mjs                entrada del comando (JS, para que `npm link` no cambie)
+index.mjs                entrada del comando (JS; Node carga los .ts de src/)
 src/
   main.ts                lee los argumentos y corre el comando
   cli-args.ts            argumentos (--space/--from/--to/--ids, --dry-run, --verbose, restore)
@@ -165,11 +230,12 @@ src/
 El código es TypeScript. Node lo ejecuta quitando los tipos, así que **no hay paso de compilación**: editas un `.ts` y corres `ctf-migrate`.
 
 ```bash
-npm run typecheck   # revisa tipos con tsc (no genera archivos)
-npm run lint        # lint + formato con Biome
-npm run format      # aplica el formato y los arreglos automáticos de Biome
-npm test            # tests (node:test, sin dependencias extra)
-npm run check       # typecheck + lint + tests; córrelo antes de hacer commit
+pnpm typecheck   # revisa tipos con tsc (no genera archivos)
+pnpm lint        # lint + formato con Biome
+pnpm format      # aplica el formato y los arreglos automáticos de Biome
+pnpm test        # tests (node:test, sin dependencias extra)
+pnpm check       # typecheck + lint + tests; córrelo antes de hacer commit
+pnpm start       # corre la herramienta desde la carpeta, sin el comando global
 ```
 
 Los tests viven en `test/` y no llaman a Contentful: usan objetos armados a mano (`test/fixtures.ts`) y un CMA falso que registra cada llamada. Cubren:

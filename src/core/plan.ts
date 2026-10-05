@@ -80,7 +80,7 @@ export function classifyTree(rootIds: string[], tree: EntryTree, existsInDst: Se
 export const writtenEntries = ({ tree, actions }: Pick<Analysis, 'tree' | 'actions'>): Entry[] =>
   [...tree.entries.values()].filter((e) => isWrite(actions.get(e.sys.id)));
 
-export const writtenContentTypes = (analysis: Pick<Analysis, 'tree' | 'actions'>): Set<string> =>
+const writtenContentTypes = (analysis: Pick<Analysis, 'tree' | 'actions'>): Set<string> =>
   new Set(writtenEntries(analysis).map(contentTypeOf));
 
 /**

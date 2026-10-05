@@ -4,15 +4,17 @@
   "private": true,
   "description": "Migra entries de Contentful entre ambientes de forma interactiva, dejándolas en draft",
   "type": "module",
+  "packageManager": "pnpm@12.3.4",
   "bin": {
     "ctf-migrate": "./index.mjs"
   },
   "scripts": {
+    "start": "node index.mjs",
     "typecheck": "tsc",
     "lint": "biome check .",
     "format": "biome check --write .",
     "test": "node --test test/*.test.ts",
-    "check": "npm run typecheck && npm run lint && npm test"
+    "check": "tsc && biome check . && node --test test/*.test.ts"
   },
   "engines": {
     "node": ">=22.18"

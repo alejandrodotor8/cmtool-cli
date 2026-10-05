@@ -20,5 +20,5 @@
     "checkJs": true,
     "skipLibCheck": true
   },
-  "include": ["index.mjs", "src"]
+  "include": ["index.mjs", "src", "test"]
 }

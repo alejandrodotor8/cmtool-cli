@@ -106,8 +106,17 @@ El código es TypeScript. Node lo ejecuta quitando los tipos, así que **no hay 
 npm run typecheck   # revisa tipos con tsc (no genera archivos)
 npm run lint        # lint + formato con Biome
 npm run format      # aplica el formato y los arreglos automáticos de Biome
-npm run check       # typecheck + lint; córrelo antes de hacer commit
+npm test            # tests (node:test, sin dependencias extra)
+npm run check       # typecheck + lint + tests; córrelo antes de hacer commit
 ```
+
+Los tests viven en `test/` y no llaman a Contentful: usan objetos armados a mano (`test/fixtures.ts`) y un CMA falso que registra cada llamada. Cubren:
+
+- **Reglas de migración** (`plan.test.ts`): qué se crea, actualiza, reutiliza o no se crea; qué se ofrece agregar al modelo; el plan final.
+- **Transformación de valores** (`fields.test.ts`): locales, merge con la entry existente y assets.
+- **Modelo, links e IDs** (`model.test.ts`, `entries.test.ts`, `ids.test.ts`).
+- **Seguridad**: el writer solo escribe en destino y solo publica content types (`write.test.ts`); el token solo va a hosts de Contentful (`session.test.ts`); los errores no muestran el token (`errors.test.ts`); los archivos solo se copian desde el CDN de Contentful (`fields.test.ts`).
+- **Lectura del árbol** (`read.test.ts`): por niveles, links rotos y ciclos.
 
 Reglas para que Node pueda ejecutar los `.ts` sin compilar:
 

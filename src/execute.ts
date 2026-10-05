@@ -9,6 +9,7 @@ import type { Writer } from './contentful/write.ts';
 import { contentTypeOf } from './core/entries.ts';
 import { assetFieldsForDestination, fieldsForDestination, mergeWithExisting } from './core/fields.ts';
 import { ACTION, type Plan } from './core/plan.ts';
+import { writableFields } from './core/publish-check.ts';
 import { log } from './ui/log.ts';
 import { createRunner } from './ui/runner.ts';
 
@@ -71,9 +72,8 @@ export async function executePlan(plan: Plan, analysis: Analysis, writer: Writer
       continue;
     }
 
-    // Solo campos que existen en ambos modelos con el mismo tipo.
-    const mismatched = new Set((diffs.get(ctId)?.mismatched ?? []).map((f) => f.id));
-    const writable = new Map(dstCT.fields.filter((f) => !mismatched.has(f.id)).map((f) => [f.id, f]));
+    // Solo campos que existen en ambos modelos con el mismo tipo; el resto conserva su valor.
+    const writable = writableFields(dstCT, diffs.get(ctId));
     const fields = fieldsForDestination(entry, writable, locales.dst);
     const tags = (entry.metadata?.tags ?? []).filter((t) => dstTagIds.has(t.sys.id));
 

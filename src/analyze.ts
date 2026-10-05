@@ -19,6 +19,8 @@ export interface Analysis {
   dst: string;
   rootIds: string[];
   tree: EntryTree;
+  /** Las entries del árbol que ya existen en destino, tal como están allá. */
+  dstEntries: Map<string, Entry>;
   existsInDst: Set<string>;
   /** Qué pasa con cada entry del árbol. */
   actions: Map<string, Action>;
@@ -39,7 +41,8 @@ export async function analyze(
 ): Promise<Analysis> {
   // Árbol de entries y qué pasa con cada una.
   const tree = await readEntryTree(cma, src, rootIds);
-  const existsInDst = new Set((await fetchEntries(cma, dst, tree.entries.keys())).keys());
+  const dstEntries = await fetchEntries(cma, dst, tree.entries.keys());
+  const existsInDst = new Set(dstEntries.keys());
   const actions = classifyTree(rootIds, tree, existsInDst);
   const written = writtenEntries({ tree, actions });
 
@@ -86,6 +89,7 @@ export async function analyze(
     dst,
     rootIds,
     tree,
+    dstEntries,
     existsInDst,
     actions,
     contentTypes,

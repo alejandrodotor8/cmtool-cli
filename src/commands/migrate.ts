@@ -13,6 +13,7 @@ import { createCma } from '../contentful/client.ts';
 import { listEnvironments, listSpaces } from '../contentful/read.ts';
 import { createWriter } from '../contentful/write.ts';
 import { buildPlan, modelOptions } from '../core/plan.ts';
+import { requiredGaps } from '../core/publish-check.ts';
 import { AbortError } from '../errors.ts';
 import { executePlan } from '../execute.ts';
 import { loadSession } from '../session.ts';
@@ -71,7 +72,7 @@ export async function migrate({ dryRun }: CliArgs): Promise<number> {
   const picked = options.length ? await askModelChanges(options, dst) : [];
 
   const plan = buildPlan(analysis, { withAssets, picked });
-  renderSummary(analysis, plan);
+  renderSummary(analysis, plan, requiredGaps(analysis, plan));
   if (!plan.entries.length) throw new AbortError('No queda nada para migrar.');
 
   if (dryRun) {

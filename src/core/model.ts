@@ -11,7 +11,8 @@ export const fieldType = (f: Field): string =>
       : f.type;
 
 export const FIELD = {
-  OK: 'ok', // existe en ambos con el mismo tipo
+  OK: 'ok', // existe en ambos, igual
+  RULES: 'rules', // mismo tipo, pero cambian reglas (obligatorio, localizado, validaciones)
   MISSING: 'missing', // falta en destino
   MISMATCH: 'mismatch', // existe en ambos con distinto tipo
   EXTRA: 'extra', // solo existe en destino
@@ -19,10 +20,22 @@ export const FIELD = {
 
 export type FieldStatus = (typeof FIELD)[keyof typeof FIELD];
 
+/** Diferencias de reglas entre un campo de origen y el mismo campo en destino. */
+export interface RuleChanges {
+  /** Obligatorio en destino pero no en origen: si queda vacío, la entry no se podrá publicar. */
+  requiredOnlyInDst: boolean;
+  /** Localizado en origen pero no en destino: solo se copia el locale por defecto. */
+  localizationLost: boolean;
+  /** Validaciones que cambian, por nombre (`size`, `linkContentType`, `items.linkContentType`…). */
+  validations: string[];
+}
+
 export interface FieldRow {
   field: Field;
   dstField: Field | undefined;
   status: FieldStatus;
+  /** Solo cuando `status` es RULES. */
+  rules?: RuleChanges;
 }
 
 export interface ContentTypeDiff {
@@ -35,6 +48,42 @@ export interface ContentTypeDiff {
   missing: Field[];
   extra: Field[];
   mismatched: Field[];
+  /** Mismo tipo, reglas distintas. */
+  changedRules: Field[];
+}
+
+/** JSON estable: los arrays de valores simples se ordenan, para que el orden no cuente como diferencia. */
+const stableJson = (value: unknown): string =>
+  JSON.stringify(value, (_, v) =>
+    Array.isArray(v) && v.every((x) => typeof x !== 'object') ? [...v].sort() : (v as unknown),
+  );
+
+/** Validaciones de un campo (y de sus items, si es un Array) por nombre. Ignora los mensajes. */
+function validationsOf(f: Field): Map<string, string> {
+  const out = new Map<string, string>();
+  const add = (list: object[] | undefined, prefix: string) => {
+    for (const validation of list ?? []) {
+      for (const [name, value] of Object.entries(validation)) {
+        if (name !== 'message') out.set(prefix + name, stableJson(value));
+      }
+    }
+  };
+  add(f.validations, '');
+  add(f.items?.validations, 'items.');
+  return out;
+}
+
+/** Compara las reglas de un campo con el mismo tipo en ambos ambientes. `undefined` si son iguales. */
+export function compareRules(src: Field, dst: Field): RuleChanges | undefined {
+  const srcValidations = validationsOf(src);
+  const dstValidations = validationsOf(dst);
+  const names = new Set([...srcValidations.keys(), ...dstValidations.keys()]);
+  const rules: RuleChanges = {
+    requiredOnlyInDst: dst.required && !src.required,
+    localizationLost: src.localized && !dst.localized,
+    validations: [...names].filter((name) => srcValidations.get(name) !== dstValidations.get(name)),
+  };
+  return rules.requiredOnlyInDst || rules.localizationLost || rules.validations.length ? rules : undefined;
 }
 
 /** Compara un content type de origen con el de destino (`undefined` si no existe allá). */
@@ -44,8 +93,10 @@ export function diffContentType(srcCT: ContentType, dstCT: ContentType | undefin
 
   const rows: FieldRow[] = srcCT.fields.map((field) => {
     const dstField = dstById.get(field.id);
-    const status = !dstField ? FIELD.MISSING : fieldSig(field) !== fieldSig(dstField) ? FIELD.MISMATCH : FIELD.OK;
-    return { field, dstField, status };
+    if (!dstField) return { field, dstField, status: FIELD.MISSING };
+    if (fieldSig(field) !== fieldSig(dstField)) return { field, dstField, status: FIELD.MISMATCH };
+    const rules = compareRules(field, dstField);
+    return rules ? { field, dstField, status: FIELD.RULES, rules } : { field, dstField, status: FIELD.OK };
   });
   for (const field of dstCT?.fields ?? []) {
     if (!srcIds.has(field.id)) rows.push({ field, dstField: field, status: FIELD.EXTRA });
@@ -60,5 +111,6 @@ export function diffContentType(srcCT: ContentType, dstCT: ContentType | undefin
     missing: fieldsWith(FIELD.MISSING),
     extra: fieldsWith(FIELD.EXTRA),
     mismatched: fieldsWith(FIELD.MISMATCH),
+    changedRules: fieldsWith(FIELD.RULES),
   };
 }

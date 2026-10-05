@@ -1,9 +1,11 @@
 import pc from 'picocolors';
 
-export const MARK = { yes: pc.green('✔'), no: pc.red('✖'), diff: pc.yellow('≠') } as const;
+export const MARK = { yes: pc.green('✔'), no: pc.red('✖'), diff: pc.red('≠'), rules: pc.yellow('!') } as const;
 
 export const legend = () =>
-  console.log(pc.dim(`  ${MARK.yes} existe   ${MARK.no} no existe   ${MARK.diff} tipo distinto`));
+  console.log(
+    pc.dim(`  ${MARK.yes} existe   ${MARK.no} no existe   ${MARK.diff} tipo distinto   ${MARK.rules} reglas distintas`),
+  );
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: son los códigos ANSI de color
 const ANSI = /\x1b\[[0-9;]*m/g;

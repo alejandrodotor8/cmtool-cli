@@ -4,9 +4,9 @@
 import pc from 'picocolors';
 import type { Analysis } from '../analyze.ts';
 import type { BackupData, SavedEntry } from '../backup.ts';
-import type { Entry } from '../contentful/types.ts';
+import type { Entry, Field } from '../contentful/types.ts';
 import { contentTypeOf } from '../core/entries.ts';
-import { FIELD, type FieldRow, fieldType } from '../core/model.ts';
+import { FIELD, type FieldRow, fieldType, type RuleChanges } from '../core/model.ts';
 import { ACTION, type Action, isWrite, type Plan } from '../core/plan.ts';
 import { RESTORE, type RestoreStatus, restoreStatus } from '../core/restore.ts';
 import { log } from './log.ts';
@@ -135,12 +135,59 @@ export function renderAssets({ src, dst, assets, locales }: Analysis): void {
   });
 }
 
-function fieldRow({ field, dstField, status }: FieldRow, index: number, dst: string): string[] {
+/** Nombres legibles de las validaciones de Contentful. */
+const VALIDATION_LABEL: Record<string, string> = {
+  linkContentType: 'tipos de entry permitidos',
+  linkMimetypeGroup: 'tipo de archivo',
+  size: 'tamaño',
+  range: 'rango',
+  in: 'valores permitidos',
+  regexp: 'formato',
+  prohibitRegexp: 'formato prohibido',
+  unique: 'único',
+  dateRange: 'rango de fechas',
+  assetFileSize: 'peso del archivo',
+  assetImageDimensions: 'dimensiones de imagen',
+  enabledNodeTypes: 'bloques de rich text',
+  enabledMarks: 'formatos de rich text',
+  nodes: 'links en rich text',
+};
+
+const validationLabel = (name: string) => {
+  const base = name.replace(/^items\./, '');
+  return VALIDATION_LABEL[base] ?? base;
+};
+
+/** Texto de las reglas que cambian en destino. */
+function rulesText(rules: RuleChanges, dst: string, dstDefault: string | undefined): string {
+  return [
+    rules.requiredOnlyInDst && `obligatorio en ${dst}`,
+    rules.localizationLost && `no localizado en ${dst}: solo se copia ${dstDefault ?? 'el locale por defecto'}`,
+    rules.validations.length && `validaciones: ${[...new Set(rules.validations.map(validationLabel))].join(', ')}`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function fieldRow(
+  { field, dstField, status, rules }: FieldRow,
+  index: number,
+  dst: string,
+  dstDefault: string | undefined,
+): string[] {
   const cells = [clip(field.name, 28), pc.dim(field.id), fieldType(field)];
   const num = pc.dim(String(index + 1));
   switch (status) {
     case FIELD.OK:
       return [num, ...cells, MARK.yes, MARK.yes, pc.green('al día')];
+    case FIELD.RULES:
+      return [
+        num,
+        ...cells,
+        MARK.yes,
+        MARK.rules,
+        pc.yellow(rules ? rulesText(rules, dst, dstDefault) : 'reglas distintas'),
+      ];
     case FIELD.MISSING:
       return [num, ...cells, MARK.yes, MARK.no, pc.yellow(`falta en ${dst}`)];
     case FIELD.MISMATCH:
@@ -157,7 +204,7 @@ function fieldRow({ field, dstField, status }: FieldRow, index: number, dst: str
 }
 
 /** Una tabla por content type del árbol, campo por campo, en el orden del modelo de origen. */
-export function renderModel({ src, dst, diffs, tree, actions, titleOf }: Analysis): void {
+export function renderModel({ src, dst, diffs, tree, actions, titleOf, locales }: Analysis): void {
   log.step(`Modelo  ${pc.bold(src)} ${pc.dim('vs')} ${pc.bold(dst)}`);
   legend();
 
@@ -168,6 +215,7 @@ export function renderModel({ src, dst, diffs, tree, actions, titleOf }: Analysi
           diff.missing.length && pc.yellow(`${diff.missing.length} falta(n)`),
           diff.extra.length && pc.cyan(`${diff.extra.length} sobra(n)`),
           diff.mismatched.length && pc.red(`${diff.mismatched.length} otro tipo`),
+          diff.changedRules.length && pc.yellow(`${diff.changedRules.length} con reglas distintas`),
         ].filter(Boolean);
     const usedBy = [...tree.entries.values()]
       .filter((e) => contentTypeOf(e) === diff.id)
@@ -184,14 +232,18 @@ export function renderModel({ src, dst, diffs, tree, actions, titleOf }: Analysi
         ...envColumns(src, dst),
         { header: 'Estado' },
       ],
-      rows: diff.rows.map((row, i) => fieldRow(row, i, dst)),
+      rows: diff.rows.map((row, i) => fieldRow(row, i, dst, locales.dst.default)),
     });
     log.info(`usado por: ${clip(usedBy.join(', '), 90)}`);
   }
 }
 
 /** Caja final con todo lo que va a pasar, antes de confirmar. */
-export function renderSummary({ src, dst, actions, assets, locales }: Analysis, plan: Plan): void {
+export function renderSummary(
+  { src, dst, actions, assets, locales, tree, titleOf }: Analysis,
+  plan: Plan,
+  gaps: Map<string, Field[]>,
+): void {
   log.step('Resumen');
   const created = plan.entries.filter((e) => e.action === ACTION.CREATE).length;
   const reused = countActions(actions, ACTION.REUSE);
@@ -229,6 +281,17 @@ export function renderSummary({ src, dst, actions, assets, locales }: Analysis, 
     rows: rows.map(([label, value]) => [pc.bold(label), value]),
   });
   if (plan.skipped.length) log.warn(`Quien use estas entries quedará con links rotos: ${plan.skipped.join(', ')}`);
+
+  if (gaps.size) {
+    log.warn(
+      `${gaps.size} entry(s) quedarán en ${dst} con campos obligatorios vacíos: no se podrán publicar hasta completarlos.`,
+    );
+    for (const [id, fields] of gaps) {
+      const entry = tree.entries.get(id);
+      const name = entry ? titleOf(entry) : id;
+      log.info(`${clip(name)} ${id}: ${fields.map((f) => f.name).join(', ')}`);
+    }
+  }
 }
 
 const RESTORE_LABEL: Record<RestoreStatus, string> = {

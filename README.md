@@ -48,8 +48,9 @@ ctf-migrate
    - campos que **faltan** en destino → eliges cuáles agregar (si no marcas nada, no se toca el modelo y esos campos no se migran);
    - campos que **sobran** en destino → no se tocan y conservan su valor;
    - campos con **otro tipo** → no se migran;
+   - campos con el mismo tipo pero **reglas distintas** (`!`): obligatorio solo en destino, localizado en origen pero no en destino (solo se copia el locale por defecto) o validaciones distintas (tipos de entry permitidos, tamaño, formato…);
    - content types que **no existen** en destino → eliges si crearlos (si no, esas entries no se migran).
-7. Revisa el **resumen** y confirma. Si el destino parece producción (es `master` o tiene un alias), tienes que escribir el nombre del ambiente para confirmar.
+7. Revisa el **resumen** y confirma. El resumen avisa qué entries quedarán con **campos obligatorios vacíos** en destino (no se podrán publicar hasta completarlos). Si el destino parece producción (es `master` o tiene un alias), tienes que escribir el nombre del ambiente para confirmar.
 8. Al terminar te dice dónde quedó el **respaldo** de la migración.
 
 ### Probar sin escribir: `--dry-run`
@@ -119,7 +120,8 @@ src/
     write.ts             ÚNICO módulo que escribe en Contentful
   core/                  reglas puras: sin red, sin terminal
     plan.ts              qué se crea, actualiza, reutiliza; plan de escritura
-    model.ts             comparación de content types campo por campo
+    model.ts             comparación de content types campo por campo (tipo y reglas)
+    publish-check.ts     campos que se escriben; obligatorios que quedarían vacíos
     fields.ts            valores de origen → formato de destino (locales, merge, assets)
     entries.ts           links, hijos, imágenes y título de una entry
     ids.ts               parseo de IDs/URLs pegados
@@ -153,6 +155,7 @@ Los tests viven en `test/` y no llaman a Contentful: usan objetos armados a mano
 - **Lectura del árbol** (`read.test.ts`): por niveles, links rotos y ciclos.
 - **Respaldo y restore** (`backup.test.ts`, `restore.test.ts`, `write.test.ts`): el respaldo se guarda antes de actualizar y, si falla, no se actualiza; detecta cambios posteriores a la migración.
 - **Argumentos** (`cli-args.test.ts`).
+- **Reglas del modelo y publicación** (`model.test.ts`, `publish-check.test.ts`): obligatorio, localizado y validaciones; qué entries quedan con obligatorios vacíos; los campos que solo existen en destino no se tocan.
 
 Reglas para que Node pueda ejecutar los `.ts` sin compilar:
 

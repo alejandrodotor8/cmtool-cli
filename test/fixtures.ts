@@ -60,6 +60,7 @@ export function analysisOf({
   rootIds,
   entries,
   existsInDst = [],
+  dstEntries = [],
   srcCTs,
   dstCTs = [],
   srcAssets = [],
@@ -68,7 +69,10 @@ export function analysisOf({
 }: {
   rootIds: string[];
   entries: Entry[];
+  /** IDs que existen en destino (sin campos). */
   existsInDst?: string[];
+  /** Entries que existen en destino, con sus campos. */
+  dstEntries?: Entry[];
   srcCTs: ContentType[];
   dstCTs?: ContentType[];
   srcAssets?: Asset[];
@@ -76,7 +80,7 @@ export function analysisOf({
   missingTags?: Tag[];
 }): Analysis {
   const tree = treeOf(entries);
-  const exists = new Set(existsInDst);
+  const exists = new Set([...existsInDst, ...dstEntries.map((e) => e.sys.id)]);
   const actions = classifyTree(rootIds, tree, exists);
   const contentTypes = {
     src: new Map(srcCTs.map((ct) => [ct.sys.id, ct])),
@@ -95,6 +99,7 @@ export function analysisOf({
     dst: 'qa',
     rootIds,
     tree,
+    dstEntries: new Map(dstEntries.map((e) => [e.sys.id, e])),
     existsInDst: exists,
     actions,
     contentTypes,

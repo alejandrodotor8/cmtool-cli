@@ -4,69 +4,77 @@ Migra entries de Contentful entre ambientes (por ejemplo, un banner de `develop`
 
 ## Requisitos
 
-- **Node 22.18 o superior** (recomendado 24). Corre TypeScript directo, sin compilar.
-- **pnpm** (el proyecto usa pnpm 12; `packageManager` en `package.json`).
+- **Node 22.18 o superior** (recomendado 24). La herramienta siempre corre con Node, que ejecuta TypeScript directo, sin compilar.
+- **Un gestor de paquetes, el que prefieras**: npm (viene con Node), pnpm o bun. El proyecto no obliga a ninguno y no sube lockfiles: cada quien instala con el suyo.
 - Una **sesión de Contentful** (`contentful login`) o un token de administración.
 
 ## Instalación (una sola vez)
 
-### macOS
+### 1. Node y tu gestor de paquetes
 
-1. **Node.** Con [fnm](https://github.com/Schniz/fnm): `fnm install 24`. El proyecto trae `.node-version`, así que fnm elige Node 24 al entrar a la carpeta.
-2. **pnpm** y su carpeta de comandos globales (abre una terminal nueva después de `pnpm setup`):
+**macOS**
+
+```bash
+fnm install 24                                   # Node con fnm; el proyecto trae .node-version
+corepack enable pnpm                             # solo si usas pnpm (o: brew install pnpm)
+curl -fsSL https://bun.sh/install | bash         # solo si usas bun (o: brew install oven-sh/bun/bun)
+```
+
+**Windows** — usa **Windows Terminal con PowerShell** (viene en Windows 11). En el `cmd` antiguo la herramienta funciona, pero algunos símbolos de las tablas (✔ ✖ ≠ ↗) pueden verse como cuadritos.
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned   # una sola vez: sin esto PowerShell bloquea npm/pnpm ("running scripts is disabled")
+winget install OpenJS.NodeJS.LTS                       # Node (trae npm)
+winget install pnpm.pnpm                               # solo si usas pnpm
+winget install Oven-sh.Bun                             # solo si usas bun
+```
+
+Cierra y abre la terminal después de instalar.
+
+**Solo pnpm**: la primera vez corre `pnpm setup` y abre una terminal nueva, para que sus comandos globales queden en el PATH.
+
+### 2. Contentful CLI e inicio de sesión
+
+Se abre el navegador para autorizar. La sesión queda en `~/.contentfulrc.json` (en Windows, `C:\Users\<usuario>\.contentfulrc.json`).
+
+| npm | pnpm | bun |
+| --- | --- | --- |
+| `npm install -g contentful-cli` | `pnpm add -g contentful-cli` | `bun add -g contentful-cli` |
+
+Después, con cualquiera: `contentful login`.
+
+### 3. La herramienta
+
+Desde la carpeta del proyecto, con tu gestor:
+
+| | npm | pnpm | bun |
+| --- | --- | --- | --- |
+| **Instalar dependencias** | `npm install` | `pnpm install` | `bun install` |
+| **Instalar el comando `ctf-migrate`** | `npm link` | `pnpm add -g "link:$PWD"` | `bun link` |
+| **Quitar el comando** | `npm rm -g ctf-migrate` | `pnpm rm -g ctf-migrate` | `bun unlink` (desde la carpeta) |
+| **Correr sin instalar el comando** | `npm start -- --dry-run` | `pnpm start --dry-run` | `bun run start --dry-run` |
+
+Los comandos son los mismos en macOS y Windows (en PowerShell, `$PWD` también es la carpeta actual).
+
+- **El comando es un enlace a esta carpeta, no una copia**: los cambios al código se aplican al instante. Por eso con pnpm se usa `link:` (en pnpm 10+ ya no existe `pnpm link --global`). Una copia no funcionaría: Node no ejecuta `.ts` dentro de `node_modules`.
+- **Instala el comando con un solo gestor.** Si tienes dos instalaciones, gana la que esté primero en el PATH y es fácil confundirse.
+
+### Cambiar de gestor de paquetes
+
+1. Quita el comando con el gestor anterior (fila **Quitar el comando**).
+2. Borra lo que instaló:
 
    ```bash
-   corepack enable pnpm   # o: brew install pnpm
-   pnpm setup
+   # macOS
+   rm -rf node_modules package-lock.json pnpm-lock.yaml bun.lock bun.lockb
    ```
-
-3. **Contentful CLI** e inicio de sesión. Se abre el navegador para autorizar y la sesión queda en `~/.contentfulrc.json`:
-
-   ```bash
-   npm install -g contentful-cli
-   contentful login
-   ```
-
-4. **La herramienta**, desde la carpeta del proyecto:
-
-   ```bash
-   pnpm install
-   pnpm add -g "link:$PWD"   # deja el comando ctf-migrate disponible en cualquier carpeta
-   ```
-
-   Si antes la instalaste con `npm link`, quita esa versión para no tener dos comandos: `npm rm -g ctf-migrate`.
-
-### Windows
-
-Usa **Windows Terminal con PowerShell** (viene en Windows 11). En el `cmd` antiguo la herramienta funciona, pero algunos símbolos de las tablas (✔ ✖ ≠ ↗) pueden verse como cuadritos.
-
-1. **Permitir scripts** (una sola vez). Sin esto, PowerShell bloquea los comandos de pnpm y npm con *"running scripts is disabled on this system"*:
 
    ```powershell
-   Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+   # Windows (PowerShell)
+   Remove-Item -Recurse -Force node_modules, package-lock.json, pnpm-lock.yaml, bun.lock, bun.lockb -ErrorAction SilentlyContinue
    ```
 
-2. **Node y pnpm** (cierra y abre la terminal después de `pnpm setup`):
-
-   ```powershell
-   winget install OpenJS.NodeJS.LTS
-   winget install pnpm.pnpm
-   pnpm setup
-   ```
-
-3. **Contentful CLI** e inicio de sesión. La sesión queda en `C:\Users\<usuario>\.contentfulrc.json`:
-
-   ```powershell
-   npm install -g contentful-cli
-   contentful login
-   ```
-
-4. **La herramienta**, desde la carpeta del proyecto:
-
-   ```powershell
-   pnpm install
-   pnpm add -g "link:$PWD"
-   ```
+3. Instala dependencias y el comando con el nuevo gestor.
 
 ### Sin el Contentful CLI
 
@@ -79,20 +87,18 @@ Crea un token en Contentful (*Settings → CMA tokens*) y defínelo en la termin
 
 ### Notas
 
-- **Sin instalar el comando global**: desde la carpeta del proyecto, `pnpm start` (con opciones: `pnpm start --dry-run`).
-- **Los cambios al código se aplican al instante**: el comando global es un enlace a esta carpeta, no una copia. Por eso hay que instalarlo con `link:`; una copia dentro de la carpeta global de pnpm no funcionaría, porque Node no ejecuta `.ts` dentro de `node_modules`.
-- **Cambiar de versión de Node** no rompe el comando: usa el `node` activo (22.18 o superior).
-- **Desinstalar**: `pnpm rm -g ctf-migrate`.
+- **npm y fnm/nvm**: con `npm link` el comando queda instalado en la versión de Node activa; si cambias de versión, repite `npm link`. Con pnpm y bun el comando usa el `node` que tengas activo.
 - **Error 401**: la sesión expiró. Vuelve a correr `contentful login`.
+- **Sin lockfile**, las dependencias directas están fijadas a versiones exactas en `package.json`. Para revisar vulnerabilidades: `npm audit`, `pnpm audit` o `bun audit`.
 
 ### Pasarle el proyecto a otra persona
 
 No hay repositorio remoto, así que se comparte como archivo:
 
 - **Con historial de git** (recomendado): `git bundle create ctf-migrate.bundle --all`. La otra persona lo clona con `git clone ctf-migrate.bundle ctf-migrate`.
-- **Sin historial**: un zip de la carpeta **sin** `node_modules`.
+- **Sin historial**: un zip de la carpeta **sin** `node_modules` ni lockfiles.
 
-Después sigue los pasos de instalación de su sistema.
+Después sigue los pasos de instalación con su sistema y su gestor.
 
 ## Uso
 
@@ -178,11 +184,11 @@ Cada migración guarda un respaldo en `~/.ctf-migrate/backups/` (en Windows, `C:
 
 ## Seguridad
 
-- **Un solo módulo escribe**: [src/contentful/write.ts](src/contentful/write.ts). Queda atado al ambiente destino y no tiene forma de borrar, archivar, despublicar ni escribir en origen. Lo verifica [test/security.test.ts](test/security.test.ts) sobre el código fuente: si alguien agrega una escritura en otro archivo, `pnpm test` falla.
+- **Un solo módulo escribe**: [src/contentful/write.ts](src/contentful/write.ts). Queda atado al ambiente destino y no tiene forma de borrar, archivar, despublicar ni escribir en origen. Lo verifica [test/security.test.ts](test/security.test.ts) sobre el código fuente: si alguien agrega una escritura en otro archivo, los tests fallan.
 - **El token solo va a Contentful**: se lee de `CONTENTFUL_MANAGEMENT_TOKEN` o de `~/.contentfulrc.json` y solo se envía a `api.contentful.com` o `api.eu.contentful.com`. Si el archivo de sesión apunta a otro host, la herramienta se detiene. Los mensajes de error nunca imprimen la request (que lleva el token).
 - **Las imágenes solo se copian desde el CDN de Contentful** (`*.ctfassets.net`, por https).
 - **Nada se escribe antes de confirmar**: todo lo anterior al resumen es solo lectura.
-- **Dependencias**: solo 3 para correr (`contentful-management`, `@inquirer/prompts`, `picocolors`) y 3 de desarrollo con versión exacta (`typescript`, `@types/node`, `@biomejs/biome`). Ninguna tiene scripts de instalación. El paquete es `private` para que no se publique en npm por error.
+- **Dependencias**: solo 3 para correr (`contentful-management`, `@inquirer/prompts`, `picocolors`) y 3 de desarrollo (`typescript`, `@types/node`, `@biomejs/biome`), todas con versión exacta. Ninguna tiene scripts de instalación. El paquete es `private` para que no se publique en npm por error.
 
 ## Cómo está organizado
 
@@ -229,14 +235,18 @@ src/
 
 El código es TypeScript. Node lo ejecuta quitando los tipos, así que **no hay paso de compilación**: editas un `.ts` y corres `ctf-migrate`.
 
-```bash
-pnpm typecheck   # revisa tipos con tsc (no genera archivos)
-pnpm lint        # lint + formato con Biome
-pnpm format      # aplica el formato y los arreglos automáticos de Biome
-pnpm test        # tests (node:test, sin dependencias extra)
-pnpm check       # typecheck + lint + tests; córrelo antes de hacer commit
-pnpm start       # corre la herramienta desde la carpeta, sin el comando global
-```
+Con tu gestor (`npm run …`, `pnpm …` o `bun run …`):
+
+| Script | Qué hace |
+| --- | --- |
+| `typecheck` | revisa tipos con tsc (no genera archivos) |
+| `lint` | lint + formato con Biome |
+| `format` | aplica el formato y los arreglos automáticos de Biome |
+| `test` | tests (`node:test`, sin dependencias extra) |
+| `check` | typecheck + lint + tests; córrelo antes de hacer commit |
+| `start` | corre la herramienta desde la carpeta, sin el comando global |
+
+Por ejemplo: `npm run check`, `pnpm check` o `bun run check`. Los tests siempre corren con Node (`node --test`), también con bun.
 
 Los tests viven en `test/` y no llaman a Contentful: usan objetos armados a mano (`test/fixtures.ts`) y un CMA falso que registra cada llamada. Cubren:
 

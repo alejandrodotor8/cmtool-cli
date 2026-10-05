@@ -4,7 +4,6 @@
   "private": true,
   "description": "Migra entries de Contentful entre ambientes de forma interactiva, dejándolas en draft",
   "type": "module",
-  "packageManager": "pnpm@12.3.4",
   "bin": {
     "ctf-migrate": "./index.mjs"
   },
@@ -20,9 +19,9 @@
     "node": ">=22.18"
   },
   "dependencies": {
-    "@inquirer/prompts": "^8.7.3",
-    "contentful-management": "^12.19.0",
-    "picocolors": "^1.1.1"
+    "@inquirer/prompts": "8.7.3",
+    "contentful-management": "12.19.0",
+    "picocolors": "1.1.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

@@ -8,16 +8,19 @@
 import pc from 'picocolors';
 import { analyze, changesSinceAnalysis } from '../analyze.ts';
 import { startBackup } from '../backup.ts';
-import type { CliArgs } from '../cli-args.ts';
+import { type CliArgs, repeatCommand } from '../cli-args.ts';
 import { LIMITS } from '../config.ts';
 import { createCma } from '../contentful/client.ts';
 import { listEnvironments, listSpaces } from '../contentful/read.ts';
+import type { Environment } from '../contentful/types.ts';
 import { createWriter } from '../contentful/write.ts';
+import { resolveEnvironment } from '../core/environments.ts';
 import { brokenHyperlinks, buildPlan, isWrite, modelOptions } from '../core/plan.ts';
 import { requiredGaps } from '../core/publish-check.ts';
 import { AbortError } from '../errors.ts';
 import { executePlan } from '../execute.ts';
 import { loadSession } from '../session.ts';
+import { trackApiCalls } from '../ui/api-calls.ts';
 import { log } from '../ui/log.ts';
 import {
   askEntryIds,
@@ -25,12 +28,14 @@ import {
   askWithAssets,
   confirmLargeMigration,
   confirmWrite,
-  pickEnvironments,
+  pickDestination,
+  pickSource,
   pickSpace,
 } from '../ui/prompts.ts';
 import { renderAssets, renderEntryTree, renderModel, renderSummary } from '../ui/views.ts';
 
-export async function migrate({ dryRun }: CliArgs): Promise<number> {
+export async function migrate(args: CliArgs): Promise<number> {
+  const { dryRun } = args;
   console.log(
     pc.bold('\nContentful · migrar entries entre ambientes') +
       pc.dim(dryRun ? '  (--dry-run: no se escribe nada)' : '  (entries e imágenes quedan en draft)'),
@@ -38,15 +43,25 @@ export async function migrate({ dryRun }: CliArgs): Promise<number> {
 
   // 1. Qué migrar y hacia dónde
   const session = loadSession();
-  const spaces = await listSpaces(createCma(session));
+  const api = trackApiCalls(args.verbose);
+  const spaces = await listSpaces(createCma(session, undefined, api.onRequest));
   if (!spaces.length) throw new AbortError('Tu usuario no tiene acceso a ningún space.');
-  const spaceId = await pickSpace(spaces, session.defaultSpaceId);
-  const cma = createCma(session, spaceId);
+  if (args.space && !spaces.some((s) => s.sys.id === args.space)) {
+    throw new AbortError(`No tienes acceso al space "${args.space}".`);
+  }
+  const spaceId = args.space ?? (await pickSpace(spaces, session.defaultSpaceId));
+  const cma = createCma(session, spaceId, api.onRequest);
 
   const envs = await listEnvironments(cma);
   if (envs.length < 2) throw new AbortError('Este space tiene un solo ambiente; no hay a dónde migrar.');
-  const { src, dst } = await pickEnvironments(envs);
-  const rootIds = await askEntryIds();
+  const src = args.from ? requireEnvironment(envs, args.from) : await pickSource(envs);
+  const dst = args.to ? requireEnvironment(envs, args.to) : await pickDestination(envs, src);
+  if (src === dst) throw new AbortError('Origen y destino son el mismo ambiente.');
+  const rootIds = args.ids ?? (await askEntryIds());
+  if (args.space || args.from || args.to || args.ids) {
+    log.info(`space ${spaceId} · ${src} → ${dst} · ${rootIds.length} entry(s)`);
+  }
+  const repeat = repeatCommand({ spaceId, src, dst, rootIds });
 
   // 2. Análisis (solo lectura)
   log.step(`Analizando ${pc.bold(src)} ${pc.dim('──▶')} ${pc.bold(dst)}…`);
@@ -84,6 +99,8 @@ export async function migrate({ dryRun }: CliArgs): Promise<number> {
 
   if (dryRun) {
     log.step('Modo --dry-run: no se escribió nada.');
+    log.info(`Para migrar: ${repeat}`);
+    log.info(`Llamadas a la API: ${api.count}`);
     return 0;
   }
 
@@ -113,5 +130,14 @@ export async function migrate({ dryRun }: CliArgs): Promise<number> {
   }
   log.info(`Respaldo: ${backup.file}`);
   log.info('Para deshacer: ctf-migrate restore');
+  log.info(`Para repetir: ${repeat}`);
+  log.info(`Llamadas a la API: ${api.count}`);
   return failures.length ? 1 : 0;
+}
+
+/** Ambiente pasado por flag (ID o alias); si no existe, se detiene. */
+function requireEnvironment(envs: Environment[], name: string): string {
+  const id = resolveEnvironment(envs, name);
+  if (!id) throw new AbortError(`El ambiente "${name}" no existe en este space.`);
+  return id;
 }

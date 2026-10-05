@@ -56,6 +56,24 @@ ctf-migrate
 7. Revisa el **resumen** y confirma. El resumen avisa qué entries quedarán con **campos obligatorios vacíos** en destino (no se podrán publicar hasta completarlos). Si el destino parece producción (es `master` o tiene un alias), tienes que escribir el nombre del ambiente para confirmar.
 8. Al terminar te dice dónde quedó el **respaldo** de la migración.
 
+### Sin pasar por los menús
+
+```bash
+ctf-migrate --space <space> --from develop --to qa --ids 5NIY0nRGNkKvvjO8yc8Pp1,otroId
+```
+
+`--space`, `--from`, `--to` e `--ids` reemplazan las primeras preguntas (`--from`/`--to` aceptan aliases como `master`). Las preguntas de imágenes y modelo, y la confirmación final, se hacen siempre. Al terminar, la herramienta imprime el comando equivalente (**"Para repetir: …"**) para que puedas copiarlo.
+
+### Ver cada llamada a la API: `--verbose`
+
+```bash
+ctf-migrate --verbose
+```
+
+Muestra cada llamada (método, ruta y parámetros; nunca headers ni token). Siempre, al terminar, dice cuántas llamadas se hicieron.
+
+`ctf-migrate --help` muestra todas las opciones.
+
 ### Probar sin escribir: `--dry-run`
 
 ```bash
@@ -94,8 +112,7 @@ Cada migración guarda un respaldo en `~/.ctf-migrate/backups/` (en Windows, `C:
 
 ## Seguridad
 
-- **Un solo módulo escribe**: [src/contentful/write.ts](src/contentful/write.ts). Queda atado al ambiente destino y no tiene forma de borrar, archivar, despublicar ni escribir en origen. Para verificarlo:
-  `grep -rnE "\.(createWithId|update|publish|delete|archive|unpublish)\(" src` solo debe mostrar ese archivo.
+- **Un solo módulo escribe**: [src/contentful/write.ts](src/contentful/write.ts). Queda atado al ambiente destino y no tiene forma de borrar, archivar, despublicar ni escribir en origen. Lo verifica [test/security.test.ts](test/security.test.ts) sobre el código fuente: si alguien agrega una escritura en otro archivo, `npm test` falla.
 - **El token solo va a Contentful**: se lee de `CONTENTFUL_MANAGEMENT_TOKEN` o de `~/.contentfulrc.json` y solo se envía a `api.contentful.com` o `api.eu.contentful.com`. Si el archivo de sesión apunta a otro host, la herramienta se detiene. Los mensajes de error nunca imprimen la request (que lleva el token).
 - **Las imágenes solo se copian desde el CDN de Contentful** (`*.ctfassets.net`, por https).
 - **Nada se escribe antes de confirmar**: todo lo anterior al resumen es solo lectura.
@@ -109,7 +126,7 @@ Cada comando se lee de arriba abajo en [src/commands/](src/commands/). El códig
 index.mjs                entrada del comando (JS, para que `npm link` no cambie)
 src/
   main.ts                lee los argumentos y corre el comando
-  cli-args.ts            argumentos (--dry-run, restore, --help)
+  cli-args.ts            argumentos (--space/--from/--to/--ids, --dry-run, --verbose, restore)
   commands/
     migrate.ts           ctf-migrate: el flujo de migración, paso a paso
     restore.ts           ctf-migrate restore: deshace una migración
@@ -121,7 +138,7 @@ src/
   execute.ts             paso final: aplica el plan con el writer
   contentful/
     types.ts             tipos de Contentful con nombres cortos
-    client.ts            cliente del CMA
+    client.ts            cliente del CMA; describe cada llamada para --verbose (sin headers)
     read.ts              lecturas (árbol de entries, modelos, locales, assets, tags)
     write.ts             ÚNICO módulo que escribe en Contentful
   core/                  reglas puras: sin red, sin terminal
@@ -132,12 +149,14 @@ src/
     entries.ts           links, hijos, imágenes y título de una entry
     ids.ts               parseo de IDs/URLs pegados
     restore.ts           qué se restaura y qué cambió después
+    environments.ts      ambiente por ID o alias
   ui/                    terminal: no decide ni escribe
     views.ts             tablas de entries, imágenes, modelo y resumen
     prompts.ts           preguntas al usuario
     table.ts             dibujo de tablas
     log.ts               mensajes de estado
     runner.ts            ejecuta escrituras una por una (✔ / ✖)
+    api-calls.ts         cuenta las llamadas a la API (y las muestra con --verbose)
 ```
 
 ## Desarrollo
@@ -160,7 +179,8 @@ Los tests viven en `test/` y no llaman a Contentful: usan objetos armados a mano
 - **Seguridad**: el writer solo escribe en destino y solo publica content types (`write.test.ts`); el token solo va a hosts de Contentful (`session.test.ts`); los errores no muestran el token (`errors.test.ts`); los archivos solo se copian desde el CDN de Contentful (`fields.test.ts`).
 - **Lectura del árbol** (`read.test.ts`): por niveles, links rotos y ciclos.
 - **Respaldo y restore** (`backup.test.ts`, `restore.test.ts`, `write.test.ts`): el respaldo se guarda antes de actualizar y, si falla, no se actualiza; detecta cambios posteriores a la migración.
-- **Argumentos** (`cli-args.test.ts`).
+- **Argumentos y flags** (`cli-args.test.ts`, `environments.test.ts`): incluido que el comando "Para repetir" se vuelve a leer igual.
+- **Código fuente** (`security.test.ts`): solo el writer escribe, nunca borra/archiva/despublica, y solo publica content types. `client.test.ts`: `--verbose` nunca muestra el token.
 - **Comportamiento** (`entries.test.ts`, `read.test.ts`, `plan.test.ts`, `errors.test.ts`): textos enlazados que no son hijos, límite del árbol, entries archivadas, cambios en destino durante la revisión y conflictos de versión.
 - **Reglas del modelo y publicación** (`model.test.ts`, `publish-check.test.ts`): obligatorio, localizado y validaciones; qué entries quedan con obligatorios vacíos; los campos que solo existen en destino no se tocan.
 

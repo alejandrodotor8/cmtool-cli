@@ -12,12 +12,13 @@ import { fetchEntries, listEnvironments } from '../contentful/read.ts';
 import { createWriter } from '../contentful/write.ts';
 import { RESTORE, restoreStatus } from '../core/restore.ts';
 import { loadSession } from '../session.ts';
+import { trackApiCalls } from '../ui/api-calls.ts';
 import { log } from '../ui/log.ts';
 import { confirmWrite, pickBackup } from '../ui/prompts.ts';
 import { createRunner } from '../ui/runner.ts';
 import { renderRestore } from '../ui/views.ts';
 
-export async function restore({ dryRun, file }: CliArgs): Promise<number> {
+export async function restore({ dryRun, file, verbose }: CliArgs): Promise<number> {
   console.log(
     pc.bold('\nContentful · deshacer una migración') + pc.dim(dryRun ? '  (--dry-run: no se escribe nada)' : ''),
   );
@@ -25,7 +26,8 @@ export async function restore({ dryRun, file }: CliArgs): Promise<number> {
   const session = loadSession();
   const backupFile = file ? path.resolve(file) : await pickBackup(listBackups());
   const data = readBackup(backupFile);
-  const cma = createCma(session, data.spaceId);
+  const api = trackApiCalls(verbose);
+  const cma = createCma(session, data.spaceId, api.onRequest);
 
   log.step(`Revisando ${pc.bold(data.dst)}…`);
   const current = await fetchEntries(
@@ -43,6 +45,7 @@ export async function restore({ dryRun, file }: CliArgs): Promise<number> {
   }
   if (dryRun) {
     log.step('Modo --dry-run: no se escribió nada.');
+    log.info(`Llamadas a la API: ${api.count}`);
     return 0;
   }
 
@@ -72,5 +75,6 @@ export async function restore({ dryRun, file }: CliArgs): Promise<number> {
 
   log.step(failures.length ? `Terminado con ${failures.length} error(es)` : 'Listo.');
   log.info(`Respaldo de este restore: ${backup.file}`);
+  log.info(`Llamadas a la API: ${api.count}`);
   return failures.length ? 1 : 0;
 }

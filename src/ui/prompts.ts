@@ -20,19 +20,17 @@ export const pickSpace = (spaces: Space[], defaultId: string | undefined): Promi
     pageSize: 15,
   });
 
-export async function pickEnvironments(envs: Environment[]): Promise<{ src: string; dst: string }> {
-  const choices = envs.map((e) => ({
+const envChoices = (envs: Environment[]) =>
+  envs.map((e) => ({
     name: e.id + (e.aliases.length ? pc.dim(`  (alias: ${e.aliases.join(', ')})`) : ''),
     value: e.id,
   }));
-  const src = await select({ message: 'Ambiente ORIGEN', choices, pageSize: 15 });
-  const dst = await select({
-    message: 'Ambiente DESTINO',
-    choices: choices.filter((c) => c.value !== src),
-    pageSize: 15,
-  });
-  return { src, dst };
-}
+
+export const pickSource = (envs: Environment[]): Promise<string> =>
+  select({ message: 'Ambiente ORIGEN', choices: envChoices(envs), pageSize: 15 });
+
+export const pickDestination = (envs: Environment[], src: string): Promise<string> =>
+  select({ message: 'Ambiente DESTINO', choices: envChoices(envs).filter((c) => c.value !== src), pageSize: 15 });
 
 export async function askEntryIds(): Promise<string[]> {
   const raw = await input({

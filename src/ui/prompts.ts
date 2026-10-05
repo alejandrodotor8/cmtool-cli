@@ -3,10 +3,12 @@
  */
 import { checkbox, confirm, input, Separator, select } from '@inquirer/prompts';
 import pc from 'picocolors';
+import { BACKUP_DIR, type BackupData } from '../backup.ts';
 import type { Environment, Space } from '../contentful/types.ts';
 import { parseEntryIds } from '../core/ids.ts';
 import { fieldType } from '../core/model.ts';
 import type { ModelOption, ModelPick } from '../core/plan.ts';
+import { AbortError } from '../errors.ts';
 import { log } from './log.ts';
 import { clip, pad } from './table.ts';
 
@@ -78,16 +80,32 @@ export function askModelChanges(options: ModelOption[], dst: string): Promise<Mo
 }
 
 /**
- * Confirmación final. Si el destino parece producción (es `master` o tiene un alias),
- * no basta con "sí": hay que escribir el nombre del ambiente.
+ * Confirmación antes de escribir. Si el destino parece producción (es `master` o tiene
+ * un alias), no basta con "sí": hay que escribir el nombre del ambiente.
  */
-export async function confirmMigration(dstEnv: Environment): Promise<boolean> {
+export async function confirmWrite(dstEnv: Environment, question: string): Promise<boolean> {
   const looksLikeProduction = dstEnv.id === 'master' || dstEnv.aliases.length > 0;
-  if (!looksLikeProduction) {
-    return confirm({ message: `¿Migrar a ${pc.bold(dstEnv.id)}? (entries e imágenes en draft)`, default: true });
-  }
+  if (!looksLikeProduction) return confirm({ message: question, default: true });
+
   const why = dstEnv.aliases.length ? `tiene el alias ${dstEnv.aliases.join(', ')}` : 'es master';
   log.warn(`${pc.bold(dstEnv.id)} ${why}: probablemente es producción.`);
   const typed = await input({ message: `Para confirmar, escribe el nombre del ambiente (${dstEnv.id})` });
   return typed.trim() === dstEnv.id;
+}
+
+/** Elige un respaldo de la lista (el más reciente primero). Devuelve la ruta del archivo. */
+export function pickBackup(backups: { file: string; data: BackupData }[]): Promise<string> {
+  if (!backups.length) throw new AbortError(`No hay respaldos en ${BACKUP_DIR}.`);
+  return select({
+    message: 'Respaldo',
+    pageSize: 15,
+    choices: backups.map(({ file, data }) => ({
+      value: file,
+      name: [
+        new Date(data.createdAt).toLocaleString('es-CO'),
+        `${data.kind === 'restore' ? 'restore' : 'migración'} ${data.src} → ${data.dst}`,
+        pc.dim(`${data.updated.length} actualizada(s), ${data.created.entries.length} creada(s)`),
+      ].join('  '),
+    })),
+  });
 }

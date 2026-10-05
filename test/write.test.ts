@@ -40,6 +40,39 @@ describe('createWriter', () => {
     assert.ok(calls.findIndex((c) => c.method === 'entry.get') < calls.indexOf(update));
   });
 
+  test('respalda la versión actual antes de actualizar; si el respaldo falla, no actualiza', async () => {
+    const { cma, calls } = fakeCma([entry('e1', 'banner', { title: { 'es-CO': 'Viejo' } })]);
+    const writer = createWriter(cma, { src: 'develop', dst: 'qa' });
+
+    const seen: unknown[] = [];
+    await writer.updateEntry(
+      'e1',
+      (current) => current,
+      [],
+      (current) => {
+        seen.push(current.fields);
+        assert.equal(calls.filter((c) => c.method === 'entry.update').length, 0, 'todavía no actualizó');
+      },
+    );
+    assert.deepEqual(seen, [{ title: { 'es-CO': 'Viejo' } }]);
+
+    const before = calls.length;
+    await assert.rejects(
+      writer.updateEntry(
+        'e1',
+        (current) => current,
+        [],
+        () => {
+          throw new Error('disco lleno');
+        },
+      ),
+    );
+    assert.equal(
+      calls.slice(before).some((c) => c.method === 'entry.update'),
+      false,
+    );
+  });
+
   test('solo publica content types', async () => {
     const { cma, calls } = fakeCma([entry('e1', 'banner')]);
     const writer = createWriter(cma, { src: 'develop', dst: 'qa' });

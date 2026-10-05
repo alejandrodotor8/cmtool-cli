@@ -52,9 +52,19 @@ export function createWriter(cma: Cma, { src, dst }: { src: string; dst: string 
     createEntry: (id: string, contentTypeId: string, fields: Entry['fields'], tags: TagLink[]) =>
       cma.entry.createWithId({ ...env, entryId: id, contentTypeId }, { fields, metadata: { tags } }),
 
-    /** Lee la versión actual en destino y la actualiza con `buildFields(camposActuales)`. */
-    async updateEntry(id: string, buildFields: (current: Entry['fields']) => Entry['fields'], tags: TagLink[]) {
+    /**
+     * Lee la versión actual en destino y la actualiza con `buildFields(camposActuales)`.
+     * `beforeUpdate` recibe la versión actual antes de escribir (para respaldarla); si falla,
+     * la entry no se actualiza.
+     */
+    async updateEntry(
+      id: string,
+      buildFields: (current: Entry['fields']) => Entry['fields'],
+      tags: TagLink[],
+      beforeUpdate?: (current: Entry) => void,
+    ) {
       const current = await cma.entry.get({ ...env, entryId: id });
+      beforeUpdate?.(current);
       return cma.entry.update(
         { ...env, entryId: id },
         { ...current, fields: buildFields(current.fields ?? {}), metadata: { ...current.metadata, tags } },

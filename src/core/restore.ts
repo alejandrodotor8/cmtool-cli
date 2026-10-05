@@ -1,0 +1,19 @@
+import type { SavedEntry } from '../backup.ts';
+import type { Entry } from '../contentful/types.ts';
+
+export const RESTORE = {
+  RESTORE: 'restore', // nadie la tocó después de la migración
+  CHANGED: 'changed', // alguien la editó o publicó después: restaurar también deshace eso
+  MISSING: 'missing', // ya no existe en destino: se omite
+} as const;
+
+export type RestoreStatus = (typeof RESTORE)[keyof typeof RESTORE];
+
+/**
+ * Qué pasa al restaurar una entry. La migración hace una sola actualización, que deja
+ * la versión en `respaldo + 1`; cualquier otra versión significa que hubo cambios después.
+ */
+export function restoreStatus(saved: SavedEntry, current: Entry | undefined): RestoreStatus {
+  if (!current) return RESTORE.MISSING;
+  return current.sys.version === saved.version + 1 ? RESTORE.RESTORE : RESTORE.CHANGED;
+}

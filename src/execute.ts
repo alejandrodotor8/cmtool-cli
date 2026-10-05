@@ -1,31 +1,22 @@
 /**
- * Paso final: aplica el plan con el writer. Si algo falla, sigue con lo demás y
- * devuelve la lista de fallos.
+ * Paso final: aplica el plan con el writer y deja todo anotado en el respaldo.
+ * Si algo falla, sigue con lo demás y devuelve la lista de fallos.
  */
 import pc from 'picocolors';
 import type { Analysis } from './analyze.ts';
+import type { Backup } from './backup.ts';
 import type { Writer } from './contentful/write.ts';
 import { contentTypeOf } from './core/entries.ts';
 import { assetFieldsForDestination, fieldsForDestination, mergeWithExisting } from './core/fields.ts';
 import { ACTION, type Plan } from './core/plan.ts';
-import { formatError } from './errors.ts';
 import { log } from './ui/log.ts';
+import { createRunner } from './ui/runner.ts';
 
-export async function executePlan(plan: Plan, analysis: Analysis, writer: Writer): Promise<string[]> {
+export async function executePlan(plan: Plan, analysis: Analysis, writer: Writer, backup: Backup): Promise<string[]> {
   const { titleOf, locales, diffs } = analysis;
   const dstCTs = new Map(analysis.contentTypes.dst); // se actualiza con los cambios de modelo
   const dstTagIds = new Set(analysis.tags.dstIds);
-  const failures: string[] = [];
-
-  const run = async (label: string, fn: () => Promise<unknown>) => {
-    try {
-      await fn();
-      log.ok(label);
-    } catch (e) {
-      failures.push(label);
-      log.err(`${label} → ${formatError(e)}`);
-    }
-  };
+  const { run, fail, failures } = createRunner();
 
   if (plan.tagsToCreate.length) {
     log.step('Tags');
@@ -33,6 +24,7 @@ export async function executePlan(plan: Plan, analysis: Analysis, writer: Writer
       await run(`tag ${tag.sys.id}`, async () => {
         await writer.createTag(tag);
         dstTagIds.add(tag.sys.id);
+        backup.recordCreated('tags', tag.sys.id);
       });
     }
   }
@@ -42,6 +34,7 @@ export async function executePlan(plan: Plan, analysis: Analysis, writer: Writer
     for (const ct of plan.contentTypesToCreate) {
       await run(`content type ${ct.sys.id} creado`, async () => {
         dstCTs.set(ct.sys.id, await writer.createContentType(ct));
+        backup.recordCreated('contentTypes', ct.sys.id);
       });
     }
     for (const [ctId, fields] of plan.fieldsToAdd) {
@@ -49,6 +42,10 @@ export async function executePlan(plan: Plan, analysis: Analysis, writer: Writer
         const current = dstCTs.get(ctId);
         if (!current) throw new Error(`el content type "${ctId}" no existe en ${writer.environment}`);
         dstCTs.set(ctId, await writer.addFields(current, fields));
+        backup.recordFields(
+          ctId,
+          fields.map((f) => f.id),
+        );
       });
     }
   }
@@ -56,20 +53,21 @@ export async function executePlan(plan: Plan, analysis: Analysis, writer: Writer
   if (plan.assetsToCreate.length) {
     log.step('Imágenes');
     for (const asset of plan.assetsToCreate) {
-      await run(`asset ${asset.sys.id} creado (draft)`, () =>
-        writer.createAsset(asset.sys.id, assetFieldsForDestination(asset, locales.dst)),
-      );
+      await run(`asset ${asset.sys.id} creado (draft)`, async () => {
+        await writer.createAsset(asset.sys.id, assetFieldsForDestination(asset, locales.dst));
+        backup.recordCreated('assets', asset.sys.id);
+      });
     }
   }
 
   log.step('Entries');
   for (const { id, action, entry } of plan.entries) {
     const ctId = contentTypeOf(entry);
-    const label = `${titleOf(entry)} ${pc.dim(id)}`;
+    const title = titleOf(entry);
+    const label = `${title} ${pc.dim(id)}`;
     const dstCT = dstCTs.get(ctId);
     if (!dstCT) {
-      failures.push(label);
-      log.err(`${label}: el content type "${ctId}" no se pudo crear en ${writer.environment}`);
+      fail(label, `el content type "${ctId}" no se pudo crear en ${writer.environment}`);
       continue;
     }
 
@@ -81,10 +79,18 @@ export async function executePlan(plan: Plan, analysis: Analysis, writer: Writer
 
     if (action === ACTION.UPDATE) {
       await run(`${label} actualizada ${pc.dim('(queda Changed si estaba publicada)')}`, () =>
-        writer.updateEntry(id, (current) => mergeWithExisting(current, fields, writable, locales.src), tags),
+        writer.updateEntry(
+          id,
+          (current) => mergeWithExisting(current, fields, writable, locales.src),
+          tags,
+          (current) => backup.recordUpdate(current, title),
+        ),
       );
     } else {
-      await run(`${label} creada (draft)`, () => writer.createEntry(id, ctId, fields, tags));
+      await run(`${label} creada (draft)`, async () => {
+        await writer.createEntry(id, ctId, fields, tags);
+        backup.recordCreated('entries', id);
+      });
     }
   }
 

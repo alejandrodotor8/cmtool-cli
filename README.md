@@ -50,6 +50,32 @@ ctf-migrate
    - campos con **otro tipo** → no se migran;
    - content types que **no existen** en destino → eliges si crearlos (si no, esas entries no se migran).
 7. Revisa el **resumen** y confirma. Si el destino parece producción (es `master` o tiene un alias), tienes que escribir el nombre del ambiente para confirmar.
+8. Al terminar te dice dónde quedó el **respaldo** de la migración.
+
+### Probar sin escribir: `--dry-run`
+
+```bash
+ctf-migrate --dry-run
+```
+
+Hace todo el análisis, muestra las tablas y el resumen, y se detiene ahí. No escribe nada en Contentful ni crea respaldo.
+
+### Deshacer una migración: `restore`
+
+```bash
+ctf-migrate restore                 # elige el respaldo de una lista
+ctf-migrate restore <respaldo.json> # o indica el archivo
+ctf-migrate restore --dry-run       # muestra qué restauraría, sin escribir
+```
+
+Cada migración guarda un respaldo en `~/.ctf-migrate/backups/` (en Windows, `C:\Users\<usuario>\.ctf-migrate\backups\`). Antes de actualizar una entry que ya existía en destino, guarda cómo estaba; si no puede guardarlo, no la actualiza.
+
+`restore` devuelve esas entries a como estaban:
+
+- Si alguien editó o publicó la entry **después** de la migración, te avisa: restaurar también deshace esos cambios.
+- Si la entry ya no existe en destino, la omite.
+- Lo que la migración **creó** (entries, imágenes, tags, content types, campos del modelo) **no se borra**, porque la herramienta nunca borra. Te lo lista para que decidas en Contentful.
+- El restore también guarda su propio respaldo, así que se puede deshacer.
 
 ## Garantías
 
@@ -58,6 +84,7 @@ ctf-migrate
 - Si una entry ya existe en destino, se actualizan solo los campos que existen en ambos modelos con el mismo tipo. Los campos que solo existen en destino conservan su valor.
 - Si una entry ya existe y está publicada, queda como **Changed**: lo publicado sigue en vivo.
 - Los tags que falten en destino se crean.
+- Antes de actualizar una entry existente, guarda cómo estaba (ver `restore`).
 
 ## Seguridad
 
@@ -70,12 +97,17 @@ ctf-migrate
 
 ## Cómo está organizado
 
-El flujo se lee de arriba abajo en [src/main.ts](src/main.ts). El código está separado por responsabilidad: lo que lee, lo que decide, lo que muestra y lo que escribe.
+Cada comando se lee de arriba abajo en [src/commands/](src/commands/). El código está separado por responsabilidad: lo que lee, lo que decide, lo que muestra y lo que escribe.
 
 ```text
 index.mjs                entrada del comando (JS, para que `npm link` no cambie)
 src/
-  main.ts                el flujo completo, paso a paso
+  main.ts                lee los argumentos y corre el comando
+  cli-args.ts            argumentos (--dry-run, restore, --help)
+  commands/
+    migrate.ts           ctf-migrate: el flujo de migración, paso a paso
+    restore.ts           ctf-migrate restore: deshace una migración
+  backup.ts              respaldos locales en ~/.ctf-migrate/backups/
   session.ts             token y host (sesión del CLI o variable de entorno)
   errors.ts              AbortError y formato de errores del CMA
   analyze.ts             paso de análisis: arma todo lo que se muestra (solo lectura)
@@ -91,11 +123,13 @@ src/
     fields.ts            valores de origen → formato de destino (locales, merge, assets)
     entries.ts           links, hijos, imágenes y título de una entry
     ids.ts               parseo de IDs/URLs pegados
+    restore.ts           qué se restaura y qué cambió después
   ui/                    terminal: no decide ni escribe
     views.ts             tablas de entries, imágenes, modelo y resumen
     prompts.ts           preguntas al usuario
     table.ts             dibujo de tablas
     log.ts               mensajes de estado
+    runner.ts            ejecuta escrituras una por una (✔ / ✖)
 ```
 
 ## Desarrollo
@@ -117,6 +151,8 @@ Los tests viven en `test/` y no llaman a Contentful: usan objetos armados a mano
 - **Modelo, links e IDs** (`model.test.ts`, `entries.test.ts`, `ids.test.ts`).
 - **Seguridad**: el writer solo escribe en destino y solo publica content types (`write.test.ts`); el token solo va a hosts de Contentful (`session.test.ts`); los errores no muestran el token (`errors.test.ts`); los archivos solo se copian desde el CDN de Contentful (`fields.test.ts`).
 - **Lectura del árbol** (`read.test.ts`): por niveles, links rotos y ciclos.
+- **Respaldo y restore** (`backup.test.ts`, `restore.test.ts`, `write.test.ts`): el respaldo se guarda antes de actualizar y, si falla, no se actualiza; detecta cambios posteriores a la migración.
+- **Argumentos** (`cli-args.test.ts`).
 
 Reglas para que Node pueda ejecutar los `.ts` sin compilar:
 

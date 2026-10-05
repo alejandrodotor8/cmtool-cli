@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * ctf-migrate — migra entries de Contentful entre ambientes de forma interactiva.
+ * ctf-migrate — migra entries de Contentful (padre + hijos) entre ambientes.
  * Todo queda en DRAFT. Usa la sesión del Contentful CLI (`contentful login`).
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createClient } from 'contentful-management';
-import { select, input, confirm } from '@inquirer/prompts';
+import { select, input, checkbox, confirm, Separator } from '@inquirer/prompts';
 import pc from 'picocolors';
 
 // ───────────────────────── utilidades ─────────────────────────
@@ -72,16 +72,18 @@ function collectLinks(value, out = []) {
 }
 
 const fieldSig = (f) => [f.type, f.linkType, f.items?.type, f.items?.linkType].join('|');
+const fieldType = (f) =>
+  f.type === 'Link' ? `Link ${f.linkType}` : f.type === 'Array' ? `Array<${f.items?.linkType ?? f.items?.type}>` : f.type;
 
-/** Devuelve el Set de IDs que sí existen en el ambiente. */
-async function existingIds(cma, environmentId, kind, ids) {
-  const found = new Set();
+/** Trae por ID las entries/assets que existan en el ambiente. */
+async function fetchMany(cma, environmentId, kind, ids) {
+  const found = new Map();
   for (const part of chunk(ids, 100)) {
     const res = await cma[kind].getMany({
       environmentId,
       query: { 'sys.id[in]': part.join(','), limit: 100 },
     });
-    res.items.forEach((i) => found.add(i.sys.id));
+    res.items.forEach((i) => found.set(i.sys.id, i));
   }
   return found;
 }
@@ -98,6 +100,52 @@ function formatError(e) {
   }
 }
 
+// ───────────────────────── tablas ─────────────────────────
+
+const YES = pc.green('✔');
+const NO = pc.red('✖');
+const DIFF = pc.yellow('≠');
+
+const ANSI = /\x1b\[[0-9;]*m/g;
+const width = (s) => String(s).replace(ANSI, '').length;
+const pad = (s, n, align = 'left') => {
+  const gap = Math.max(0, n - width(s));
+  if (align === 'center') return ' '.repeat(Math.floor(gap / 2)) + s + ' '.repeat(Math.ceil(gap / 2));
+  return s + ' '.repeat(gap);
+};
+/** Recorta texto plano (sin color) para que las tablas no se desborden. */
+const clip = (s, n = 34) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+
+/**
+ * Dibuja una tabla con borde redondeado.
+ * columns: [{ header, align }] — sin `header` en ninguna columna, no pinta encabezado.
+ * rows: arrays de celdas (pueden traer color).
+ */
+function table({ title, columns, rows }) {
+  const b = pc.dim;
+  const widths = columns.map((c, i) => Math.max(width(c.header ?? ''), ...rows.map((r) => width(r[i] ?? ''))));
+  const used = widths.reduce((a, w) => a + w, 0) + 2 * (columns.length - 1);
+  const inner = Math.max(used, title ? width(title) + 2 : 0);
+  widths[widths.length - 1] += inner - used;
+
+  const line = (cells) =>
+    b('│ ') + cells.map((c, i) => pad(c ?? '', widths[i], columns[i].align)).join('  ') + b(' │');
+  const out = [];
+  out.push(title ? b('╭─ ') + title + ' ' + b('─'.repeat(inner - width(title) - 1) + '╮') : b('╭' + '─'.repeat(inner + 2) + '╮'));
+  if (columns.some((c) => c.header)) {
+    out.push(line(columns.map((c) => pc.bold(c.header ?? ''))));
+    out.push(b('├' + '─'.repeat(inner + 2) + '┤'));
+  }
+  rows.forEach((r) => out.push(line(r)));
+  out.push(b('╰' + '─'.repeat(inner + 2) + '╯'));
+  console.log(out.map((l) => '  ' + l).join('\n'));
+}
+
+const legend = () => console.log(pc.dim(`  ${YES} existe   ${NO} no existe   ${DIFF} tipo distinto`));
+
+const formatBytes = (n) =>
+  n == null ? '' : n < 1024 ? `${n} B` : n < 1024 ** 2 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 ** 2).toFixed(1)} MB`;
+
 // ───────────────────────── flujo principal ─────────────────────────
 
 async function main() {
@@ -112,7 +160,7 @@ async function main() {
   const host = cfg.host || 'api.contentful.com';
   const appHost = host.includes('.eu.') ? 'app.eu.contentful.com' : 'app.contentful.com';
 
-  // 1. Space
+  // Space
   const base = createClient({ accessToken: token, host }, { type: 'plain' });
   const spaces = (await base.space.getMany({ query: { limit: 100 } })).items;
   if (!spaces.length) {
@@ -127,7 +175,7 @@ async function main() {
   });
   const cma = createClient({ accessToken: token, host }, { type: 'plain', defaults: { spaceId } });
 
-  // 2. Ambientes
+  // Ambientes
   const envs = (await cma.environment.getMany({ query: { limit: 100 } })).items.filter(
     (e) => e.sys.status?.sys?.id !== 'failed',
   );
@@ -152,38 +200,51 @@ async function main() {
     pageSize: 15,
   });
 
-  // 3. Entries
+  // Entries
   const rawIds = await input({
     message: 'Entry ID(s) o URL(s) (separados por coma o espacio)',
     validate: (v) => parseEntryIds(v).length > 0 || 'Pega al menos un entry ID',
   });
   const rootIds = parseEntryIds(rawIds);
 
-  // ─── Análisis ───
-  log.step(`Analizando ${src} → ${dst}…`);
+  // ─── Lectura: padres e hijos ───
+  log.step(`Analizando ${pc.bold(src)} ${pc.dim('──▶')} ${pc.bold(dst)}…`);
 
-  const entries = new Map();
+  const entries = new Map(); // id → entry
+  const children = new Map(); // id → ids de entries hijas
   const assetIds = new Set();
-  const externalRefs = new Set();
+  const brokenInSource = new Set();
+  const queue = [...rootIds];
 
-  for (const id of rootIds) {
+  while (queue.length) {
+    const id = queue.shift();
+    if (entries.has(id) || brokenInSource.has(id)) continue;
     let entry;
     try {
       entry = await cma.entry.get({ environmentId: src, entryId: id });
     } catch (e) {
       if (!isNotFound(e)) throw e;
-      log.err(`La entry ${id} no existe en ${src}.`);
-      process.exit(1);
+      if (rootIds.includes(id)) {
+        log.err(`La entry ${id} no existe en ${src}.`);
+        process.exit(1);
+      }
+      brokenInSource.add(id);
+      continue;
     }
     entries.set(id, entry);
+    const kids = [];
     for (const l of collectLinks(entry.fields)) {
       if (l.type === 'Asset') assetIds.add(l.id);
-      else if (!rootIds.includes(l.id)) externalRefs.add(l.id);
+      else if (!kids.includes(l.id)) {
+        kids.push(l.id);
+        queue.push(l.id);
+      }
     }
+    children.set(id, kids);
   }
 
-  // Content types
-  const ctIds = [...new Set([...entries.values()].map((e) => e.sys.contentType.sys.id))];
+  const ctOf = (e) => e.sys.contentType.sys.id;
+  const ctIds = [...new Set([...entries.values()].map(ctOf))];
   const srcCTs = new Map();
   const dstCTs = new Map();
   for (const id of ctIds) {
@@ -196,37 +257,19 @@ async function main() {
     }
   }
 
-  const modelDiff = [];
-  for (const id of ctIds) {
-    const s = srcCTs.get(id);
-    const d = dstCTs.get(id);
-    if (!d) {
-      modelDiff.push({ ctId: id, missingCT: true, missingFields: s.fields, mismatched: [] });
-      continue;
-    }
-    const byId = new Map(d.fields.map((f) => [f.id, f]));
-    const missingFields = s.fields.filter((f) => !byId.has(f.id));
-    const mismatched = s.fields.filter((f) => byId.has(f.id) && fieldSig(f) !== fieldSig(byId.get(f.id)));
-    if (missingFields.length || mismatched.length) {
-      modelDiff.push({ ctId: id, missingCT: false, missingFields, mismatched });
-    }
-  }
-
-  // Locales
   const srcLocales = (await cma.locale.getMany({ environmentId: src, query: { limit: 100 } })).items;
   const dstLocales = (await cma.locale.getMany({ environmentId: dst, query: { limit: 100 } })).items;
+  const srcLocaleCodes = new Set(srcLocales.map((l) => l.code));
   const dstLocaleCodes = new Set(dstLocales.map((l) => l.code));
-  const missingLocales = srcLocales.map((l) => l.code).filter((c) => !dstLocaleCodes.has(c));
-  const defaultLocale = srcLocales.find((l) => l.default)?.code;
+  const missingLocales = [...srcLocaleCodes].filter((c) => !dstLocaleCodes.has(c));
+  const srcDefault = srcLocales.find((l) => l.default)?.code;
+  const dstDefault = dstLocales.find((l) => l.default)?.code;
 
-  // Qué ya existe en destino
-  const existingEntries = await existingIds(cma, dst, 'entry', [...entries.keys()]);
-  const existingAssets = await existingIds(cma, dst, 'asset', [...assetIds]);
-  const missingAssets = [...assetIds].filter((id) => !existingAssets.has(id));
-  const existingExternal = await existingIds(cma, dst, 'entry', [...externalRefs]);
-  const brokenRefs = [...externalRefs].filter((id) => !existingExternal.has(id));
+  const existingEntries = new Set((await fetchMany(cma, dst, 'entry', [...entries.keys()])).keys());
+  const srcAssets = await fetchMany(cma, src, 'asset', [...assetIds]);
+  const existingAssets = new Set((await fetchMany(cma, dst, 'asset', [...assetIds])).keys());
+  const missingAssets = [...assetIds].filter((id) => !existingAssets.has(id) && srcAssets.has(id));
 
-  // Tags
   const tagIds = [
     ...new Set([...entries.values()].flatMap((e) => (e.metadata?.tags ?? []).map((t) => t.sys.id))),
   ];
@@ -237,70 +280,253 @@ async function main() {
   }
   const missingTags = tagIds.filter((id) => !dstTagIds.has(id));
 
-  // ─── Plan ───
   const titleOf = (entry) => {
-    const ct = srcCTs.get(entry.sys.contentType.sys.id);
+    const ct = srcCTs.get(ctOf(entry));
     const v = entry.fields?.[ct?.displayField];
-    const t = v?.[defaultLocale] ?? (v && Object.values(v)[0]);
+    const t = v?.[srcDefault] ?? (v && Object.values(v)[0]);
     return typeof t === 'string' ? t : '(sin título)';
   };
 
-  log.step('Plan');
-  for (const id of rootIds) {
+  // ─── 1. Padres e hijos ───
+  log.step('Entries');
+  const entryRows = [];
+  const listed = new Set();
+  const walk = (id, prefix, isLast, isRoot) => {
+    const lead = pc.dim(prefix + (isRoot ? '' : isLast ? '└─ ' : '├─ '));
+    const room = 40 - prefix.length;
+    if (brokenInSource.has(id)) {
+      entryRows.push([lead + pc.red('(no existe)'), '', pc.dim(id), NO, '', pc.red(`link roto en ${src}, se ignora`)]);
+      return;
+    }
     const e = entries.get(id);
-    log.ok(`${pc.bold(titleOf(e))} ${pc.dim(`${id} · ${e.sys.contentType.sys.id}`)}`);
-  }
-  const newCount = [...entries.keys()].filter((id) => !existingEntries.has(id)).length;
-  log.info(`Entries: ${entries.size} · ${newCount} nuevas, ${entries.size - newCount} se actualizan`);
+    const name = clip(titleOf(e), room);
+    const repeated = listed.has(id);
+    const action = repeated
+      ? pc.dim('ya listada arriba')
+      : existingEntries.has(id)
+        ? pc.yellow('se actualiza')
+        : pc.green('se crea');
+    entryRows.push([
+      lead + (isRoot ? pc.bold(name) : name),
+      pc.dim(ctOf(e)),
+      pc.dim(id),
+      YES,
+      existingEntries.has(id) ? YES : NO,
+      action,
+    ]);
+    if (repeated) return;
+    listed.add(id);
+    const kids = children.get(id);
+    const childPrefix = isRoot ? '' : prefix + (isLast ? '   ' : '│  ');
+    kids.forEach((k, i) => walk(k, childPrefix, i === kids.length - 1, false));
+  };
+  rootIds.forEach((id) => walk(id, '', true, true));
 
-  // Modelo
-  const blocking = modelDiff.filter((d) => d.mismatched.length);
-  if (blocking.length) {
-    for (const d of blocking) {
-      for (const f of d.mismatched) {
-        log.err(`${d.ctId}.${f.id}: el tipo del campo es distinto en ${src} y ${dst}.`);
+  const childCount = entries.size - rootIds.length;
+  const newCount = [...entries.keys()].filter((id) => !existingEntries.has(id)).length;
+  legend();
+  table({
+    title: `${pc.bold(`${rootIds.length} padre(s) · ${childCount} hijo(s)`)}  ${pc.dim(`${newCount} nuevas, ${entries.size - newCount} ya existen en ${dst}`)}`,
+    columns: [
+      { header: 'Entry' },
+      { header: 'Content type' },
+      { header: 'ID' },
+      { header: src, align: 'center' },
+      { header: dst, align: 'center' },
+      { header: 'Acción' },
+    ],
+    rows: entryRows,
+  });
+
+  // ─── 2. Imágenes ───
+  let withAssets = false;
+  if (assetIds.size) {
+    log.step('Imágenes y media');
+    const assetRows = [...assetIds].map((id) => {
+      const a = srcAssets.get(id);
+      const inDst = existingAssets.has(id);
+      if (!a) {
+        return [pc.red('(no existe)'), pc.dim(id), '', NO, inDst ? YES : NO, inDst ? pc.dim('se reutiliza') : pc.red(`link roto en ${src}`)];
+      }
+      const file = a.fields.file?.[srcDefault] ?? Object.values(a.fields.file ?? {})[0];
+      const name = a.fields.title?.[srcDefault] ?? file?.fileName ?? '(sin nombre)';
+      const img = file?.details?.image;
+      const detail = [file?.contentType, img && `${img.width}×${img.height}`, formatBytes(file?.details?.size)]
+        .filter(Boolean)
+        .join(' · ');
+      return [clip(name), pc.dim(id), pc.dim(detail), YES, inDst ? YES : NO, inDst ? pc.green('ya existe → se reutiliza') : pc.yellow(`falta en ${dst}`)];
+    });
+    table({
+      title: `${pc.bold(`${assetIds.size} archivo(s)`)}  ${pc.dim(`${existingAssets.size} ya existen, ${missingAssets.length} faltan en ${dst}`)}`,
+      columns: [
+        { header: 'Imagen' },
+        { header: 'ID' },
+        { header: 'Detalle' },
+        { header: src, align: 'center' },
+        { header: dst, align: 'center' },
+        { header: 'Estado' },
+      ],
+      rows: assetRows,
+    });
+    if (missingAssets.length) {
+      withAssets = await confirm({
+        message: `¿Migrar con imágenes? (se crean las ${missingAssets.length} que faltan y se reutilizan las que ya existen)`,
+        default: true,
+      });
+      if (!withAssets) {
+        log.warn(`Las entries quedarán apuntando a ${missingAssets.length} imagen(es) que no existen en ${dst}; no se podrán publicar hasta que existan.`);
       }
     }
-    log.info('Esto no se resuelve automáticamente. Alinea el modelo con una migración y vuelve a intentar.');
+  }
+
+  // ─── 3. Modelo ───
+  log.step(`Modelo  ${pc.bold(src)} ${pc.dim('vs')} ${pc.bold(dst)}`);
+  const model = ctIds.map((id) => {
+    const s = srcCTs.get(id);
+    const d = dstCTs.get(id);
+    if (!d) return { id, missingCT: true, missing: s.fields, extra: [], mismatched: [] };
+    const dById = new Map(d.fields.map((f) => [f.id, f]));
+    const srcFieldIds = new Set(s.fields.map((f) => f.id));
+    return {
+      id,
+      missingCT: false,
+      missing: s.fields.filter((f) => !dById.has(f.id)),
+      extra: d.fields.filter((f) => !srcFieldIds.has(f.id)),
+      mismatched: s.fields
+        .filter((f) => dById.has(f.id) && fieldSig(f) !== fieldSig(dById.get(f.id)))
+        .map((f) => ({ id: f.id, src: f, dst: dById.get(f.id) })),
+    };
+  });
+
+  legend();
+  for (const m of model) {
+    const s = srcCTs.get(m.id);
+    const dById = new Map((dstCTs.get(m.id)?.fields ?? []).map((f) => [f.id, f]));
+
+    const rows = s.fields.map((f, i) => {
+      const df = dById.get(f.id);
+      let mark = YES;
+      let status = pc.green('al día');
+      if (!df) {
+        mark = NO;
+        status = pc.yellow(`falta en ${dst}`);
+      } else if (fieldSig(f) !== fieldSig(df)) {
+        mark = DIFF;
+        status = pc.red(`en ${dst} es ${fieldType(df)} → no se migra`);
+      }
+      return [pc.dim(String(i + 1)), clip(f.name, 28), pc.dim(f.id), fieldType(f), YES, mark, status];
+    });
+    m.extra.forEach((f) =>
+      rows.push([pc.dim('·'), clip(f.name, 28), pc.dim(f.id), fieldType(f), NO, YES, pc.cyan(`sobra en ${dst} → se conserva`)]),
+    );
+
+    const badges = m.missingCT
+      ? [pc.red(`no existe en ${dst}`)]
+      : [
+          m.missing.length && pc.yellow(`${m.missing.length} falta(n)`),
+          m.extra.length && pc.cyan(`${m.extra.length} sobra(n)`),
+          m.mismatched.length && pc.red(`${m.mismatched.length} otro tipo`),
+        ].filter(Boolean);
+    const usedBy = [...entries.values()].filter((e) => ctOf(e) === m.id);
+
+    console.log();
+    table({
+      title: `${pc.bold(s.name)} ${pc.dim(m.id)}  ${badges.length ? badges.join(pc.dim(' · ')) : pc.green('al día')}`,
+      columns: [
+        { header: '#' },
+        { header: 'Campo' },
+        { header: 'ID' },
+        { header: 'Tipo' },
+        { header: src, align: 'center' },
+        { header: dst, align: 'center' },
+        { header: 'Estado' },
+      ],
+      rows,
+    });
+    log.info(`usado por: ${clip(usedBy.map(titleOf).join(', '), 90)}`);
+  }
+
+  const modelChoices = [];
+  for (const m of model) {
+    const s = srcCTs.get(m.id);
+    if (!m.missingCT && !m.missing.length) continue;
+    modelChoices.push(new Separator(pc.dim(`── ${s.name} (${m.id})`)));
+    if (m.missingCT) {
+      modelChoices.push({
+        name: `Crear content type completo ${pc.dim(`(${m.missing.length} campos; si no, sus entries no se migran)`)}`,
+        value: { ctId: m.id },
+      });
+      continue;
+    }
+    const w = Math.max(...m.missing.map((f) => clip(f.name, 28).length));
+    for (const f of m.missing) {
+      modelChoices.push({
+        name: `${pad(clip(f.name, 28), w)}  ${pc.dim(pad(f.id, 20))} ${pc.dim(fieldType(f))}`,
+        value: { ctId: m.id, field: f },
+      });
+    }
+  }
+  let picked = [];
+  if (modelChoices.length) {
+    console.log();
+    picked = await checkbox({
+      message: `¿Qué agrego al modelo de ${pc.bold(dst)}? ${pc.dim('(espacio marca · a marca todo · enter continúa · sin marcar = no se toca)')}`,
+      choices: modelChoices,
+      pageSize: 20,
+    });
+  }
+  const createCTs = new Set(picked.filter((p) => !p.field).map((p) => p.ctId));
+  const addFields = new Map();
+  for (const p of picked.filter((p) => p.field)) {
+    addFields.set(p.ctId, [...(addFields.get(p.ctId) ?? []), p.field]);
+  }
+  const skippedCTs = new Set(model.filter((m) => m.missingCT && !createCTs.has(m.id)).map((m) => m.id));
+  const skipped = [...entries.values()].filter((e) => skippedCTs.has(ctOf(e))).map((e) => e.sys.id);
+  const notAdded = model.flatMap((m) =>
+    m.missingCT
+      ? []
+      : m.missing.filter((f) => !addFields.get(m.id)?.some((a) => a.id === f.id)).map((f) => `${m.id}.${f.id}`),
+  );
+
+  // ─── Resumen ───
+  log.step('Resumen');
+  const toMigrate = [...entries.keys()].filter((id) => !skipped.includes(id));
+  const toCreate = toMigrate.filter((id) => !existingEntries.has(id)).length;
+  const nFields = [...addFields.values()].reduce((n, fs) => n + fs.length, 0);
+  const summary = [
+    ['Entries', `${pc.green(`${toCreate} se crean`)} · ${pc.yellow(`${toMigrate.length - toCreate} se actualizan`)}`],
+  ];
+  if (skipped.length) {
+    summary.push(['', pc.red(`${skipped.length} no se migran (content type no existe en ${dst})`)]);
+  }
+  summary.push([
+    'Modelo',
+    picked.length
+      ? pc.yellow(`+${createCTs.size} content type(s) · +${nFields} campo(s)`) + pc.dim(' (se publica el modelo)')
+      : pc.dim('sin cambios'),
+  ]);
+  if (notAdded.length) summary.push(['', pc.dim(`no se migran: ${clip(notAdded.join(', '), 70)}`)]);
+  if (assetIds.size) {
+    summary.push([
+      'Imágenes',
+      withAssets
+        ? `${pc.green(`${missingAssets.length} se crean`)} · ${existingAssets.size} se reutilizan`
+        : `${existingAssets.size} se reutilizan${missingAssets.length ? pc.red(` · ${missingAssets.length} no se crean`) : ''}`,
+    ]);
+  }
+  if (missingTags.length) summary.push(['Tags', pc.green(`${missingTags.length} se crean`)]);
+  if (missingLocales.length) summary.push(['Locales', pc.dim(`se omiten: ${missingLocales.join(', ')}`)]);
+  table({
+    title: `${pc.bold(src)} ${pc.dim('──▶')} ${pc.bold(dst)}  ${pc.dim('todo queda en draft')}`,
+    columns: [{}, {}],
+    rows: summary.map(([k, v]) => [pc.bold(k), v]),
+  });
+  if (skipped.length) log.warn(`Quien use estas entries quedará con links rotos: ${skipped.join(', ')}`);
+
+  if (!toMigrate.length) {
+    log.err('No queda nada para migrar.');
     process.exit(1);
   }
-
-  let modelMode = 'none';
-  if (modelDiff.length) {
-    log.warn(`El modelo en ${dst} está desactualizado:`);
-    for (const d of modelDiff) {
-      if (d.missingCT) log.info(`• content type "${d.ctId}" no existe`);
-      else log.info(`• ${d.ctId}: faltan ${d.missingFields.map((f) => `"${f.id}"`).join(', ')}`);
-    }
-    const anyMissingCT = modelDiff.some((d) => d.missingCT);
-    modelMode = await select({
-      message: '¿Qué hago con el modelo?',
-      choices: [
-        { name: `Agregar lo que falta al modelo de ${dst}`, value: 'sync' },
-        ...(anyMissingCT
-          ? []
-          : [{ name: 'Migrar sin esos campos (su contenido no llega a destino)', value: 'omit' }]),
-        { name: 'Cancelar', value: 'cancel' },
-      ],
-    });
-    if (modelMode === 'cancel') return console.log(pc.dim('\nCancelado.'));
-  }
-
-  // Assets
-  if (missingAssets.length) {
-    log.info(`Assets: ${missingAssets.length} se crearán (${existingAssets.size} ya existen y se reutilizan)`);
-  } else if (assetIds.size) {
-    log.info(`Assets: los ${assetIds.size} ya existen en ${dst} y se reutilizan`);
-  }
-
-  if (brokenRefs.length) {
-    log.warn(
-      `${brokenRefs.length} entry(s) enlazada(s) no existen en ${dst}; esos links quedarán rotos y la entry no se podrá publicar hasta que existan: ${brokenRefs.join(', ')}`,
-    );
-  }
-  if (missingLocales.length) log.warn(`Locales que no existen en ${dst} (se omiten): ${missingLocales.join(', ')}`);
-  if (missingTags.length) log.info(`Tags: ${missingTags.length} se crearán`);
-
   const go = await confirm({ message: `¿Migrar a ${pc.bold(dst)} como draft?`, default: true });
   if (!go) return console.log(pc.dim('\nCancelado.'));
 
@@ -330,38 +556,40 @@ async function main() {
     }
   }
 
-  if (modelMode === 'sync') {
+  if (picked.length) {
     log.step('Modelo');
-    for (const d of modelDiff) {
-      await run(d.missingCT ? `content type ${d.ctId} creado` : `${d.ctId}: +${d.missingFields.length} campo(s)`, async () => {
-        const s = srcCTs.get(d.ctId);
-        let ct;
-        if (d.missingCT) {
-          ct = await cma.contentType.createWithId(
-            { environmentId: dst, contentTypeId: d.ctId },
-            { name: s.name, description: s.description, displayField: s.displayField, fields: s.fields },
-          );
-        } else {
-          const cur = dstCTs.get(d.ctId);
-          ct = await cma.contentType.update(
-            { environmentId: dst, contentTypeId: d.ctId },
-            { ...cur, fields: [...cur.fields, ...d.missingFields] },
-          );
-        }
-        ct = await cma.contentType.publish({ environmentId: dst, contentTypeId: d.ctId }, ct);
-        dstCTs.set(d.ctId, ct);
+    for (const ctId of createCTs) {
+      await run(`content type ${ctId} creado`, async () => {
+        const s = srcCTs.get(ctId);
+        const ct = await cma.contentType.createWithId(
+          { environmentId: dst, contentTypeId: ctId },
+          { name: s.name, description: s.description, displayField: s.displayField, fields: s.fields },
+        );
+        dstCTs.set(ctId, await cma.contentType.publish({ environmentId: dst, contentTypeId: ctId }, ct));
+      });
+    }
+    for (const [ctId, fields] of addFields) {
+      await run(`${ctId}: +${fields.map((f) => f.id).join(', ')}`, async () => {
+        const cur = dstCTs.get(ctId);
+        const ct = await cma.contentType.update(
+          { environmentId: dst, contentTypeId: ctId },
+          { ...cur, fields: [...cur.fields, ...fields] },
+        );
+        dstCTs.set(ctId, await cma.contentType.publish({ environmentId: dst, contentTypeId: ctId }, ct));
       });
     }
   }
 
   const filterLocales = (byLocale) =>
     Object.fromEntries(Object.entries(byLocale ?? {}).filter(([loc]) => dstLocaleCodes.has(loc)));
+  const dstOnlyLocales = (byLocale) =>
+    Object.fromEntries(Object.entries(byLocale ?? {}).filter(([loc]) => !srcLocaleCodes.has(loc)));
 
-  if (missingAssets.length) {
-    log.step('Assets');
+  if (withAssets) {
+    log.step('Imágenes');
     for (const assetId of missingAssets) {
-      await run(`asset ${assetId} (draft)`, async () => {
-        const a = await cma.asset.get({ environmentId: src, assetId });
+      await run(`asset ${assetId} creado (draft)`, async () => {
+        const a = srcAssets.get(assetId);
         const file = {};
         for (const [loc, f] of Object.entries(filterLocales(a.fields.file))) {
           const url = f.url ? (f.url.startsWith('//') ? 'https:' + f.url : f.url) : f.upload;
@@ -377,41 +605,56 @@ async function main() {
   }
 
   log.step('Entries');
-  for (const [id, e] of entries) {
-    const ctId = e.sys.contentType.sys.id;
+  const mismatchedBy = new Map(model.map((m) => [m.id, new Set(m.mismatched.map((f) => f.id))]));
+  for (const id of toMigrate) {
+    const e = entries.get(id);
+    const ctId = ctOf(e);
+    const label = `${titleOf(e)} ${pc.dim(id)}`;
     const dstCT = dstCTs.get(ctId);
     if (!dstCT) {
       failures.push(id);
-      log.err(`${id}: el content type "${ctId}" no existe en ${dst}`);
+      log.err(`${label}: el content type "${ctId}" no se pudo crear en ${dst}`);
       continue;
     }
-    const allowed = new Set(dstCT.fields.map((f) => f.id));
-    const fields = Object.fromEntries(
-      Object.entries(e.fields)
-        .filter(([k]) => allowed.has(k))
-        .map(([k, v]) => [k, filterLocales(v)]),
-    );
+
+    // Solo campos que existen en ambos modelos con el mismo tipo.
+    const dstFields = new Map(dstCT.fields.filter((f) => !mismatchedBy.get(ctId).has(f.id)).map((f) => [f.id, f]));
+    const fields = {};
+    for (const [k, byLocale] of Object.entries(e.fields)) {
+      const f = dstFields.get(k);
+      if (!f) continue;
+      const v = f.localized
+        ? filterLocales(byLocale)
+        : dstDefault in byLocale
+          ? { [dstDefault]: byLocale[dstDefault] }
+          : {};
+      if (Object.keys(v).length) fields[k] = v;
+    }
     const tags = (e.metadata?.tags ?? []).filter((t) => dstTagIds.has(t.sys.id));
 
     if (existingEntries.has(id)) {
-      await run(`${id} actualizada ${pc.dim('(queda Changed si estaba publicada)')}`, async () => {
+      await run(`${label} actualizada ${pc.dim('(queda Changed si estaba publicada)')}`, async () => {
         const cur = await cma.entry.get({ environmentId: dst, entryId: id });
+        // Lo que solo existe en destino (campos de sobra, otro tipo, locales propios) se conserva.
+        const merged = { ...cur.fields };
+        for (const k of dstFields.keys()) {
+          const v = { ...dstOnlyLocales(cur.fields[k]), ...(fields[k] ?? {}) };
+          if (Object.keys(v).length) merged[k] = v;
+          else delete merged[k];
+        }
         await cma.entry.update(
           { environmentId: dst, entryId: id },
-          { ...cur, fields, metadata: { ...(cur.metadata ?? {}), tags } },
+          { ...cur, fields: merged, metadata: { ...(cur.metadata ?? {}), tags } },
         );
       });
     } else {
-      await run(`${id} creada (draft)`, () =>
-        cma.entry.createWithId(
-          { environmentId: dst, entryId: id, contentTypeId: ctId },
-          { fields, metadata: { tags } },
-        ),
+      await run(`${label} creada (draft)`, () =>
+        cma.entry.createWithId({ environmentId: dst, entryId: id, contentTypeId: ctId }, { fields, metadata: { tags } }),
       );
     }
   }
 
-  // ─── Resumen ───
+  // ─── Final ───
   log.step(failures.length ? `Terminado con ${failures.length} error(es)` : 'Listo. Nada fue publicado.');
   for (const id of rootIds) {
     log.info(`https://${appHost}/spaces/${spaceId}/environments/${dst}/entries/${id}`);

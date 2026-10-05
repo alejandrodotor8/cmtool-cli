@@ -1,7 +1,8 @@
 /**
  * Lecturas del CMA. Nada de este módulo escribe en Contentful.
  */
-import { childEntryIds } from '../core/entries.ts';
+import { LIMITS } from '../config.ts';
+import { childEntryIds, hyperlinkedEntryIds } from '../core/entries.ts';
 import { AbortError } from '../errors.ts';
 import type { Asset, Cma, ContentType, Entry, EntryTree, Environment, Locales, Space, Tag } from './types.ts';
 
@@ -62,6 +63,7 @@ export async function listEnvironments(cma: Cma): Promise<Environment[]> {
 export async function readEntryTree(cma: Cma, environmentId: string, rootIds: string[]): Promise<EntryTree> {
   const entries = new Map<string, Entry>();
   const children = new Map<string, string[]>();
+  const hyperlinks = new Map<string, string[]>();
   const broken = new Set<string>();
 
   let level = [...rootIds];
@@ -78,11 +80,18 @@ export async function readEntryTree(cma: Cma, environmentId: string, rootIds: st
       const kids = childEntryIds(entry);
       entries.set(id, entry);
       children.set(id, kids);
+      hyperlinks.set(id, hyperlinkedEntryIds(entry));
       next.push(...kids);
+    }
+    if (entries.size > LIMITS.maxTreeEntries) {
+      throw new AbortError(
+        `El árbol pasa de ${LIMITS.maxTreeEntries} entries.`,
+        'Revisa los IDs: puede que un link esté arrastrando una página entera.',
+      );
     }
     level = [...new Set(next)].filter((id) => !entries.has(id) && !broken.has(id));
   }
-  return { entries, children, broken };
+  return { entries, children, hyperlinks, broken };
 }
 
 /** Todos los content types del ambiente, por ID. */

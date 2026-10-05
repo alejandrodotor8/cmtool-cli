@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import { LIMITS } from '../src/config.ts';
 import { readEntryTree } from '../src/contentful/read.ts';
 import { AbortError } from '../src/errors.ts';
 import { entry, fakeCma, link } from './fixtures.ts';
@@ -33,5 +34,27 @@ describe('readEntryTree', () => {
     ]);
     const tree = await readEntryTree(cma, 'develop', ['a']);
     assert.deepEqual([...tree.entries.keys()], ['a', 'b']);
+  });
+});
+
+describe('readEntryTree: textos enlazados y límite', () => {
+  test('un texto enlazado no se recorre como hijo', async () => {
+    const body = {
+      nodeType: 'document',
+      content: [
+        { nodeType: 'paragraph', content: [{ nodeType: 'entry-hyperlink', data: { target: link('pagina') } }] },
+      ],
+    };
+    const { cma } = fakeCma([entry('banner', 'banner', { body: { 'es-CO': body } }), entry('pagina', 'page')]);
+    const tree = await readEntryTree(cma, 'develop', ['banner']);
+    assert.deepEqual([...tree.entries.keys()], ['banner']);
+    assert.deepEqual(tree.hyperlinks.get('banner'), ['pagina']);
+  });
+
+  test(`si el árbol pasa de ${LIMITS.maxTreeEntries} entries, se detiene`, async () => {
+    const kids = Array.from({ length: LIMITS.maxTreeEntries + 1 }, (_, i) => `hijo${i}`);
+    const root = entry('banner', 'banner', { items: { 'es-CO': kids.map((id) => link(id)) } });
+    const { cma } = fakeCma([root, ...kids.map((id) => entry(id, 'item'))]);
+    await assert.rejects(readEntryTree(cma, 'develop', ['banner']), AbortError);
   });
 });

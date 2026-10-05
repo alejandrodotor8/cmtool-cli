@@ -3,7 +3,7 @@
  */
 import type { Analysis } from '../analyze.ts';
 import type { Asset, ContentType, Entry, EntryTree, Field, Tag } from '../contentful/types.ts';
-import { contentTypeOf } from './entries.ts';
+import { contentTypeOf, isArchived as isArchivedEntry } from './entries.ts';
 import type { ContentTypeDiff } from './model.ts';
 
 export const ACTION = {
@@ -44,6 +44,8 @@ export interface Plan {
   entries: PlannedEntry[];
   /** Entries que no se escriben porque su content type no existe en destino. */
   skipped: string[];
+  /** Entries que pegaste y están archivadas en destino: no se pueden actualizar. */
+  archived: string[];
   /** Campos que faltan en destino y no se marcaron (`contentType.campo`). */
   notAdded: string[];
 }
@@ -114,6 +116,7 @@ export function buildPlan(
     entry,
   }));
   const isSkipped = (w: PlannedEntry) => skippedCTs.has(contentTypeOf(w.entry));
+  const isArchived = (w: PlannedEntry) => w.action === ACTION.UPDATE && analysis.archivedInDst.has(w.id);
 
   return {
     withAssets,
@@ -121,12 +124,42 @@ export function buildPlan(
     contentTypesToCreate: [...createCTs].flatMap((id) => contentTypes.src.get(id) ?? []),
     fieldsToAdd,
     assetsToCreate: withAssets ? assets.missing.flatMap((id) => assets.src.get(id) ?? []) : [],
-    entries: writes.filter((w) => !isSkipped(w)),
+    entries: writes.filter((w) => !isSkipped(w) && !isArchived(w)),
     skipped: writes.filter(isSkipped).map((w) => w.id),
+    archived: writes.filter(isArchived).map((w) => w.id),
     notAdded: [...diffs.values()].flatMap((d) =>
       d.missingCT
         ? []
         : d.missing.filter((f) => !fieldsToAdd.get(d.id)?.some((a) => a.id === f.id)).map((f) => `${d.id}.${f.id}`),
     ),
   };
+}
+
+/** La entry va a existir en destino después de migrar (ya existe o se escribe). */
+export const willExistInDst = ({ existsInDst, actions }: Pick<Analysis, 'existsInDst' | 'actions'>, id: string) =>
+  existsInDst.has(id) || isWrite(actions.get(id));
+
+/**
+ * Textos enlazados (rich text) de las entries que se escriben que apuntan a entries que
+ * no van a existir en destino. Por entry: los IDs a los que apunta.
+ */
+export function brokenHyperlinks(analysis: Pick<Analysis, 'tree' | 'actions' | 'existsInDst'>): Map<string, string[]> {
+  const broken = new Map<string, string[]>();
+  for (const entry of writtenEntries(analysis)) {
+    const missing = (analysis.tree.hyperlinks.get(entry.sys.id) ?? []).filter((id) => !willExistInDst(analysis, id));
+    if (missing.length) broken.set(entry.sys.id, missing);
+  }
+  return broken;
+}
+
+/**
+ * Entries del árbol cuyo estado en destino cambió entre dos lecturas: aparecieron,
+ * desaparecieron o se archivaron/desarchivaron.
+ */
+export function changedInDst(ids: Iterable<string>, before: Map<string, Entry>, after: Map<string, Entry>): string[] {
+  return [...ids].filter((id) => {
+    const a = before.get(id);
+    const b = after.get(id);
+    return Boolean(a) !== Boolean(b) || (a && b && isArchivedEntry(a) !== isArchivedEntry(b));
+  });
 }

@@ -31,7 +31,11 @@ export function formatError(e: unknown): string {
     const details = (body.details?.errors ?? [])
       .map((d) => `${d.name}${d.path ? ` en ${d.path.join('.')}` : ''}${d.details ? `: ${d.details}` : ''}`)
       .join('; ');
-    return `${body.status} ${body.statusText}: ${body.message}${details ? ` → ${details}` : ''}`;
+    const conflict =
+      e instanceof Error && e.name === 'VersionMismatch'
+        ? ' (alguien la modificó al mismo tiempo en Contentful; vuelve a correr ctf-migrate)'
+        : '';
+    return `${body.status} ${body.statusText}: ${body.message}${details ? ` → ${details}` : ''}${conflict}`;
   } catch {
     return message;
   }

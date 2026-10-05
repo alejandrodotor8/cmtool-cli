@@ -1,7 +1,7 @@
 /** Constructores mínimos de objetos de Contentful para los tests. */
 import type { Analysis } from '../src/analyze.ts';
 import type { Asset, Cma, ContentType, Entry, EntryTree, Field, Locales, Tag } from '../src/contentful/types.ts';
-import { childEntryIds, contentTypeOf, makeTitleOf } from '../src/core/entries.ts';
+import { childEntryIds, contentTypeOf, hyperlinkedEntryIds, isArchived, makeTitleOf } from '../src/core/entries.ts';
 import { diffContentType } from '../src/core/model.ts';
 import { classifyTree, writtenEntries } from '../src/core/plan.ts';
 
@@ -51,6 +51,7 @@ export function treeOf(entries: Entry[], broken: string[] = []): EntryTree {
   return {
     entries: new Map(entries.map((e) => [e.sys.id, e])),
     children: new Map(entries.map((e) => [e.sys.id, childEntryIds(e)])),
+    hyperlinks: new Map(entries.map((e) => [e.sys.id, hyperlinkedEntryIds(e)])),
     broken: new Set(broken),
   };
 }
@@ -101,6 +102,7 @@ export function analysisOf({
     tree,
     dstEntries: new Map(dstEntries.map((e) => [e.sys.id, e])),
     existsInDst: exists,
+    archivedInDst: new Set(dstEntries.filter(isArchived).map((e) => e.sys.id)),
     actions,
     contentTypes,
     diffs,

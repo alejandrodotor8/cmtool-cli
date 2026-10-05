@@ -6,13 +6,14 @@
  *   4. confirmar, respaldar y escribir en destino.
  */
 import pc from 'picocolors';
-import { analyze } from '../analyze.ts';
+import { analyze, changesSinceAnalysis } from '../analyze.ts';
 import { startBackup } from '../backup.ts';
 import type { CliArgs } from '../cli-args.ts';
+import { LIMITS } from '../config.ts';
 import { createCma } from '../contentful/client.ts';
 import { listEnvironments, listSpaces } from '../contentful/read.ts';
 import { createWriter } from '../contentful/write.ts';
-import { buildPlan, modelOptions } from '../core/plan.ts';
+import { brokenHyperlinks, buildPlan, isWrite, modelOptions } from '../core/plan.ts';
 import { requiredGaps } from '../core/publish-check.ts';
 import { AbortError } from '../errors.ts';
 import { executePlan } from '../execute.ts';
@@ -22,6 +23,7 @@ import {
   askEntryIds,
   askModelChanges,
   askWithAssets,
+  confirmLargeMigration,
   confirmWrite,
   pickEnvironments,
   pickSpace,
@@ -52,6 +54,11 @@ export async function migrate({ dryRun }: CliArgs): Promise<number> {
 
   // 3. Mostrar y decidir
   renderEntryTree(analysis);
+  const writes = [...analysis.actions.values()].filter(isWrite).length;
+  if (!dryRun && writes > LIMITS.confirmWritesAbove && !(await confirmLargeMigration(writes, dst))) {
+    console.log(pc.dim('\nCancelado.'));
+    return 0;
+  }
 
   let withAssets = false;
   if (analysis.assets.ids.length) {
@@ -72,7 +79,7 @@ export async function migrate({ dryRun }: CliArgs): Promise<number> {
   const picked = options.length ? await askModelChanges(options, dst) : [];
 
   const plan = buildPlan(analysis, { withAssets, picked });
-  renderSummary(analysis, plan, requiredGaps(analysis, plan));
+  renderSummary(analysis, plan, { gaps: requiredGaps(analysis, plan), hyperlinks: brokenHyperlinks(analysis) });
   if (!plan.entries.length) throw new AbortError('No queda nada para migrar.');
 
   if (dryRun) {
@@ -86,6 +93,15 @@ export async function migrate({ dryRun }: CliArgs): Promise<number> {
     console.log(pc.dim('\nCancelado.'));
     return 0;
   }
+  // Lo que se mostró tiene que seguir siendo cierto: si destino cambió mientras revisabas, no se escribe.
+  const changed = await changesSinceAnalysis(cma, analysis);
+  if (changed.length) {
+    throw new AbortError(
+      `${dst} cambió mientras revisabas el plan (${changed.join(', ')}). No se escribió nada.`,
+      'Vuelve a correr ctf-migrate para analizar de nuevo.',
+    );
+  }
+
   const backup = startBackup({ kind: 'migrate', spaceId, src, dst, rootIds });
   const failures = await executePlan(plan, analysis, createWriter(cma, { src, dst }), backup);
 

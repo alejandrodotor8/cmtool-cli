@@ -7,7 +7,7 @@ import type { BackupData, SavedEntry } from '../backup.ts';
 import type { Entry, Field } from '../contentful/types.ts';
 import { contentTypeOf } from '../core/entries.ts';
 import { FIELD, type FieldRow, fieldType, type RuleChanges } from '../core/model.ts';
-import { ACTION, type Action, isWrite, type Plan } from '../core/plan.ts';
+import { ACTION, type Action, isWrite, type Plan, willExistInDst } from '../core/plan.ts';
 import { RESTORE, type RestoreStatus, restoreStatus } from '../core/restore.ts';
 import { log } from './log.ts';
 import { type Column, clip, legend, MARK, table } from './table.ts';
@@ -36,11 +36,35 @@ const formatBytes = (n: number | undefined): string =>
         ? `${Math.round(n / 1024)} KB`
         : `${(n / 1024 ** 2).toFixed(1)} MB`;
 
+/** Qué se hará con una entry del árbol, teniendo en cuenta si está archivada en destino. */
+function actionLabel(action: Action | undefined, archived: boolean, dst: string): string {
+  if (!action) return pc.dim('ya listada arriba');
+  if (archived && action === ACTION.UPDATE) return pc.red(`archivada en ${dst} → no se toca`);
+  if (archived && action === ACTION.REUSE) return pc.yellow(`archivada en ${dst} → el padre no se podrá publicar`);
+  return ACTION_LABEL[action];
+}
+
 /** Árbol padre → hijos, con lo que se hará con cada entry. */
-export function renderEntryTree({ src, dst, rootIds, tree, existsInDst, actions, titleOf }: Analysis): void {
+export function renderEntryTree(analysis: Analysis): void {
+  const { src, dst, rootIds, tree, existsInDst, archivedInDst, actions, titleOf } = analysis;
   log.step('Entries');
   const rows: string[][] = [];
   const listed = new Set<string>();
+
+  /** Un texto enlazado en un rich text: no es hijo, no se migra; solo se avisa si no existirá en destino. */
+  const hyperlinkRow = (id: string, lead: string) => {
+    const target = tree.entries.get(id);
+    const name = target ? clip(titleOf(target), 30) : pc.dim('enlace en texto');
+    const ok = willExistInDst(analysis, id);
+    rows.push([
+      `${lead}${pc.dim('↗ ')}${name}`,
+      target ? pc.dim(contentTypeOf(target)) : '',
+      pc.dim(id),
+      '',
+      existsInDst.has(id) ? MARK.yes : MARK.no,
+      ok ? pc.dim('enlace en texto · no se migra') : pc.yellow(`enlace en texto · no existe en ${dst}`),
+    ]);
+  };
 
   const walk = (id: string, prefix: string, isLast: boolean, isRoot: boolean): void => {
     const lead = pc.dim(prefix + (isRoot ? '' : isLast ? '└─ ' : '├─ '));
@@ -58,14 +82,18 @@ export function renderEntryTree({ src, dst, rootIds, tree, existsInDst, actions,
       pc.dim(id),
       MARK.yes,
       existsInDst.has(id) ? MARK.yes : MARK.no,
-      repeated || !action ? pc.dim('ya listada arriba') : ACTION_LABEL[action],
+      actionLabel(repeated ? undefined : action, archivedInDst.has(id), dst),
     ]);
     if (repeated) return;
     listed.add(id);
     const kids = tree.children.get(id) ?? [];
+    const links = tree.hyperlinks.get(id) ?? [];
     const childPrefix = isRoot ? '' : prefix + (isLast ? '   ' : '│  ');
     kids.forEach((kid, i) => {
-      walk(kid, childPrefix, i === kids.length - 1, false);
+      walk(kid, childPrefix, i === kids.length - 1 && !links.length, false);
+    });
+    links.forEach((link, i) => {
+      hyperlinkRow(link, pc.dim(childPrefix + (i === links.length - 1 ? '└─ ' : '├─ ')));
     });
   };
   for (const id of rootIds) walk(id, '', true, true);
@@ -242,7 +270,7 @@ export function renderModel({ src, dst, diffs, tree, actions, titleOf, locales }
 export function renderSummary(
   { src, dst, actions, assets, locales, tree, titleOf }: Analysis,
   plan: Plan,
-  gaps: Map<string, Field[]>,
+  { gaps, hyperlinks }: { gaps: Map<string, Field[]>; hyperlinks: Map<string, string[]> },
 ): void {
   log.step('Resumen');
   const created = plan.entries.filter((e) => e.action === ACTION.CREATE).length;
@@ -256,6 +284,7 @@ export function renderSummary(
   if (reused) rows.push(['', pc.cyan(`${reused} hijo(s) ya existen en ${dst} → se reutilizan sin tocarlos`)]);
   if (plan.skipped.length)
     rows.push(['', pc.red(`${plan.skipped.length} no se migran (content type no existe en ${dst})`)]);
+  if (plan.archived.length) rows.push(['', pc.red(`${plan.archived.length} no se tocan (archivadas en ${dst})`)]);
   rows.push([
     'Modelo',
     modelChanges
@@ -281,6 +310,14 @@ export function renderSummary(
     rows: rows.map(([label, value]) => [pc.bold(label), value]),
   });
   if (plan.skipped.length) log.warn(`Quien use estas entries quedará con links rotos: ${plan.skipped.join(', ')}`);
+
+  if (hyperlinks.size) {
+    log.warn(`Hay textos enlazados a entries que no existen en ${dst}: esos enlaces quedarán rotos.`);
+    for (const [id, targets] of hyperlinks) {
+      const entry = tree.entries.get(id);
+      log.info(`${clip(entry ? titleOf(entry) : id)} ${id}: ${targets.join(', ')}`);
+    }
+  }
 
   if (gaps.size) {
     log.warn(

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { ACTION, buildPlan, classifyTree, modelOptions } from '../src/core/plan.ts';
+import type { Entry } from '../src/contentful/types.ts';
+import { ACTION, brokenHyperlinks, buildPlan, changedInDst, classifyTree, modelOptions } from '../src/core/plan.ts';
 import { analysisOf, asset, contentType, entry, field, link, tag, treeOf, writtenIds } from './fixtures.ts';
 
 describe('classifyTree', () => {
@@ -166,5 +167,76 @@ describe('buildPlan', () => {
 
   test('solo escribe entries del árbol que se crean o actualizan', () => {
     assert.deepEqual(writtenIds(analysis).sort(), ['banner', 'promo1']);
+  });
+});
+
+const archivedEntry = (id: string, ct: string): Entry => {
+  const e = entry(id, ct);
+  (e.sys as Entry['sys']).archivedVersion = 2;
+  return e;
+};
+
+describe('entries archivadas en destino', () => {
+  test('una entry que pegaste y está archivada en destino no se actualiza', () => {
+    const ct = contentType('banner', [field('title')]);
+    const analysis = analysisOf({
+      rootIds: ['banner'],
+      entries: [entry('banner', 'banner')],
+      dstEntries: [archivedEntry('banner', 'banner')],
+      srcCTs: [ct],
+      dstCTs: [ct],
+    });
+    const plan = buildPlan(analysis, { withAssets: false, picked: [] });
+    assert.deepEqual(plan.archived, ['banner']);
+    assert.deepEqual(plan.entries, []);
+  });
+});
+
+describe('brokenHyperlinks', () => {
+  const hyperlinkTo = (id: string) => ({
+    'es-CO': { nodeType: 'document', content: [{ nodeType: 'entry-hyperlink', data: { target: link(id) } }] },
+  });
+  const ct = contentType('banner', [field('title'), field('body', 'RichText')]);
+
+  test('avisa si un texto enlazado apunta a una entry que no existirá en destino', () => {
+    const analysis = analysisOf({
+      rootIds: ['banner'],
+      entries: [entry('banner', 'banner', { body: hyperlinkTo('pagina') })],
+      srcCTs: [ct],
+      dstCTs: [ct],
+    });
+    assert.deepEqual(Object.fromEntries(brokenHyperlinks(analysis)), { banner: ['pagina'] });
+  });
+
+  test('si la entry enlazada ya existe en destino, no hay aviso', () => {
+    const analysis = analysisOf({
+      rootIds: ['banner'],
+      entries: [entry('banner', 'banner', { body: hyperlinkTo('pagina') })],
+      existsInDst: ['pagina'],
+      srcCTs: [ct],
+      dstCTs: [ct],
+    });
+    assert.equal(brokenHyperlinks(analysis).size, 0);
+  });
+});
+
+describe('changedInDst', () => {
+  test('detecta entries que aparecieron, desaparecieron o se archivaron', () => {
+    const before = new Map([
+      ['a', entry('a', 'x')],
+      ['b', entry('b', 'x')],
+      ['c', entry('c', 'x')],
+    ]);
+    const after = new Map([
+      ['b', entry('b', 'x')],
+      ['c', archivedEntry('c', 'x')],
+      ['d', entry('d', 'x')],
+    ]);
+    assert.deepEqual(changedInDst(['a', 'b', 'c', 'd'], before, after), ['a', 'c', 'd']);
+  });
+
+  test('si nada cambió, no hay diferencias', () => {
+    const state = new Map([['a', entry('a', 'x')]]);
+    assert.deepEqual(changedInDst(['a', 'b'], state, new Map(state)), []);
   });
 });

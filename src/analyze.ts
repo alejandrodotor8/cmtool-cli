@@ -10,9 +10,9 @@ import {
   readTags,
 } from './contentful/read.ts';
 import type { Asset, Cma, ContentType, Entry, EntryTree, Locales, Tag } from './contentful/types.ts';
-import { assetIdsOf, contentTypeOf, makeTitleOf } from './core/entries.ts';
+import { assetIdsOf, contentTypeOf, isArchived, makeTitleOf } from './core/entries.ts';
 import { type ContentTypeDiff, diffContentType } from './core/model.ts';
-import { type Action, classifyTree, writtenEntries } from './core/plan.ts';
+import { type Action, changedInDst, classifyTree, writtenEntries } from './core/plan.ts';
 
 export interface Analysis {
   src: string;
@@ -22,6 +22,8 @@ export interface Analysis {
   /** Las entries del árbol que ya existen en destino, tal como están allá. */
   dstEntries: Map<string, Entry>;
   existsInDst: Set<string>;
+  /** Entries (del árbol o enlazadas en texto) que existen en destino pero están archivadas. */
+  archivedInDst: Set<string>;
   /** Qué pasa con cada entry del árbol. */
   actions: Map<string, Action>;
   contentTypes: { src: Map<string, ContentType>; dst: Map<string, ContentType> };
@@ -41,8 +43,11 @@ export async function analyze(
 ): Promise<Analysis> {
   // Árbol de entries y qué pasa con cada una.
   const tree = await readEntryTree(cma, src, rootIds);
-  const dstEntries = await fetchEntries(cma, dst, tree.entries.keys());
+  // También se revisan en destino las entries enlazadas en texto, para avisar si no existen.
+  const hyperlinked = [...new Set([...tree.hyperlinks.values()].flat())].filter((id) => !tree.entries.has(id));
+  const dstEntries = await fetchEntries(cma, dst, [...tree.entries.keys(), ...hyperlinked]);
   const existsInDst = new Set(dstEntries.keys());
+  const archivedInDst = new Set([...dstEntries.values()].filter(isArchived).map((e) => e.sys.id));
   const actions = classifyTree(rootIds, tree, existsInDst);
   const written = writtenEntries({ tree, actions });
 
@@ -91,6 +96,7 @@ export async function analyze(
     tree,
     dstEntries,
     existsInDst,
+    archivedInDst,
     actions,
     contentTypes,
     diffs,
@@ -99,4 +105,14 @@ export async function analyze(
     tags,
     titleOf: makeTitleOf(contentTypes.src, srcLocales.default),
   };
+}
+
+/**
+ * Vuelve a mirar destino justo antes de escribir. Devuelve las entries del árbol que
+ * aparecieron, desaparecieron o se archivaron mientras el usuario revisaba el plan.
+ */
+export async function changesSinceAnalysis(cma: Cma, analysis: Analysis): Promise<string[]> {
+  const ids = [...analysis.tree.entries.keys()];
+  const now = await fetchEntries(cma, analysis.dst, ids);
+  return changedInDst(ids, analysis.dstEntries, now);
 }

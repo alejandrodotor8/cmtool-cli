@@ -16,6 +16,12 @@ describe('formatError', () => {
     assert.equal(msg.includes('SECRETO123'), false);
   });
 
+  test('un conflicto de versión explica qué pasó', () => {
+    const e = new Error(JSON.stringify({ status: 409, statusText: 'Conflict', message: 'Version mismatch' }));
+    e.name = 'VersionMismatch';
+    assert.match(formatError(e), /^409 Conflict: Version mismatch \(alguien la modificó al mismo tiempo/);
+  });
+
   test('un error que no es del CMA se muestra tal cual', () => {
     assert.equal(formatError(new Error('se cayó la red')), 'se cayó la red');
     assert.equal(formatError('texto'), 'texto');

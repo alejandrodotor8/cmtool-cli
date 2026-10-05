@@ -33,6 +33,8 @@ export interface Locales {
 export interface EntryTree {
   entries: Map<string, Entry>;
   children: Map<string, string[]>;
+  /** Entries a las que solo apunta un texto enlazado en un rich text (no se recorren ni se migran). */
+  hyperlinks: Map<string, string[]>;
   /** Links a entries que no existen en origen. */
   broken: Set<string>;
 }

@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { assetIdsOf, childEntryIds, collectLinks, makeTitleOf } from '../src/core/entries.ts';
+import type { Entry } from '../src/contentful/types.ts';
+import {
+  assetIdsOf,
+  childEntryIds,
+  collectLinks,
+  hyperlinkedEntryIds,
+  isArchived,
+  makeTitleOf,
+} from '../src/core/entries.ts';
 import { contentType, entry, field, link } from './fixtures.ts';
 
 describe('collectLinks', () => {
@@ -13,9 +21,22 @@ describe('collectLinks', () => {
       ],
     };
     assert.deepEqual(collectLinks(richText), [
-      { type: 'Entry', id: 'e1' },
-      { type: 'Asset', id: 'a1' },
+      { type: 'Entry', id: 'e1', hyperlink: false },
+      { type: 'Asset', id: 'a1', hyperlink: false },
     ]);
+  });
+
+  test('marca los textos enlazados (hipervínculos) de un rich text', () => {
+    const richText = {
+      nodeType: 'document',
+      content: [
+        {
+          nodeType: 'paragraph',
+          content: [{ nodeType: 'entry-hyperlink', data: { target: link('pagina') }, content: [{ value: 'ver más' }] }],
+        },
+      ],
+    };
+    assert.deepEqual(collectLinks(richText), [{ type: 'Entry', id: 'pagina', hyperlink: true }]);
   });
 
   test('ignora objetos con sys que no son links', () => {
@@ -54,5 +75,43 @@ describe('makeTitleOf', () => {
     assert.equal(titleOf(entry('e', 'banner')), '(sin título)');
     assert.equal(titleOf(entry('e', 'banner', { title: { 'es-CO': 42 } })), '(sin título)');
     assert.equal(titleOf(entry('e', 'desconocido', { title: { 'es-CO': 'x' } })), '(sin título)');
+  });
+});
+
+describe('hijos vs. textos enlazados', () => {
+  const hyperlink = (id: string) => ({ nodeType: 'entry-hyperlink', data: { target: link(id) }, content: [] });
+  const e = entry('banner', 'banner', {
+    slide: { 'es-CO': link('slide') },
+    body: {
+      'es-CO': {
+        nodeType: 'document',
+        content: [
+          { nodeType: 'embedded-entry-block', data: { target: link('promo') } },
+          { nodeType: 'paragraph', content: [hyperlink('pagina'), hyperlink('slide')] },
+          { nodeType: 'paragraph', content: [{ nodeType: 'asset-hyperlink', data: { target: link('pdf', 'Asset') } }] },
+        ],
+      },
+    },
+  });
+
+  test('los componentes y las entries embebidas son hijos; los textos enlazados no', () => {
+    assert.deepEqual(childEntryIds(e), ['slide', 'promo']);
+  });
+
+  test('los textos enlazados se listan aparte, sin repetir los que ya son hijos', () => {
+    assert.deepEqual(hyperlinkedEntryIds(e), ['pagina']);
+  });
+
+  test('los archivos enlazados en texto sí cuentan como imágenes/archivos de la entry', () => {
+    assert.deepEqual(assetIdsOf(e), ['pdf']);
+  });
+});
+
+describe('isArchived', () => {
+  test('detecta entries archivadas', () => {
+    const archived = entry('a', 'x');
+    (archived.sys as Entry['sys']).archivedVersion = 3;
+    assert.equal(isArchived(archived), true);
+    assert.equal(isArchived(entry('b', 'x')), false);
   });
 });

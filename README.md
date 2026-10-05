@@ -43,6 +43,9 @@ ctf-migrate
    - Un hijo que ya existe en destino **se reutiliza sin tocarlo**. Igual se muestra lo que tiene debajo y se revisa su modelo.
    - Un hijo que no existe en destino se crea, y se revisan sus propios hijos con la misma regla.
    - Para actualizar un hijo que ya existe, pega también su ID.
+   - Un **texto enlazado** dentro de un rich text (`↗`) no es un hijo: no se migra. Si apunta a una entry que no existe en destino, te avisa que el enlace quedará roto.
+   - Si una entry está **archivada** en destino, no se actualiza (y si es un hijo reutilizado, te avisa que el padre no se podrá publicar).
+   - Si se van a escribir más de 20 entries, te pide confirmar que el árbol es lo que esperabas.
 5. **Imágenes**: si faltan imágenes en destino, te pregunta si migrar con imágenes. Si dices que sí, reutiliza las que ya existen y crea las que faltan.
 6. **Modelo**: compara el modelo de padres e hijos con el de destino y te muestra:
    - campos que **faltan** en destino → eliges cuáles agregar (si no marcas nada, no se toca el modelo y esos campos no se migran);
@@ -86,6 +89,8 @@ Cada migración guarda un respaldo en `~/.ctf-migrate/backups/` (en Windows, `C:
 - Si una entry ya existe y está publicada, queda como **Changed**: lo publicado sigue en vivo.
 - Los tags que falten en destino se crean.
 - Antes de actualizar una entry existente, guarda cómo estaba (ver `restore`).
+- Justo antes de escribir vuelve a mirar destino: si algo del árbol apareció, desapareció o se archivó mientras revisabas, se detiene sin escribir.
+- Si el árbol pasa de 300 entries, se detiene: seguramente un link está arrastrando una página entera. Los límites están en [src/config.ts](src/config.ts).
 
 ## Seguridad
 
@@ -109,6 +114,7 @@ src/
     migrate.ts           ctf-migrate: el flujo de migración, paso a paso
     restore.ts           ctf-migrate restore: deshace una migración
   backup.ts              respaldos locales en ~/.ctf-migrate/backups/
+  config.ts              límites de seguridad (tamaño del árbol, confirmación)
   session.ts             token y host (sesión del CLI o variable de entorno)
   errors.ts              AbortError y formato de errores del CMA
   analyze.ts             paso de análisis: arma todo lo que se muestra (solo lectura)
@@ -155,6 +161,7 @@ Los tests viven en `test/` y no llaman a Contentful: usan objetos armados a mano
 - **Lectura del árbol** (`read.test.ts`): por niveles, links rotos y ciclos.
 - **Respaldo y restore** (`backup.test.ts`, `restore.test.ts`, `write.test.ts`): el respaldo se guarda antes de actualizar y, si falla, no se actualiza; detecta cambios posteriores a la migración.
 - **Argumentos** (`cli-args.test.ts`).
+- **Comportamiento** (`entries.test.ts`, `read.test.ts`, `plan.test.ts`, `errors.test.ts`): textos enlazados que no son hijos, límite del árbol, entries archivadas, cambios en destino durante la revisión y conflictos de versión.
 - **Reglas del modelo y publicación** (`model.test.ts`, `publish-check.test.ts`): obligatorio, localizado y validaciones; qué entries quedan con obligatorios vacíos; los campos que solo existen en destino no se tocan.
 
 Reglas para que Node pueda ejecutar los `.ts` sin compilar:

@@ -42,6 +42,13 @@ export async function askEntryIds(): Promise<string[]> {
   return parseEntryIds(raw);
 }
 
+/** Pide confirmación cuando se van a escribir muchas entries de una vez. */
+export const confirmLargeMigration = (count: number, dst: string): Promise<boolean> =>
+  confirm({
+    message: `Se van a escribir ${count} entries en ${pc.bold(dst)}. Revisa el árbol: ¿es lo que esperabas?`,
+    default: false,
+  });
+
 export const askWithAssets = (missingCount: number): Promise<boolean> =>
   confirm({
     message: `¿Migrar con imágenes? (se crean las ${missingCount} que faltan y se reutilizan las que ya existen)`,

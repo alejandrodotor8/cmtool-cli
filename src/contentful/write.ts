@@ -7,22 +7,26 @@
  * - Lo único que publica son content types, porque Contentful lo exige para usar
  *   campos nuevos. Entries y assets quedan en draft.
  */
-export function createWriter(cma, { src, dst }) {
+import type { Asset, Cma, ContentType, Entry, Field, Tag, TagLink } from './types.ts';
+
+export type Writer = ReturnType<typeof createWriter>;
+
+export function createWriter(cma: Cma, { src, dst }: { src: string; dst: string }) {
   if (!dst || dst === src) throw new Error(`Ambiente destino inválido: "${dst}"`);
   const env = { environmentId: dst };
-  const publishContentType = (ct) => cma.contentType.publish({ ...env, contentTypeId: ct.sys.id }, ct);
+  const publishContentType = (ct: ContentType) => cma.contentType.publish({ ...env, contentTypeId: ct.sys.id }, ct);
 
   return {
     environment: dst,
 
-    createTag: (tag) =>
+    createTag: (tag: Tag) =>
       cma.tag.createWithId(
         { ...env, tagId: tag.sys.id },
         { name: tag.name, sys: { visibility: tag.sys.visibility ?? 'private' } },
       ),
 
     /** Crea el content type con el mismo ID y campos que en origen. Devuelve la versión publicada. */
-    async createContentType(srcCT) {
+    async createContentType(srcCT: ContentType): Promise<ContentType> {
       const { name, description, displayField, fields } = srcCT;
       const ct = await cma.contentType.createWithId(
         { ...env, contentTypeId: srcCT.sys.id },
@@ -32,7 +36,7 @@ export function createWriter(cma, { src, dst }) {
     },
 
     /** Agrega campos al final del content type de destino, sin tocar los existentes. */
-    async addFields(dstCT, fields) {
+    async addFields(dstCT: ContentType, fields: Field[]): Promise<ContentType> {
       const ct = await cma.contentType.update(
         { ...env, contentTypeId: dstCT.sys.id },
         { ...dstCT, fields: [...dstCT.fields, ...fields] },
@@ -40,20 +44,20 @@ export function createWriter(cma, { src, dst }) {
       return publishContentType(ct);
     },
 
-    async createAsset(id, fields) {
+    async createAsset(id: string, fields: Asset['fields']): Promise<void> {
       const asset = await cma.asset.createWithId({ ...env, assetId: id }, { fields });
       await cma.asset.processForAllLocales(env, asset);
     },
 
-    createEntry: (id, contentTypeId, fields, tags) =>
+    createEntry: (id: string, contentTypeId: string, fields: Entry['fields'], tags: TagLink[]) =>
       cma.entry.createWithId({ ...env, entryId: id, contentTypeId }, { fields, metadata: { tags } }),
 
     /** Lee la versión actual en destino y la actualiza con `buildFields(camposActuales)`. */
-    async updateEntry(id, buildFields, tags) {
+    async updateEntry(id: string, buildFields: (current: Entry['fields']) => Entry['fields'], tags: TagLink[]) {
       const current = await cma.entry.get({ ...env, entryId: id });
       return cma.entry.update(
         { ...env, entryId: id },
-        { ...current, fields: buildFields(current.fields ?? {}), metadata: { ...(current.metadata ?? {}), tags } },
+        { ...current, fields: buildFields(current.fields ?? {}), metadata: { ...current.metadata, tags } },
       );
     },
   };

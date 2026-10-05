@@ -1,0 +1,38 @@
+/** Error esperado: corta el flujo mostrando un mensaje claro, sin stack trace. */
+export class AbortError extends Error {
+  readonly hint: string | undefined;
+
+  constructor(message: string, hint?: string) {
+    super(message);
+    this.name = 'AbortError';
+    this.hint = hint;
+  }
+}
+
+/** El usuario canceló un prompt (Ctrl+C). */
+export const isCancel = (e: unknown): boolean => e instanceof Error && e.name === 'ExitPromptError';
+
+/** Lo que trae el mensaje (JSON) de un error del CMA. */
+interface CmaErrorBody {
+  status?: number;
+  statusText?: string;
+  message?: string;
+  details?: { errors?: { name: string; path?: (string | number)[]; details?: string }[] };
+}
+
+/**
+ * Mensaje legible de un error del CMA. Solo usa status, mensaje y detalles:
+ * nunca imprime la request, que lleva el token en los headers.
+ */
+export function formatError(e: unknown): string {
+  const message = e instanceof Error ? e.message : String(e);
+  try {
+    const body = JSON.parse(message) as CmaErrorBody;
+    const details = (body.details?.errors ?? [])
+      .map((d) => `${d.name}${d.path ? ` en ${d.path.join('.')}` : ''}${d.details ? `: ${d.details}` : ''}`)
+      .join('; ');
+    return `${body.status} ${body.statusText}: ${body.message}${details ? ` → ${details}` : ''}`;
+  } catch {
+    return message;
+  }
+}

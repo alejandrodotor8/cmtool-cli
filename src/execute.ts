@@ -3,19 +3,21 @@
  * devuelve la lista de fallos.
  */
 import pc from 'picocolors';
-import { log } from './ui/log.mjs';
-import { formatError } from './errors.mjs';
-import { ACTION } from './core/plan.mjs';
-import { contentTypeOf } from './core/entries.mjs';
-import { assetFieldsForDestination, fieldsForDestination, mergeWithExisting } from './core/fields.mjs';
+import type { Analysis } from './analyze.ts';
+import type { Writer } from './contentful/write.ts';
+import { contentTypeOf } from './core/entries.ts';
+import { assetFieldsForDestination, fieldsForDestination, mergeWithExisting } from './core/fields.ts';
+import { ACTION, type Plan } from './core/plan.ts';
+import { formatError } from './errors.ts';
+import { log } from './ui/log.ts';
 
-export async function executePlan(plan, analysis, writer) {
+export async function executePlan(plan: Plan, analysis: Analysis, writer: Writer): Promise<string[]> {
   const { titleOf, locales, diffs } = analysis;
   const dstCTs = new Map(analysis.contentTypes.dst); // se actualiza con los cambios de modelo
   const dstTagIds = new Set(analysis.tags.dstIds);
-  const failures = [];
+  const failures: string[] = [];
 
-  const run = async (label, fn) => {
+  const run = async (label: string, fn: () => Promise<unknown>) => {
     try {
       await fn();
       log.ok(label);
@@ -44,7 +46,9 @@ export async function executePlan(plan, analysis, writer) {
     }
     for (const [ctId, fields] of plan.fieldsToAdd) {
       await run(`${ctId}: +${fields.map((f) => f.id).join(', ')}`, async () => {
-        dstCTs.set(ctId, await writer.addFields(dstCTs.get(ctId), fields));
+        const current = dstCTs.get(ctId);
+        if (!current) throw new Error(`el content type "${ctId}" no existe en ${writer.environment}`);
+        dstCTs.set(ctId, await writer.addFields(current, fields));
       });
     }
   }
@@ -70,7 +74,7 @@ export async function executePlan(plan, analysis, writer) {
     }
 
     // Solo campos que existen en ambos modelos con el mismo tipo.
-    const mismatched = new Set(diffs.get(ctId).mismatched.map((f) => f.id));
+    const mismatched = new Set((diffs.get(ctId)?.mismatched ?? []).map((f) => f.id));
     const writable = new Map(dstCT.fields.filter((f) => !mismatched.has(f.id)).map((f) => [f.id, f]));
     const fields = fieldsForDestination(entry, writable, locales.dst);
     const tags = (entry.metadata?.tags ?? []).filter((t) => dstTagIds.has(t.sys.id));

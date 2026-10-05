@@ -2,61 +2,72 @@
  * Lo que se muestra en la terminal. Solo pinta: no pregunta ni decide nada.
  */
 import pc from 'picocolors';
-import { log } from './log.mjs';
-import { MARK, clip, legend, table } from './table.mjs';
-import { ACTION, isWrite } from '../core/plan.mjs';
-import { FIELD, fieldType } from '../core/model.mjs';
-import { contentTypeOf } from '../core/entries.mjs';
+import type { Analysis } from '../analyze.ts';
+import { contentTypeOf } from '../core/entries.ts';
+import { FIELD, type FieldRow, fieldType } from '../core/model.ts';
+import { ACTION, type Action, isWrite, type Plan } from '../core/plan.ts';
+import { log } from './log.ts';
+import { type Column, clip, legend, MARK, table } from './table.ts';
 
-const ACTION_LABEL = {
+const ACTION_LABEL: Record<Action, string> = {
   [ACTION.CREATE]: pc.green('se crea'),
   [ACTION.UPDATE]: pc.yellow('se actualiza'),
   [ACTION.REUSE]: pc.cyan('ya existe → se reutiliza'),
   [ACTION.ORPHAN]: pc.dim('no se crea (cuelga de una reutilizada)'),
 };
 
-const envColumns = (src, dst) => [
+const envColumns = (src: string, dst: string): Column[] => [
   { header: src, align: 'center' },
   { header: dst, align: 'center' },
 ];
 
-const countActions = (actions, action) => [...actions.values()].filter((a) => a === action).length;
+const countActions = (actions: Map<string, Action>, action: Action): number =>
+  [...actions.values()].filter((a) => a === action).length;
 
-const formatBytes = (n) =>
-  n == null ? '' : n < 1024 ? `${n} B` : n < 1024 ** 2 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 ** 2).toFixed(1)} MB`;
+const formatBytes = (n: number | undefined): string =>
+  n == null
+    ? ''
+    : n < 1024
+      ? `${n} B`
+      : n < 1024 ** 2
+        ? `${Math.round(n / 1024)} KB`
+        : `${(n / 1024 ** 2).toFixed(1)} MB`;
 
 /** Árbol padre → hijos, con lo que se hará con cada entry. */
-export function renderEntryTree({ src, dst, rootIds, tree, existsInDst, actions, titleOf }) {
+export function renderEntryTree({ src, dst, rootIds, tree, existsInDst, actions, titleOf }: Analysis): void {
   log.step('Entries');
-  const rows = [];
-  const listed = new Set();
+  const rows: string[][] = [];
+  const listed = new Set<string>();
 
-  const walk = (id, prefix, isLast, isRoot) => {
+  const walk = (id: string, prefix: string, isLast: boolean, isRoot: boolean): void => {
     const lead = pc.dim(prefix + (isRoot ? '' : isLast ? '└─ ' : '├─ '));
-    if (tree.broken.has(id)) {
+    const entry = tree.entries.get(id);
+    if (!entry) {
       rows.push([lead + pc.red('(no existe)'), '', pc.dim(id), MARK.no, '', pc.red(`link roto en ${src}, se ignora`)]);
       return;
     }
-    const entry = tree.entries.get(id);
     const name = clip(titleOf(entry), 40 - prefix.length);
     const repeated = listed.has(id);
+    const action = actions.get(id);
     rows.push([
       lead + (isRoot ? pc.bold(name) : name),
       pc.dim(contentTypeOf(entry)),
       pc.dim(id),
       MARK.yes,
       existsInDst.has(id) ? MARK.yes : MARK.no,
-      repeated ? pc.dim('ya listada arriba') : ACTION_LABEL[actions.get(id)],
+      repeated || !action ? pc.dim('ya listada arriba') : ACTION_LABEL[action],
     ]);
     if (repeated) return;
     listed.add(id);
-    const kids = tree.children.get(id);
+    const kids = tree.children.get(id) ?? [];
     const childPrefix = isRoot ? '' : prefix + (isLast ? '   ' : '│  ');
-    kids.forEach((kid, i) => walk(kid, childPrefix, i === kids.length - 1, false));
+    kids.forEach((kid, i) => {
+      walk(kid, childPrefix, i === kids.length - 1, false);
+    });
   };
-  rootIds.forEach((id) => walk(id, '', true, true));
+  for (const id of rootIds) walk(id, '', true, true);
 
-  const n = (action) => countActions(actions, action);
+  const n = (action: Action) => countActions(actions, action);
   const counts = [
     `${n(ACTION.CREATE)} se crean`,
     n(ACTION.UPDATE) && `${n(ACTION.UPDATE)} se actualizan`,
@@ -67,13 +78,19 @@ export function renderEntryTree({ src, dst, rootIds, tree, existsInDst, actions,
   legend();
   table({
     title: `${pc.bold(`${rootIds.length} padre(s) · ${tree.entries.size - rootIds.length} hijo(s)`)}  ${pc.dim(counts.join(', '))}`,
-    columns: [{ header: 'Entry' }, { header: 'Content type' }, { header: 'ID' }, ...envColumns(src, dst), { header: 'Acción' }],
+    columns: [
+      { header: 'Entry' },
+      { header: 'Content type' },
+      { header: 'ID' },
+      ...envColumns(src, dst),
+      { header: 'Acción' },
+    ],
     rows,
   });
 }
 
 /** Imágenes y archivos que usan las entries que se escriben. */
-export function renderAssets({ src, dst, assets, locales }) {
+export function renderAssets({ src, dst, assets, locales }: Analysis): void {
   log.step('Imágenes y media');
   const locale = locales.src.default;
 
@@ -82,11 +99,19 @@ export function renderAssets({ src, dst, assets, locales }) {
     const inDst = assets.existing.has(id);
     const dstMark = inDst ? MARK.yes : MARK.no;
     if (!asset) {
-      return [pc.red('(no existe)'), pc.dim(id), '', MARK.no, dstMark, inDst ? pc.dim('se reutiliza') : pc.red(`link roto en ${src}`)];
+      return [
+        pc.red('(no existe)'),
+        pc.dim(id),
+        '',
+        MARK.no,
+        dstMark,
+        inDst ? pc.dim('se reutiliza') : pc.red(`link roto en ${src}`),
+      ];
     }
-    const file = asset.fields.file?.[locale] ?? Object.values(asset.fields.file ?? {})[0];
-    const name = asset.fields.title?.[locale] ?? file?.fileName ?? '(sin nombre)';
-    const img = file?.details?.image;
+    const files = asset.fields.file ?? {};
+    const file = (locale ? files[locale] : undefined) ?? Object.values(files)[0];
+    const name = (locale ? asset.fields.title?.[locale] : undefined) ?? file?.fileName ?? '(sin nombre)';
+    const img = file?.details?.image as { width: number; height: number } | undefined;
     const detail = [file?.contentType, img && `${img.width}×${img.height}`, formatBytes(file?.details?.size)]
       .filter(Boolean)
       .join(' · ');
@@ -96,12 +121,18 @@ export function renderAssets({ src, dst, assets, locales }) {
 
   table({
     title: `${pc.bold(`${assets.ids.length} archivo(s)`)}  ${pc.dim(`${assets.existing.size} ya existen, ${assets.missing.length} faltan en ${dst}`)}`,
-    columns: [{ header: 'Imagen' }, { header: 'ID' }, { header: 'Detalle' }, ...envColumns(src, dst), { header: 'Estado' }],
+    columns: [
+      { header: 'Imagen' },
+      { header: 'ID' },
+      { header: 'Detalle' },
+      ...envColumns(src, dst),
+      { header: 'Estado' },
+    ],
     rows,
   });
 }
 
-function fieldRow({ field, dstField, status }, index, dst) {
+function fieldRow({ field, dstField, status }: FieldRow, index: number, dst: string): string[] {
   const cells = [clip(field.name, 28), pc.dim(field.id), fieldType(field)];
   const num = pc.dim(String(index + 1));
   switch (status) {
@@ -110,14 +141,20 @@ function fieldRow({ field, dstField, status }, index, dst) {
     case FIELD.MISSING:
       return [num, ...cells, MARK.yes, MARK.no, pc.yellow(`falta en ${dst}`)];
     case FIELD.MISMATCH:
-      return [num, ...cells, MARK.yes, MARK.diff, pc.red(`en ${dst} es ${fieldType(dstField)} → no se migra`)];
+      return [
+        num,
+        ...cells,
+        MARK.yes,
+        MARK.diff,
+        pc.red(`en ${dst} es ${dstField ? fieldType(dstField) : '?'} → no se migra`),
+      ];
     case FIELD.EXTRA:
       return [pc.dim('·'), ...cells, MARK.no, MARK.yes, pc.cyan(`sobra en ${dst} → se conserva`)];
   }
 }
 
 /** Una tabla por content type del árbol, campo por campo, en el orden del modelo de origen. */
-export function renderModel({ src, dst, diffs, tree, actions, titleOf }) {
+export function renderModel({ src, dst, diffs, tree, actions, titleOf }: Analysis): void {
   log.step(`Modelo  ${pc.bold(src)} ${pc.dim('vs')} ${pc.bold(dst)}`);
   legend();
 
@@ -151,20 +188,24 @@ export function renderModel({ src, dst, diffs, tree, actions, titleOf }) {
 }
 
 /** Caja final con todo lo que va a pasar, antes de confirmar. */
-export function renderSummary({ src, dst, actions, assets, locales }, plan) {
+export function renderSummary({ src, dst, actions, assets, locales }: Analysis, plan: Plan): void {
   log.step('Resumen');
   const created = plan.entries.filter((e) => e.action === ACTION.CREATE).length;
   const reused = countActions(actions, ACTION.REUSE);
   const newFields = [...plan.fieldsToAdd.values()].reduce((n, fields) => n + fields.length, 0);
   const modelChanges = plan.contentTypesToCreate.length + newFields;
 
-  const rows = [['Entries', `${pc.green(`${created} se crean`)} · ${pc.yellow(`${plan.entries.length - created} se actualizan`)}`]];
+  const rows: [string, string][] = [
+    ['Entries', `${pc.green(`${created} se crean`)} · ${pc.yellow(`${plan.entries.length - created} se actualizan`)}`],
+  ];
   if (reused) rows.push(['', pc.cyan(`${reused} hijo(s) ya existen en ${dst} → se reutilizan sin tocarlos`)]);
-  if (plan.skipped.length) rows.push(['', pc.red(`${plan.skipped.length} no se migran (content type no existe en ${dst})`)]);
+  if (plan.skipped.length)
+    rows.push(['', pc.red(`${plan.skipped.length} no se migran (content type no existe en ${dst})`)]);
   rows.push([
     'Modelo',
     modelChanges
-      ? pc.yellow(`+${plan.contentTypesToCreate.length} content type(s) · +${newFields} campo(s)`) + pc.dim(' (se publica el modelo)')
+      ? pc.yellow(`+${plan.contentTypesToCreate.length} content type(s) · +${newFields} campo(s)`) +
+        pc.dim(' (se publica el modelo)')
       : pc.dim('sin cambios'),
   ]);
   if (plan.notAdded.length) rows.push(['', pc.dim(`no se migran: ${clip(plan.notAdded.join(', '), 70)}`)]);

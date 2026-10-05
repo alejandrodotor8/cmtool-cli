@@ -4,7 +4,7 @@ Migra entries de Contentful entre ambientes (por ejemplo, un banner de `develop`
 
 ## Requisitos
 
-- Node 20+
+- Node 22.18+ (corre TypeScript directo, sin compilar). Con fnm, `.node-version` elige Node 24.
 - Una sesión de Contentful (ver abajo)
 
 ## Instalación (una sola vez)
@@ -61,45 +61,63 @@ ctf-migrate
 
 ## Seguridad
 
-- **Un solo módulo escribe**: [src/contentful/write.mjs](src/contentful/write.mjs). Queda atado al ambiente destino y no tiene forma de borrar, archivar, despublicar ni escribir en origen. Para verificarlo:
+- **Un solo módulo escribe**: [src/contentful/write.ts](src/contentful/write.ts). Queda atado al ambiente destino y no tiene forma de borrar, archivar, despublicar ni escribir en origen. Para verificarlo:
   `grep -rnE "\.(createWithId|update|publish|delete|archive|unpublish)\(" src` solo debe mostrar ese archivo.
 - **El token solo va a Contentful**: se lee de `CONTENTFUL_MANAGEMENT_TOKEN` o de `~/.contentfulrc.json` y solo se envía a `api.contentful.com` o `api.eu.contentful.com`. Si el archivo de sesión apunta a otro host, la herramienta se detiene. Los mensajes de error nunca imprimen la request (que lleva el token).
 - **Las imágenes solo se copian desde el CDN de Contentful** (`*.ctfassets.net`, por https).
 - **Nada se escribe antes de confirmar**: todo lo anterior al resumen es solo lectura.
-- **Dependencias**: solo 3 directas (`contentful-management`, `@inquirer/prompts`, `picocolors`), sin scripts de instalación. El paquete es `private` para que no se publique en npm por error.
+- **Dependencias**: solo 3 para correr (`contentful-management`, `@inquirer/prompts`, `picocolors`) y 3 de desarrollo con versión exacta (`typescript`, `@types/node`, `@biomejs/biome`). Ninguna tiene scripts de instalación. El paquete es `private` para que no se publique en npm por error.
 
 ## Cómo está organizado
 
-El flujo se lee de arriba abajo en [src/main.mjs](src/main.mjs). El código está separado por responsabilidad: lo que lee, lo que decide, lo que muestra y lo que escribe.
+El flujo se lee de arriba abajo en [src/main.ts](src/main.ts). El código está separado por responsabilidad: lo que lee, lo que decide, lo que muestra y lo que escribe.
 
 ```text
-index.mjs                 entrada del comando: corre main() y maneja errores/salida
+index.mjs                entrada del comando (JS, para que `npm link` no cambie)
 src/
-  main.mjs                el flujo completo, paso a paso
-  session.mjs             token y host (sesión del CLI o variable de entorno)
-  errors.mjs              AbortError y formato de errores del CMA
-  analyze.mjs             paso de análisis: arma todo lo que se muestra (solo lectura)
-  execute.mjs             paso final: aplica el plan con el writer
+  main.ts                el flujo completo, paso a paso
+  session.ts             token y host (sesión del CLI o variable de entorno)
+  errors.ts              AbortError y formato de errores del CMA
+  analyze.ts             paso de análisis: arma todo lo que se muestra (solo lectura)
+  execute.ts             paso final: aplica el plan con el writer
   contentful/
-    client.mjs            cliente del CMA
-    read.mjs              lecturas (árbol de entries, modelos, locales, assets, tags)
-    write.mjs             ÚNICO módulo que escribe en Contentful
-  core/                   reglas puras: sin red, sin terminal
-    plan.mjs              qué se crea, actualiza, reutiliza; plan de escritura
-    model.mjs             comparación de content types campo por campo
-    fields.mjs            valores de origen → formato de destino (locales, merge, assets)
-    entries.mjs           links, hijos, imágenes y título de una entry
-    ids.mjs               parseo de IDs/URLs pegados
-  ui/                     terminal: no decide ni escribe
-    views.mjs             tablas de entries, imágenes, modelo y resumen
-    prompts.mjs           preguntas al usuario
-    table.mjs             dibujo de tablas
-    log.mjs               mensajes de estado
+    types.ts             tipos de Contentful con nombres cortos
+    client.ts            cliente del CMA
+    read.ts              lecturas (árbol de entries, modelos, locales, assets, tags)
+    write.ts             ÚNICO módulo que escribe en Contentful
+  core/                  reglas puras: sin red, sin terminal
+    plan.ts              qué se crea, actualiza, reutiliza; plan de escritura
+    model.ts             comparación de content types campo por campo
+    fields.ts            valores de origen → formato de destino (locales, merge, assets)
+    entries.ts           links, hijos, imágenes y título de una entry
+    ids.ts               parseo de IDs/URLs pegados
+  ui/                    terminal: no decide ni escribe
+    views.ts             tablas de entries, imágenes, modelo y resumen
+    prompts.ts           preguntas al usuario
+    table.ts             dibujo de tablas
+    log.ts               mensajes de estado
 ```
+
+## Desarrollo
+
+El código es TypeScript. Node lo ejecuta quitando los tipos, así que **no hay paso de compilación**: editas un `.ts` y corres `ctf-migrate`.
+
+```bash
+npm run typecheck   # revisa tipos con tsc (no genera archivos)
+npm run lint        # lint + formato con Biome
+npm run format      # aplica el formato y los arreglos automáticos de Biome
+npm run check       # typecheck + lint; córrelo antes de hacer commit
+```
+
+Reglas para que Node pueda ejecutar los `.ts` sin compilar:
+
+- Los imports llevan la extensión `.ts` (`import { x } from './core/plan.ts'`).
+- Solo sintaxis que se puede borrar: nada de `enum`, `namespace` ni parámetros con `private`/`readonly` en el constructor. Para valores fijos usa un objeto `as const`, como `ACTION` en [src/core/plan.ts](src/core/plan.ts). `tsc` avisa si algo no cumple (`erasableSyntaxOnly`).
+- Los tipos se importan con `import type`.
 
 ### Cómo extenderlo
 
-- **Cambiar qué se migra** (por ejemplo, que un hijo existente se actualice): `classifyTree` en [src/core/plan.mjs](src/core/plan.mjs).
-- **Nueva pregunta al usuario**: una función en [src/ui/prompts.mjs](src/ui/prompts.mjs), su respuesta va a `buildPlan`.
-- **Nuevo tipo de escritura** (por ejemplo, copiar locales): un método en [src/contentful/write.mjs](src/contentful/write.mjs) y su paso en [src/execute.mjs](src/execute.mjs).
-- **Nueva tabla o columna**: [src/ui/views.mjs](src/ui/views.mjs).
+- **Cambiar qué se migra** (por ejemplo, que un hijo existente se actualice): `classifyTree` en [src/core/plan.ts](src/core/plan.ts).
+- **Nueva pregunta al usuario**: una función en [src/ui/prompts.ts](src/ui/prompts.ts), su respuesta va a `buildPlan`.
+- **Nuevo tipo de escritura** (por ejemplo, copiar locales): un método en [src/contentful/write.ts](src/contentful/write.ts) y su paso en [src/execute.ts](src/execute.ts).
+- **Nueva tabla o columna**: [src/ui/views.ts](src/ui/views.ts).

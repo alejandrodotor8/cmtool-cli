@@ -1,0 +1,98 @@
+/**
+ * Paso de análisis: reúne todo lo necesario de origen y destino. Solo lectura.
+ */
+import {
+  fetchAssets,
+  fetchEntries,
+  readContentTypes,
+  readEntryTree,
+  readLocales,
+  readTags,
+} from './contentful/read.ts';
+import type { Asset, Cma, ContentType, Entry, EntryTree, Locales, Tag } from './contentful/types.ts';
+import { assetIdsOf, contentTypeOf, makeTitleOf } from './core/entries.ts';
+import { type ContentTypeDiff, diffContentType } from './core/model.ts';
+import { type Action, classifyTree, writtenEntries } from './core/plan.ts';
+
+export interface Analysis {
+  src: string;
+  dst: string;
+  rootIds: string[];
+  tree: EntryTree;
+  existsInDst: Set<string>;
+  /** Qué pasa con cada entry del árbol. */
+  actions: Map<string, Action>;
+  contentTypes: { src: Map<string, ContentType>; dst: Map<string, ContentType> };
+  /** Comparación de modelo de cada content type del árbol. */
+  diffs: Map<string, ContentTypeDiff>;
+  locales: { src: Locales; dst: Locales; missing: string[] };
+  /** Imágenes de las entries que se escriben. */
+  assets: { ids: string[]; src: Map<string, Asset>; existing: Set<string>; missing: string[] };
+  /** Tags de las entries que se escriben: los que ya hay en destino y los que faltan. */
+  tags: { dstIds: Set<string>; missing: Tag[] };
+  titleOf: (entry: Entry) => string;
+}
+
+export async function analyze(
+  cma: Cma,
+  { src, dst, rootIds }: { src: string; dst: string; rootIds: string[] },
+): Promise<Analysis> {
+  // Árbol de entries y qué pasa con cada una.
+  const tree = await readEntryTree(cma, src, rootIds);
+  const existsInDst = new Set((await fetchEntries(cma, dst, tree.entries.keys())).keys());
+  const actions = classifyTree(rootIds, tree, existsInDst);
+  const written = writtenEntries({ tree, actions });
+
+  // Modelo: todos los content types del árbol, incluidos los de entries reutilizadas.
+  const contentTypes = { src: await readContentTypes(cma, src), dst: await readContentTypes(cma, dst) };
+  const diffs = new Map<string, ContentTypeDiff>();
+  for (const id of new Set([...tree.entries.values()].map(contentTypeOf))) {
+    const srcCT = contentTypes.src.get(id);
+    if (!srcCT) throw new Error(`El content type "${id}" no existe en ${src}.`);
+    diffs.set(id, diffContentType(srcCT, contentTypes.dst.get(id)));
+  }
+
+  const srcLocales = await readLocales(cma, src);
+  const dstLocales = await readLocales(cma, dst);
+  const locales = {
+    src: srcLocales,
+    dst: dstLocales,
+    missing: [...srcLocales.codes].filter((code) => !dstLocales.codes.has(code)),
+  };
+
+  // Imágenes: solo las de entries que se escriben.
+  const assetIds = [...new Set(written.flatMap(assetIdsOf))];
+  const srcAssets = await fetchAssets(cma, src, assetIds);
+  const existingAssets = new Set((await fetchAssets(cma, dst, assetIds)).keys());
+  const assets = {
+    ids: assetIds,
+    src: srcAssets,
+    existing: existingAssets,
+    missing: assetIds.filter((id) => !existingAssets.has(id) && srcAssets.has(id)),
+  };
+
+  // Tags: solo los de entries que se escriben.
+  const tagIds = [...new Set(written.flatMap((e) => (e.metadata?.tags ?? []).map((t) => t.sys.id)))];
+  const tags: Analysis['tags'] = { dstIds: new Set(), missing: [] };
+  if (tagIds.length) {
+    tags.dstIds = new Set((await readTags(cma, dst)).keys());
+    const missingIds = tagIds.filter((id) => !tags.dstIds.has(id));
+    const srcTags = missingIds.length ? await readTags(cma, src) : new Map<string, Tag>();
+    tags.missing = missingIds.flatMap((id) => srcTags.get(id) ?? []);
+  }
+
+  return {
+    src,
+    dst,
+    rootIds,
+    tree,
+    existsInDst,
+    actions,
+    contentTypes,
+    diffs,
+    locales,
+    assets,
+    tags,
+    titleOf: makeTitleOf(contentTypes.src, srcLocales.default),
+  };
+}

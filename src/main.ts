@@ -7,16 +7,15 @@
  * Devuelve el código de salida.
  */
 import pc from 'picocolors';
-import { AbortError } from './errors.mjs';
-import { loadSession } from './session.mjs';
-import { createCma } from './contentful/client.mjs';
-import { listEnvironments, listSpaces } from './contentful/read.mjs';
-import { createWriter } from './contentful/write.mjs';
-import { analyze } from './analyze.mjs';
-import { executePlan } from './execute.mjs';
-import { buildPlan, modelOptions } from './core/plan.mjs';
-import { log } from './ui/log.mjs';
-import { renderAssets, renderEntryTree, renderModel, renderSummary } from './ui/views.mjs';
+import { analyze } from './analyze.ts';
+import { createCma } from './contentful/client.ts';
+import { listEnvironments, listSpaces } from './contentful/read.ts';
+import { createWriter } from './contentful/write.ts';
+import { buildPlan, modelOptions } from './core/plan.ts';
+import { AbortError } from './errors.ts';
+import { executePlan } from './execute.ts';
+import { loadSession } from './session.ts';
+import { log } from './ui/log.ts';
 import {
   askEntryIds,
   askModelChanges,
@@ -24,10 +23,13 @@ import {
   confirmMigration,
   pickEnvironments,
   pickSpace,
-} from './ui/prompts.mjs';
+} from './ui/prompts.ts';
+import { renderAssets, renderEntryTree, renderModel, renderSummary } from './ui/views.ts';
 
-export async function main() {
-  console.log(pc.bold('\nContentful · migrar entries entre ambientes') + pc.dim('  (entries e imágenes quedan en draft)'));
+export async function main(): Promise<number> {
+  console.log(
+    pc.bold('\nContentful · migrar entries entre ambientes') + pc.dim('  (entries e imágenes quedan en draft)'),
+  );
 
   // 1. Qué migrar y hacia dónde
   const session = loadSession();
@@ -55,7 +57,9 @@ export async function main() {
     if (missing) {
       withAssets = await askWithAssets(missing);
       if (!withAssets) {
-        log.warn(`Las entries quedarán apuntando a ${missing} imagen(es) que no existen en ${dst}; no se podrán publicar hasta que existan.`);
+        log.warn(
+          `Las entries quedarán apuntando a ${missing} imagen(es) que no existen en ${dst}; no se podrán publicar hasta que existan.`,
+        );
       }
     }
   }
@@ -69,13 +73,16 @@ export async function main() {
   if (!plan.entries.length) throw new AbortError('No queda nada para migrar.');
 
   // 4. Confirmar y escribir
-  if (!(await confirmMigration(envs.find((e) => e.id === dst)))) {
+  const dstEnv = envs.find((e) => e.id === dst) ?? { id: dst, aliases: [] };
+  if (!(await confirmMigration(dstEnv))) {
     console.log(pc.dim('\nCancelado.'));
     return 0;
   }
   const failures = await executePlan(plan, analysis, createWriter(cma, { src, dst }));
 
-  log.step(failures.length ? `Terminado con ${failures.length} error(es)` : 'Listo. Ninguna entry ni imagen fue publicada.');
+  log.step(
+    failures.length ? `Terminado con ${failures.length} error(es)` : 'Listo. Ninguna entry ni imagen fue publicada.',
+  );
   for (const id of rootIds) {
     log.info(`https://${session.appHost}/spaces/${spaceId}/environments/${dst}/entries/${id}`);
   }

@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 /**
  * ctf-migrate — migra entries de Contentful (padre + hijos) entre ambientes.
- * Entries e imágenes quedan en DRAFT. El flujo completo está en src/main.mjs.
+ * Entries e imágenes quedan en DRAFT. El flujo completo está en src/main.ts.
+ *
+ * Este archivo es JavaScript para que el comando enlazado con `npm link` no cambie;
+ * Node (>= 22.18) carga los módulos .ts directamente, sin compilar.
  */
 import pc from 'picocolors';
-import { main } from './src/main.mjs';
-import { AbortError, formatError, isCancel } from './src/errors.mjs';
-import { log } from './src/ui/log.mjs';
+import { AbortError, formatError, isCancel } from './src/errors.ts';
+import { main } from './src/main.ts';
+import { log } from './src/ui/log.ts';
 
 main()
   .then((code) => process.exit(code))

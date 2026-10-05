@@ -1,14 +1,16 @@
 /**
  * Preguntas al usuario. Cada función devuelve la respuesta; no lee ni escribe en Contentful.
  */
+import { checkbox, confirm, input, Separator, select } from '@inquirer/prompts';
 import pc from 'picocolors';
-import { select, input, checkbox, confirm, Separator } from '@inquirer/prompts';
-import { log } from './log.mjs';
-import { clip, pad } from './table.mjs';
-import { parseEntryIds } from '../core/ids.mjs';
-import { fieldType } from '../core/model.mjs';
+import type { Environment, Space } from '../contentful/types.ts';
+import { parseEntryIds } from '../core/ids.ts';
+import { fieldType } from '../core/model.ts';
+import type { ModelOption, ModelPick } from '../core/plan.ts';
+import { log } from './log.ts';
+import { clip, pad } from './table.ts';
 
-export const pickSpace = (spaces, defaultId) =>
+export const pickSpace = (spaces: Space[], defaultId: string | undefined): Promise<string> =>
   select({
     message: 'Space',
     choices: spaces.map((s) => ({ name: `${s.name} ${pc.dim(s.sys.id)}`, value: s.sys.id })),
@@ -16,17 +18,21 @@ export const pickSpace = (spaces, defaultId) =>
     pageSize: 15,
   });
 
-export async function pickEnvironments(envs) {
+export async function pickEnvironments(envs: Environment[]): Promise<{ src: string; dst: string }> {
   const choices = envs.map((e) => ({
     name: e.id + (e.aliases.length ? pc.dim(`  (alias: ${e.aliases.join(', ')})`) : ''),
     value: e.id,
   }));
   const src = await select({ message: 'Ambiente ORIGEN', choices, pageSize: 15 });
-  const dst = await select({ message: 'Ambiente DESTINO', choices: choices.filter((c) => c.value !== src), pageSize: 15 });
+  const dst = await select({
+    message: 'Ambiente DESTINO',
+    choices: choices.filter((c) => c.value !== src),
+    pageSize: 15,
+  });
   return { src, dst };
 }
 
-export async function askEntryIds() {
+export async function askEntryIds(): Promise<string[]> {
   const raw = await input({
     message: 'Entry ID(s) o URL(s) (separados por coma o espacio)',
     validate: (v) => parseEntryIds(v).length > 0 || 'Pega al menos un entry ID',
@@ -34,15 +40,15 @@ export async function askEntryIds() {
   return parseEntryIds(raw);
 }
 
-export const askWithAssets = (missingCount) =>
+export const askWithAssets = (missingCount: number): Promise<boolean> =>
   confirm({
     message: `¿Migrar con imágenes? (se crean las ${missingCount} que faltan y se reutilizan las que ya existen)`,
     default: true,
   });
 
 /** Lista con checks de lo que falta en el modelo de destino. Devuelve las opciones marcadas. */
-export function askModelChanges(options, dst) {
-  const choices = [];
+export function askModelChanges(options: ModelOption[], dst: string): Promise<ModelPick[]> {
+  const choices: (Separator | { name: string; value: ModelPick })[] = [];
   for (const { diff, onlyReused } of options) {
     const note = onlyReused ? '  · solo entries reutilizadas: se agrega el campo, su contenido no se copia' : '';
     choices.push(new Separator(pc.dim(`── ${diff.name} (${diff.id})${note}`)));
@@ -75,7 +81,7 @@ export function askModelChanges(options, dst) {
  * Confirmación final. Si el destino parece producción (es `master` o tiene un alias),
  * no basta con "sí": hay que escribir el nombre del ambiente.
  */
-export async function confirmMigration(dstEnv) {
+export async function confirmMigration(dstEnv: Environment): Promise<boolean> {
   const looksLikeProduction = dstEnv.id === 'master' || dstEnv.aliases.length > 0;
   if (!looksLikeProduction) {
     return confirm({ message: `¿Migrar a ${pc.bold(dstEnv.id)}? (entries e imágenes en draft)`, default: true });

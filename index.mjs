@@ -210,15 +210,19 @@ async function main() {
   // ─── Lectura: padres e hijos ───
   log.step(`Analizando ${pc.bold(src)} ${pc.dim('──▶')} ${pc.bold(dst)}…`);
 
-  const entries = new Map(); // id → entry
+  // Se recorre el árbol completo en origen, para mostrarlo y revisar el modelo
+  // de todos sus content types. Pero solo se escribe:
+  //   · lo que pegas (se crea o se actualiza);
+  //   · los hijos que no existen en destino, colgando de algo que se escribe (se crean).
+  // Un hijo que ya existe en destino se reutiliza sin tocar su contenido.
+  const all = new Map(); // id → entry en origen (árbol completo)
   const children = new Map(); // id → ids de entries hijas
-  const assetIds = new Set();
   const brokenInSource = new Set();
   const queue = [...rootIds];
 
   while (queue.length) {
     const id = queue.shift();
-    if (entries.has(id) || brokenInSource.has(id)) continue;
+    if (all.has(id) || brokenInSource.has(id)) continue;
     let entry;
     try {
       entry = await cma.entry.get({ environmentId: src, entryId: id });
@@ -231,20 +235,36 @@ async function main() {
       brokenInSource.add(id);
       continue;
     }
-    entries.set(id, entry);
-    const kids = [];
-    for (const l of collectLinks(entry.fields)) {
-      if (l.type === 'Asset') assetIds.add(l.id);
-      else if (!kids.includes(l.id)) {
-        kids.push(l.id);
-        queue.push(l.id);
-      }
-    }
+    all.set(id, entry);
+    const kids = [...new Set(collectLinks(entry.fields).filter((l) => l.type === 'Entry').map((l) => l.id))];
     children.set(id, kids);
+    queue.push(...kids);
   }
 
+  const existingEntries = new Set((await fetchMany(cma, dst, 'entry', [...all.keys()])).keys());
+
+  const entries = new Map(); // id → entry en origen que se va a escribir
+  const toVisit = [...rootIds];
+  while (toVisit.length) {
+    const id = toVisit.shift();
+    if (entries.has(id) || !all.has(id)) continue;
+    entries.set(id, all.get(id));
+    toVisit.push(...children.get(id).filter((k) => !existingEntries.has(k)));
+  }
+  const untouched = [...all.keys()].filter((id) => !entries.has(id));
+  const reusedCount = untouched.filter((id) => existingEntries.has(id)).length;
+  const orphanCount = untouched.length - reusedCount;
+
+  const assetIds = new Set(
+    [...entries.values()].flatMap((e) =>
+      collectLinks(e.fields)
+        .filter((l) => l.type === 'Asset')
+        .map((l) => l.id),
+    ),
+  );
+
   const ctOf = (e) => e.sys.contentType.sys.id;
-  const ctIds = [...new Set([...entries.values()].map(ctOf))];
+  const ctIds = [...new Set([...all.values()].map(ctOf))];
   const srcCTs = new Map();
   const dstCTs = new Map();
   for (const id of ctIds) {
@@ -265,7 +285,6 @@ async function main() {
   const srcDefault = srcLocales.find((l) => l.default)?.code;
   const dstDefault = dstLocales.find((l) => l.default)?.code;
 
-  const existingEntries = new Set((await fetchMany(cma, dst, 'entry', [...entries.keys()])).keys());
   const srcAssets = await fetchMany(cma, src, 'asset', [...assetIds]);
   const existingAssets = new Set((await fetchMany(cma, dst, 'asset', [...assetIds])).keys());
   const missingAssets = [...assetIds].filter((id) => !existingAssets.has(id) && srcAssets.has(id));
@@ -298,14 +317,18 @@ async function main() {
       entryRows.push([lead + pc.red('(no existe)'), '', pc.dim(id), NO, '', pc.red(`link roto en ${src}, se ignora`)]);
       return;
     }
-    const e = entries.get(id);
+    const e = all.get(id);
     const name = clip(titleOf(e), room);
     const repeated = listed.has(id);
     const action = repeated
       ? pc.dim('ya listada arriba')
-      : existingEntries.has(id)
-        ? pc.yellow('se actualiza')
-        : pc.green('se crea');
+      : !entries.has(id)
+        ? existingEntries.has(id)
+          ? pc.cyan('ya existe → se reutiliza')
+          : pc.dim('no se crea (cuelga de una reutilizada)')
+        : existingEntries.has(id)
+          ? pc.yellow('se actualiza')
+          : pc.green('se crea');
     entryRows.push([
       lead + (isRoot ? pc.bold(name) : name),
       pc.dim(ctOf(e)),
@@ -322,11 +345,21 @@ async function main() {
   };
   rootIds.forEach((id) => walk(id, '', true, true));
 
-  const childCount = entries.size - rootIds.length;
+  const childCount = all.size - rootIds.length;
   const newCount = [...entries.keys()].filter((id) => !existingEntries.has(id)).length;
+  const updateCount = entries.size - newCount;
   legend();
   table({
-    title: `${pc.bold(`${rootIds.length} padre(s) · ${childCount} hijo(s)`)}  ${pc.dim(`${newCount} nuevas, ${entries.size - newCount} ya existen en ${dst}`)}`,
+    title: `${pc.bold(`${rootIds.length} padre(s) · ${childCount} hijo(s)`)}  ${pc.dim(
+      [
+        `${newCount} se crean`,
+        updateCount && `${updateCount} se actualizan`,
+        reusedCount && `${reusedCount} se reutilizan`,
+        orphanCount && `${orphanCount} no se crean`,
+      ]
+        .filter(Boolean)
+        .join(', '),
+    )}`,
     columns: [
       { header: 'Entry' },
       { header: 'Content type' },
@@ -427,7 +460,9 @@ async function main() {
           m.extra.length && pc.cyan(`${m.extra.length} sobra(n)`),
           m.mismatched.length && pc.red(`${m.mismatched.length} otro tipo`),
         ].filter(Boolean);
-    const usedBy = [...entries.values()].filter((e) => ctOf(e) === m.id);
+    const usedBy = [...all.values()]
+      .filter((e) => ctOf(e) === m.id)
+      .map((e) => titleOf(e) + (entries.has(e.sys.id) ? '' : ' (reutilizada)'));
 
     console.log();
     table({
@@ -443,14 +478,18 @@ async function main() {
       ],
       rows,
     });
-    log.info(`usado por: ${clip(usedBy.map(titleOf).join(', '), 90)}`);
+    log.info(`usado por: ${clip(usedBy.join(', '), 90)}`);
   }
 
+  const writesCT = (ctId) => [...entries.values()].some((e) => ctOf(e) === ctId);
   const modelChoices = [];
   for (const m of model) {
     const s = srcCTs.get(m.id);
     if (!m.missingCT && !m.missing.length) continue;
-    modelChoices.push(new Separator(pc.dim(`── ${s.name} (${m.id})`)));
+    // Un content type que solo usan entries que no se escriben no hace falta crearlo.
+    if (m.missingCT && !writesCT(m.id)) continue;
+    const note = writesCT(m.id) ? '' : '  · solo entries reutilizadas: se agrega el campo, su contenido no se copia';
+    modelChoices.push(new Separator(pc.dim(`── ${s.name} (${m.id})${note}`)));
     if (m.missingCT) {
       modelChoices.push({
         name: `Crear content type completo ${pc.dim(`(${m.missing.length} campos; si no, sus entries no se migran)`)}`,
@@ -496,6 +535,7 @@ async function main() {
   const summary = [
     ['Entries', `${pc.green(`${toCreate} se crean`)} · ${pc.yellow(`${toMigrate.length - toCreate} se actualizan`)}`],
   ];
+  if (reusedCount) summary.push(['', pc.cyan(`${reusedCount} hijo(s) ya existen en ${dst} → se reutilizan sin tocarlos`)]);
   if (skipped.length) {
     summary.push(['', pc.red(`${skipped.length} no se migran (content type no existe en ${dst})`)]);
   }

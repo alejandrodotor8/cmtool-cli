@@ -2,10 +2,18 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { SavedEntry } from '../src/backup.ts';
 import type { Entry } from '../src/contentful/types.ts';
-import { RESTORE, restoreStatus } from '../src/core/restore.ts';
+import { RESTORE, restoreStatus, shouldRestore } from '../src/core/restore.ts';
 import { entry } from './fixtures.ts';
 
-const saved: SavedEntry = { id: 'banner', contentType: 'banner', title: 'Banner', version: 7, fields: {}, tags: [] };
+const saved: SavedEntry = {
+  id: 'banner',
+  contentType: 'banner',
+  title: 'Banner',
+  version: 7,
+  fields: {},
+  tags: [],
+  applied: true,
+};
 
 const withVersion = (version: number): Entry => {
   const e = entry('banner', 'banner');
@@ -25,5 +33,13 @@ describe('restoreStatus', () => {
 
   test('si ya no existe en destino, se omite', () => {
     assert.equal(restoreStatus(saved, undefined), RESTORE.MISSING);
+  });
+
+  test('si la migración no la alcanzó a actualizar, se omite', () => {
+    assert.equal(restoreStatus({ ...saved, applied: false }, withVersion(7)), RESTORE.NOT_APPLIED);
+  });
+
+  test('solo se restauran las que nadie tocó o se editaron después', () => {
+    assert.deepEqual(Object.values(RESTORE).filter(shouldRestore), [RESTORE.RESTORE, RESTORE.CHANGED]);
   });
 });

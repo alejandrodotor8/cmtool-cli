@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { buildPlan } from '../src/core/plan.ts';
-import { projectedContentType, requiredGaps, writableFields } from '../src/core/publish-check.ts';
-import { analysisOf, contentType, entry, field } from './fixtures.ts';
+import { projectedContentType, type RequiredGap, requiredGaps, writableFields } from '../src/core/publish-check.ts';
+import { analysisOf, contentType, entry, field, locales } from './fixtures.ts';
 
-const gapIds = (gaps: Map<string, { id: string }[]>) =>
-  Object.fromEntries([...gaps].map(([id, fields]) => [id, fields.map((f) => f.id)]));
+const gapIds = (gaps: Map<string, RequiredGap[]>) =>
+  Object.fromEntries([...gaps].map(([id, entryGaps]) => [id, entryGaps.map((g) => g.field.id)]));
 
 describe('requiredGaps', () => {
   test('una entry nueva con un obligatorio vacío en destino no se podrá publicar', () => {
@@ -69,6 +69,46 @@ describe('requiredGaps', () => {
       dstCTs: [ct],
     });
     assert.equal(requiredGaps(analysis, buildPlan(analysis, { withAssets: false, picked: [] })).size, 0);
+  });
+});
+
+describe('requiredGaps en varios idiomas', () => {
+  const ct = contentType('banner', [
+    field('title', 'Symbol', { required: true, localized: true }),
+    field('code', 'Symbol', { required: true }),
+  ]);
+  const withLocales = (required: string[]) => {
+    const analysis = analysisOf({
+      rootIds: ['banner'],
+      entries: [entry('banner', 'banner', { title: { 'es-CO': 'Hola' }, code: { 'es-CO': 'X' } })],
+      srcCTs: [ct],
+      dstCTs: [ct],
+    });
+    const loc = locales(['es-CO', 'en-US'], 'es-CO', required);
+    return { ...analysis, locales: { src: loc, dst: loc, missing: [] } };
+  };
+
+  test('un campo localizado debe tener valor en cada idioma que no permite vacíos', () => {
+    const analysis = withLocales(['es-CO', 'en-US']);
+    const gaps = requiredGaps(analysis, buildPlan(analysis, { withAssets: false, picked: [] }));
+    assert.deepEqual(
+      gaps.get('banner')?.map((g) => [g.field.id, g.locales]),
+      [['title', ['en-US']]],
+    );
+  });
+
+  test('si el otro idioma permite vacíos, no hay aviso', () => {
+    const analysis = withLocales(['es-CO']);
+    assert.equal(requiredGaps(analysis, buildPlan(analysis, { withAssets: false, picked: [] })).size, 0);
+  });
+
+  test('un campo no localizado solo se revisa en el idioma por defecto', () => {
+    const analysis = withLocales(['es-CO', 'en-US']);
+    const gaps = requiredGaps(analysis, buildPlan(analysis, { withAssets: false, picked: [] }));
+    assert.equal(
+      gaps.get('banner')?.some((g) => g.field.id === 'code'),
+      false,
+    );
   });
 });
 

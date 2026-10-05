@@ -44,7 +44,11 @@ export const asset = (
 
 export const tag = (id: string): Tag => ({ sys: { id, visibility: 'public' }, name: id }) as unknown as Tag;
 
-export const locales = (codes: string[], def = codes[0]): Locales => ({ codes: new Set(codes), default: def });
+export const locales = (codes: string[], def = codes[0], required = def ? [def] : []): Locales => ({
+  codes: new Set(codes),
+  default: def,
+  required: new Set(required),
+});
 
 /** Árbol a partir de las entries de origen; los hijos salen de sus links. */
 export function treeOf(entries: Entry[], broken: string[] = []): EntryTree {

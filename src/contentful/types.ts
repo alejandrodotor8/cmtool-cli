@@ -27,6 +27,8 @@ export interface Environment {
 export interface Locales {
   codes: Set<string>;
   default: string | undefined;
+  /** Locales que no permiten campos vacíos: los obligatorios deben tener valor ahí (incluye el por defecto). */
+  required: Set<string>;
 }
 
 /** Entries leídas en origen a partir de las que pegaste, con sus hijos. */

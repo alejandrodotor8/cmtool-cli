@@ -20,6 +20,8 @@ export interface SavedEntry {
   version: number;
   fields: Entry['fields'];
   tags: TagLink[];
+  /** Se guarda en `false` antes de actualizar y pasa a `true` cuando la actualización funcionó. */
+  applied: boolean;
 }
 
 export interface BackupData {
@@ -72,7 +74,14 @@ export function startBackup(meta: Pick<BackupData, 'kind' | 'spaceId' | 'src' | 
         version: entry.sys.version,
         fields: entry.fields ?? {},
         tags: entry.metadata?.tags ?? [],
+        applied: false,
       });
+      save();
+    },
+    /** La actualización de esa entry sí se hizo. */
+    confirmUpdate(id: string) {
+      const saved = data.updated.findLast((e) => e.id === id);
+      if (saved) saved.applied = true;
       save();
     },
     recordCreated(kind: CreatedKind, id: string) {

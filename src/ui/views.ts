@@ -4,10 +4,11 @@
 import pc from 'picocolors';
 import type { Analysis } from '../analyze.ts';
 import type { BackupData, SavedEntry } from '../backup.ts';
-import type { Entry, Field } from '../contentful/types.ts';
+import type { Entry } from '../contentful/types.ts';
 import { contentTypeOf } from '../core/entries.ts';
 import { FIELD, type FieldRow, fieldType, type RuleChanges } from '../core/model.ts';
 import { ACTION, type Action, isWrite, type Plan, willExistInDst } from '../core/plan.ts';
+import type { RequiredGap } from '../core/publish-check.ts';
 import { RESTORE, type RestoreStatus, restoreStatus } from '../core/restore.ts';
 import { log } from './log.ts';
 import { type Column, clip, legend, MARK, table } from './table.ts';
@@ -270,7 +271,7 @@ export function renderModel({ src, dst, diffs, tree, actions, titleOf, locales }
 export function renderSummary(
   { src, dst, actions, assets, locales, tree, titleOf }: Analysis,
   plan: Plan,
-  { gaps, hyperlinks }: { gaps: Map<string, Field[]>; hyperlinks: Map<string, string[]> },
+  { gaps, hyperlinks }: { gaps: Map<string, RequiredGap[]>; hyperlinks: Map<string, string[]> },
 ): void {
   log.step('Resumen');
   const created = plan.entries.filter((e) => e.action === ACTION.CREATE).length;
@@ -323,10 +324,12 @@ export function renderSummary(
     log.warn(
       `${gaps.size} entry(s) quedarán en ${dst} con campos obligatorios vacíos: no se podrán publicar hasta completarlos.`,
     );
-    for (const [id, fields] of gaps) {
+    const onlyDefault = locales.dst.required.size <= 1;
+    for (const [id, entryGaps] of gaps) {
       const entry = tree.entries.get(id);
       const name = entry ? titleOf(entry) : id;
-      log.info(`${clip(name)} ${id}: ${fields.map((f) => f.name).join(', ')}`);
+      const fields = entryGaps.map((g) => (onlyDefault ? g.field.name : `${g.field.name} (${g.locales.join(', ')})`));
+      log.info(`${clip(name)} ${id}: ${fields.join(', ')}`);
     }
   }
 }
@@ -335,6 +338,7 @@ const RESTORE_LABEL: Record<RestoreStatus, string> = {
   [RESTORE.RESTORE]: pc.green('se restaura'),
   [RESTORE.CHANGED]: pc.yellow('se editó después → ese cambio también se deshace'),
   [RESTORE.MISSING]: pc.red('ya no existe → se omite'),
+  [RESTORE.NOT_APPLIED]: pc.dim('la migración no la alcanzó a actualizar → se omite'),
 };
 
 /** Qué va a restaurar un respaldo, y lo que la migración creó (que no se borra). */

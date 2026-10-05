@@ -78,14 +78,15 @@ export async function executePlan(plan: Plan, analysis: Analysis, writer: Writer
     const tags = (entry.metadata?.tags ?? []).filter((t) => dstTagIds.has(t.sys.id));
 
     if (action === ACTION.UPDATE) {
-      await run(`${label} actualizada ${pc.dim('(queda Changed si estaba publicada)')}`, () =>
-        writer.updateEntry(
+      await run(`${label} actualizada ${pc.dim('(queda Changed si estaba publicada)')}`, async () => {
+        await writer.updateEntry(
           id,
           (current) => mergeWithExisting(current, fields, writable, locales.src),
           tags,
           (current) => backup.recordUpdate(current, title),
-        ),
-      );
+        );
+        backup.confirmUpdate(id);
+      });
     } else {
       await run(`${label} creada (draft)`, async () => {
         await writer.createEntry(id, ctId, fields, tags);

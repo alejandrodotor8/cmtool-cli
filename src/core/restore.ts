@@ -5,6 +5,7 @@ export const RESTORE = {
   RESTORE: 'restore', // nadie la tocó después de la migración
   CHANGED: 'changed', // alguien la editó o publicó después: restaurar también deshace eso
   MISSING: 'missing', // ya no existe en destino: se omite
+  NOT_APPLIED: 'not-applied', // la actualización falló durante la migración: no hay nada que deshacer
 } as const;
 
 export type RestoreStatus = (typeof RESTORE)[keyof typeof RESTORE];
@@ -14,6 +15,11 @@ export type RestoreStatus = (typeof RESTORE)[keyof typeof RESTORE];
  * la versión en `respaldo + 1`; cualquier otra versión significa que hubo cambios después.
  */
 export function restoreStatus(saved: SavedEntry, current: Entry | undefined): RestoreStatus {
+  if (saved.applied === false) return RESTORE.NOT_APPLIED;
   if (!current) return RESTORE.MISSING;
   return current.sys.version === saved.version + 1 ? RESTORE.RESTORE : RESTORE.CHANGED;
 }
+
+/** Se restaura si nadie la tocó o si se editó después (avisando); el resto se omite. */
+export const shouldRestore = (status: RestoreStatus): boolean =>
+  status === RESTORE.RESTORE || status === RESTORE.CHANGED;

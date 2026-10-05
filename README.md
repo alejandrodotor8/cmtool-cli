@@ -53,7 +53,7 @@ ctf-migrate
    - campos con **otro tipo** → no se migran;
    - campos con el mismo tipo pero **reglas distintas** (`!`): obligatorio solo en destino, localizado en origen pero no en destino (solo se copia el locale por defecto) o validaciones distintas (tipos de entry permitidos, tamaño, formato…);
    - content types que **no existen** en destino → eliges si crearlos (si no, esas entries no se migran).
-7. Revisa el **resumen** y confirma. El resumen avisa qué entries quedarán con **campos obligatorios vacíos** en destino (no se podrán publicar hasta completarlos). Si el destino parece producción (es `master` o tiene un alias), tienes que escribir el nombre del ambiente para confirmar.
+7. Revisa el **resumen** y confirma. El resumen avisa qué entries quedarán con **campos obligatorios vacíos** en destino (no se podrán publicar hasta completarlos). Revisa el idioma por defecto y los idiomas que en destino no permiten campos vacíos. Si el destino parece producción (es `master` o tiene un alias), tienes que escribir el nombre del ambiente para confirmar.
 8. Al terminar te dice dónde quedó el **respaldo** de la migración.
 
 ### Sin pasar por los menús
@@ -96,6 +96,7 @@ Cada migración guarda un respaldo en `~/.ctf-migrate/backups/` (en Windows, `C:
 
 - Si alguien editó o publicó la entry **después** de la migración, te avisa: restaurar también deshace esos cambios.
 - Si la entry ya no existe en destino, la omite.
+- Si durante la migración la actualización de una entry falló, no hay nada que deshacer: la omite.
 - Lo que la migración **creó** (entries, imágenes, tags, content types, campos del modelo) **no se borra**, porque la herramienta nunca borra. Te lo lista para que decidas en Contentful.
 - El restore también guarda su propio respaldo, así que se puede deshacer.
 

@@ -10,7 +10,7 @@ import type { CliArgs } from '../cli-args.ts';
 import { createCma } from '../contentful/client.ts';
 import { fetchEntries, listEnvironments } from '../contentful/read.ts';
 import { createWriter } from '../contentful/write.ts';
-import { RESTORE, restoreStatus } from '../core/restore.ts';
+import { restoreStatus, shouldRestore } from '../core/restore.ts';
 import { loadSession } from '../session.ts';
 import { trackApiCalls } from '../ui/api-calls.ts';
 import { log } from '../ui/log.ts';
@@ -36,7 +36,7 @@ export async function restore({ dryRun, file, verbose }: CliArgs): Promise<numbe
     data.updated.map((e) => e.id),
   );
   const items = data.updated.map((saved) => ({ saved, current: current.get(saved.id) }));
-  const toRestore = items.filter((i) => restoreStatus(i.saved, i.current) !== RESTORE.MISSING);
+  const toRestore = items.filter((i) => shouldRestore(restoreStatus(i.saved, i.current)));
   renderRestore(data, items);
 
   if (!toRestore.length) {
@@ -63,14 +63,15 @@ export async function restore({ dryRun, file, verbose }: CliArgs): Promise<numbe
 
   log.step('Restaurando');
   for (const { saved } of toRestore) {
-    await run(`${saved.title} ${pc.dim(saved.id)} restaurada`, () =>
-      writer.updateEntry(
+    await run(`${saved.title} ${pc.dim(saved.id)} restaurada`, async () => {
+      await writer.updateEntry(
         saved.id,
         () => saved.fields,
         saved.tags,
         (entry) => backup.recordUpdate(entry, saved.title),
-      ),
-    );
+      );
+      backup.confirmUpdate(saved.id);
+    });
   }
 
   log.step(failures.length ? `Terminado con ${failures.length} error(es)` : 'Listo.');

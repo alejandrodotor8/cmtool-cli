@@ -108,7 +108,11 @@ export async function readContentTypes(cma: Cma, environmentId: string): Promise
 
 export async function readLocales(cma: Cma, environmentId: string): Promise<Locales> {
   const items = (await cma.locale.getMany({ environmentId, query: { limit: 100 } })).items;
-  return { codes: new Set(items.map((l) => l.code)), default: items.find((l) => l.default)?.code };
+  return {
+    codes: new Set(items.map((l) => l.code)),
+    default: items.find((l) => l.default)?.code,
+    required: new Set(items.filter((l) => l.default || !l.optional).map((l) => l.code)),
+  };
 }
 
 export async function readTags(cma: Cma, environmentId: string): Promise<Map<string, Tag>> {

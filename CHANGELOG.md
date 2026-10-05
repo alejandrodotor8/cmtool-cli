@@ -7,8 +7,8 @@
 - **Padre e hijos**: se migra la entry que pegas y las entries que la componen. Un hijo que ya existe en destino se reutiliza sin tocarlo; solo se crean los que faltan.
 - **Tablas en la terminal**: árbol de entries, imágenes, modelo campo por campo (con columnas por ambiente) y resumen.
 - **Comparación de modelo**: campos que faltan, sobran, tienen otro tipo o reglas distintas (obligatorio, localizado, validaciones). Eliges con checks qué agregar.
-- **Aviso de publicación**: el resumen dice qué entries quedarán con obligatorios vacíos o con textos enlazados a entries que no existen en destino.
-- **Respaldo y `ctf-migrate restore`**: cada migración guarda cómo estaban las entries que actualiza, y `restore` las devuelve a ese estado.
+- **Aviso de publicación**: el resumen dice qué entries quedarán con obligatorios vacíos (en el idioma por defecto y en los que no permiten vacíos) o con textos enlazados a entries que no existen en destino.
+- **Respaldo y `ctf-migrate restore`**: cada migración guarda cómo estaban las entries que actualiza (y cuáles sí se alcanzaron a actualizar), y `restore` las devuelve a ese estado.
 - **`--dry-run`**, **`--verbose`** y flags para no pasar por los menús (`--space`, `--from`, `--to`, `--ids`).
 - **Límites**: se detiene si el árbol pasa de 300 entries y pide confirmación si se van a escribir más de 20.
 - **Entries archivadas** en destino: no se actualizan y se avisa.

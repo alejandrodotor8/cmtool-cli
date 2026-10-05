@@ -54,9 +54,24 @@ describe('backup', () => {
       version: 7,
       fields: { title: { 'es-CO': 'Antes' } },
       tags: [{ sys: { type: 'Link', linkType: 'Tag', id: 'navidad' } }],
+      applied: false,
     });
     assert.deepEqual(data.created.entries, ['slide']);
     assert.deepEqual(data.fieldsAdded, { banner: ['subtitle'] });
+  });
+
+  test('marca como aplicada una entry solo cuando se confirma su actualización', () => {
+    const backup = startBackup(meta, dir);
+    backup.recordUpdate(entry('a', 'banner'), 'A');
+    backup.recordUpdate(entry('b', 'banner'), 'B');
+    backup.confirmUpdate('a');
+    assert.deepEqual(
+      readBackup(backup.file).updated.map((e) => [e.id, e.applied]),
+      [
+        ['a', true],
+        ['b', false],
+      ],
+    );
   });
 
   test('solo el usuario puede leer el respaldo', { skip: process.platform === 'win32' }, () => {

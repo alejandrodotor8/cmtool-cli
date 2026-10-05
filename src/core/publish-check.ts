@@ -29,13 +29,20 @@ export function projectedContentType(ctId: string, analysis: Analysis, plan: Pla
 const isBlank = (value: unknown): boolean =>
   value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0);
 
+/** Un campo obligatorio que quedará vacío, y en qué locales. */
+export interface RequiredGap {
+  field: Field;
+  locales: string[];
+}
+
 /**
- * Campos obligatorios que quedarán vacíos (en el locale por defecto de destino) en cada
- * entry que se escribe. Solo incluye entries con al menos un campo vacío.
+ * Campos obligatorios que quedarán vacíos en cada entry que se escribe. Un campo
+ * localizado debe tener valor en cada locale que no permite vacíos; uno no localizado,
+ * en el locale por defecto. Solo incluye entries con al menos un hueco.
  */
-export function requiredGaps(analysis: Analysis, plan: Plan): Map<string, Field[]> {
+export function requiredGaps(analysis: Analysis, plan: Plan): Map<string, RequiredGap[]> {
   const { locales, diffs, dstEntries } = analysis;
-  const gaps = new Map<string, Field[]>();
+  const gaps = new Map<string, RequiredGap[]>();
 
   for (const { id, action, entry } of plan.entries) {
     const ctId = contentTypeOf(entry);
@@ -47,10 +54,17 @@ export function requiredGaps(analysis: Analysis, plan: Plan): Map<string, Field[
     const current: Entry['fields'] = dstEntries.get(id)?.fields ?? {};
     const result = action === ACTION.UPDATE ? mergeWithExisting(current, incoming, writable, locales.src) : incoming;
 
-    const empty = ct.fields.filter(
-      (f) => f.required && !f.disabled && !f.omitted && isBlank(result[f.id]?.[locales.dst.default ?? '']),
-    );
-    if (empty.length) gaps.set(id, empty);
+    const defaultLocale = locales.dst.default ? [locales.dst.default] : [];
+    const entryGaps = ct.fields
+      .filter((f) => f.required && !f.disabled && !f.omitted)
+      .map((field) => ({
+        field,
+        locales: (field.localized ? [...locales.dst.required] : defaultLocale).filter((locale) =>
+          isBlank(result[field.id]?.[locale]),
+        ),
+      }))
+      .filter((gap) => gap.locales.length > 0);
+    if (entryGaps.length) gaps.set(id, entryGaps);
   }
   return gaps;
 }

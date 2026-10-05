@@ -1,0 +1,17 @@
+{
+  "name": "ctf-migrate",
+  "version": "0.1.0",
+  "description": "Migra entries de Contentful entre ambientes de forma interactiva, dejándolas en draft",
+  "type": "module",
+  "bin": {
+    "ctf-migrate": "./index.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^8.7.3",
+    "contentful-management": "^12.19.0",
+    "picocolors": "^1.1.1"
+  }
+}

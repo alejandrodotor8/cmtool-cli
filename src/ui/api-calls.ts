@@ -1,4 +1,5 @@
 import pc from 'picocolors';
+import { log } from './log.ts';
 
 /** Cuenta las llamadas a la API de la ejecución y, con --verbose, las muestra a medida que salen. */
 export function trackApiCalls(verbose: boolean) {
@@ -6,7 +7,7 @@ export function trackApiCalls(verbose: boolean) {
     count: 0,
     onRequest: (request: string) => {
       tracker.count++;
-      if (verbose) console.log(pc.dim(`    · ${request}`));
+      if (verbose) log.info(`· ${pc.dim(request)}`);
     },
   };
   return tracker;

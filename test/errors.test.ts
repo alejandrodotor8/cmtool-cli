@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { formatError, isCancel } from '../src/errors.ts';
+import { CancelError, formatError, isCancel } from '../src/errors.ts';
 
 describe('formatError', () => {
   test('muestra status, mensaje y detalles, pero nunca la request con el token', () => {
@@ -29,10 +29,8 @@ describe('formatError', () => {
 });
 
 describe('isCancel', () => {
-  test('reconoce el Ctrl+C de los prompts', () => {
-    const e = new Error('cancel');
-    e.name = 'ExitPromptError';
-    assert.equal(isCancel(e), true);
+  test('reconoce la cancelación de una pregunta (Ctrl+C o Esc)', () => {
+    assert.equal(isCancel(new CancelError()), true);
     assert.equal(isCancel(new Error('otro')), false);
   });
 });

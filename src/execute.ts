@@ -10,17 +10,22 @@ import { contentTypeOf } from './core/entries.ts';
 import { assetFieldsForDestination, fieldsForDestination, mergeWithExisting } from './core/fields.ts';
 import { ACTION, type Plan } from './core/plan.ts';
 import { writableFields } from './core/publish-check.ts';
-import { log } from './ui/log.ts';
 import { createRunner } from './ui/runner.ts';
 
-export async function executePlan(plan: Plan, analysis: Analysis, writer: Writer, backup: Backup): Promise<string[]> {
+export async function executePlan(
+  plan: Plan,
+  analysis: Analysis,
+  writer: Writer,
+  backup: Backup,
+  { animate }: { animate: boolean },
+): Promise<string[]> {
   const { titleOf, locales, diffs } = analysis;
   const dstCTs = new Map(analysis.contentTypes.dst); // se actualiza con los cambios de modelo
   const dstTagIds = new Set(analysis.tags.dstIds);
-  const { run, fail, failures } = createRunner();
+  const { start, run, fail, end, failures } = createRunner({ animate });
 
   if (plan.tagsToCreate.length) {
-    log.step('Tags');
+    start('Tags', plan.tagsToCreate.length);
     for (const tag of plan.tagsToCreate) {
       await run(`tag ${tag.sys.id}`, async () => {
         await writer.createTag(tag);
@@ -28,10 +33,11 @@ export async function executePlan(plan: Plan, analysis: Analysis, writer: Writer
         backup.recordCreated('tags', tag.sys.id);
       });
     }
+    end();
   }
 
   if (plan.contentTypesToCreate.length || plan.fieldsToAdd.size) {
-    log.step('Modelo');
+    start('Modelo', plan.contentTypesToCreate.length + plan.fieldsToAdd.size);
     for (const ct of plan.contentTypesToCreate) {
       await run(`content type ${ct.sys.id} creado`, async () => {
         dstCTs.set(ct.sys.id, await writer.createContentType(ct));
@@ -49,19 +55,21 @@ export async function executePlan(plan: Plan, analysis: Analysis, writer: Writer
         );
       });
     }
+    end();
   }
 
   if (plan.assetsToCreate.length) {
-    log.step('Imágenes');
+    start('Imágenes', plan.assetsToCreate.length);
     for (const asset of plan.assetsToCreate) {
       await run(`asset ${asset.sys.id} creado (draft)`, async () => {
         await writer.createAsset(asset.sys.id, assetFieldsForDestination(asset, locales.dst));
         backup.recordCreated('assets', asset.sys.id);
       });
     }
+    end();
   }
 
-  log.step('Entries');
+  start('Entries', plan.entries.length);
   for (const { id, action, entry } of plan.entries) {
     const ctId = contentTypeOf(entry);
     const title = titleOf(entry);
@@ -95,5 +103,6 @@ export async function executePlan(plan: Plan, analysis: Analysis, writer: Writer
     }
   }
 
+  end();
   return failures;
 }

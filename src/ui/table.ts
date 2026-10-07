@@ -1,10 +1,12 @@
 import pc from 'picocolors';
+import { log } from './log.ts';
 
 export const MARK = { yes: pc.green('✔'), no: pc.red('✖'), diff: pc.red('≠'), rules: pc.yellow('!') } as const;
 
 export const legend = () =>
-  console.log(
-    pc.dim(`  ${MARK.yes} existe   ${MARK.no} no existe   ${MARK.diff} tipo distinto   ${MARK.rules} reglas distintas`),
+  log.block(
+    pc.dim(`${MARK.yes} existe   ${MARK.no} no existe   ${MARK.diff} tipo distinto   ${MARK.rules} reglas distintas`),
+    1,
   );
 
 // biome-ignore lint/suspicious/noControlCharactersInRegex: son los códigos ANSI de color
@@ -33,7 +35,18 @@ export interface Column {
  * Dibuja una tabla con borde redondeado.
  * Si ninguna columna tiene `header`, no pinta encabezado. Las celdas pueden traer color.
  */
-export function table({ title, columns, rows }: { title?: string; columns: Column[]; rows: string[][] }): void {
+export function table({
+  title,
+  columns,
+  rows,
+  spacing = 0,
+}: {
+  title?: string;
+  columns: Column[];
+  rows: string[][];
+  /** Líneas en blanco antes de la tabla. */
+  spacing?: number;
+}): void {
   const border = pc.dim;
   const widths = columns.map((c, i) => Math.max(width(c.header ?? ''), ...rows.map((r) => width(r[i] ?? ''))));
   const used = widths.reduce((a, w) => a + w, 0) + 2 * (columns.length - 1);
@@ -52,5 +65,5 @@ export function table({ title, columns, rows }: { title?: string; columns: Colum
   }
   for (const r of rows) out.push(line(r));
   out.push(rule('╰', '╯'));
-  console.log(out.map((l) => `  ${l}`).join('\n'));
+  log.block(out.join('\n'), spacing);
 }

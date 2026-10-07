@@ -17,7 +17,9 @@
 
 ### Cambiado
 
-- **Entry IDs**: la pregunta acepta varias líneas (se puede pegar una columna o fila de Excel; termina con una línea vacía), coma, punto y coma, espacio y tabulación; valida que cada valor sea un entry ID o la URL de una entry, y si faltan varias en origen las lista todas.
+- **Interfaz con @clack/prompts** (reemplaza a @inquirer/prompts): selector de space con búsqueda, checks del modelo agrupados por content type, spinners mientras se consulta la API, barra de progreso por fase al escribir y recuadros de cierre con links, respaldo y comandos para repetir o deshacer. Se evaluaron commander, Ink, consola y listr2 y se descartaron (ver README).
+
+- **Entry IDs**: la pregunta acepta varias líneas (se puede pegar una columna o fila de Excel; se continúa con Tab + Enter), coma, punto y coma, espacio y tabulación; valida que cada valor sea un entry ID o la URL de una entry, y si faltan varias en origen las lista todas.
 
 - **Dos comandos**: `ctf-migrate` corre el build (`dist/`, se genera con el script `build`) y `ctf-migrate-dev` corre el código fuente sin compilar. `dist/` no se sube al repo. `ctf-migrate` avisa si el código es más nuevo que el build.
 

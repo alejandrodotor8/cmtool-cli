@@ -250,8 +250,8 @@ export function renderModel({ src, dst, diffs, tree, actions, titleOf, locales }
       .filter((e) => contentTypeOf(e) === diff.id)
       .map((e) => titleOf(e) + (isWrite(actions.get(e.sys.id)) ? '' : ' (reutilizada)'));
 
-    console.log();
     table({
+      spacing: 1,
       title: `${pc.bold(diff.name)} ${pc.dim(diff.id)}  ${badges.length ? badges.join(pc.dim(' · ')) : pc.green('al día')}`,
       columns: [
         { header: '#' },

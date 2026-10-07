@@ -40,11 +40,15 @@ export interface Analysis {
 export async function analyze(
   cma: Cma,
   { src, dst, rootIds }: { src: string; dst: string; rootIds: string[] },
+  /** Avisa en qué etapa va (para el spinner). */
+  report: (stage: string) => void = () => {},
 ): Promise<Analysis> {
   // Árbol de entries y qué pasa con cada una.
+  report(`Leyendo las entries y sus hijos en ${src}…`);
   const tree = await readEntryTree(cma, src, rootIds);
   // También se revisan en destino las entries enlazadas en texto, para avisar si no existen.
   const hyperlinked = [...new Set([...tree.hyperlinks.values()].flat())].filter((id) => !tree.entries.has(id));
+  report(`Buscando qué ya existe en ${dst}…`);
   const dstEntries = await fetchEntries(cma, dst, [...tree.entries.keys(), ...hyperlinked]);
   const existsInDst = new Set(dstEntries.keys());
   const archivedInDst = new Set([...dstEntries.values()].filter(isArchived).map((e) => e.sys.id));
@@ -52,6 +56,7 @@ export async function analyze(
   const written = writtenEntries({ tree, actions });
 
   // Modelo: todos los content types del árbol, incluidos los de entries reutilizadas.
+  report('Comparando modelos…');
   const contentTypes = { src: await readContentTypes(cma, src), dst: await readContentTypes(cma, dst) };
   const diffs = new Map<string, ContentTypeDiff>();
   for (const id of new Set([...tree.entries.values()].map(contentTypeOf))) {
@@ -60,6 +65,7 @@ export async function analyze(
     diffs.set(id, diffContentType(srcCT, contentTypes.dst.get(id)));
   }
 
+  report('Revisando idiomas, imágenes y tags…');
   const srcLocales = await readLocales(cma, src);
   const dstLocales = await readLocales(cma, dst);
   const locales = {

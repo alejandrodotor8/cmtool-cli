@@ -9,8 +9,15 @@ export class AbortError extends Error {
   }
 }
 
-/** El usuario canceló un prompt (Ctrl+C). */
-export const isCancel = (e: unknown): boolean => e instanceof Error && e.name === 'ExitPromptError';
+/** El usuario canceló una pregunta (Ctrl+C o Esc). */
+export class CancelError extends Error {
+  constructor() {
+    super('Cancelado');
+    this.name = 'CancelError';
+  }
+}
+
+export const isCancel = (e: unknown): boolean => e instanceof CancelError;
 
 /** Lo que trae el mensaje (JSON) de un error del CMA. */
 interface CmaErrorBody {

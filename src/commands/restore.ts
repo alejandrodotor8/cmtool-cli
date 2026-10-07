@@ -13,10 +13,10 @@ import { createWriter } from '../contentful/write.ts';
 import { restoreStatus, shouldRestore } from '../core/restore.ts';
 import { loadSession } from '../session.ts';
 import { trackApiCalls } from '../ui/api-calls.ts';
-import { printHeader, type RunMode } from '../ui/header.ts';
-import { log } from '../ui/log.ts';
+import { printCancelled, printHeader, printNote, printOutro, type RunMode, shouldAnimate } from '../ui/header.ts';
 import { confirmWrite, pickBackup } from '../ui/prompts.ts';
 import { createRunner } from '../ui/runner.ts';
+import { withStatus } from '../ui/status.ts';
 import { renderRestore } from '../ui/views.ts';
 
 export async function restore({ dryRun, file, verbose }: CliArgs, mode: RunMode): Promise<number> {
@@ -26,43 +26,49 @@ export async function restore({ dryRun, file, verbose }: CliArgs, mode: RunMode)
   const backupFile = file ? path.resolve(file) : await pickBackup(listBackups());
   const data = readBackup(backupFile);
   const api = trackApiCalls(verbose);
+  const animate = shouldAnimate(verbose);
   const cma = createCma(session, data.spaceId, api.onRequest);
 
-  log.step(`Revisando ${pc.bold(data.dst)}…`);
-  const current = await fetchEntries(
-    cma,
-    data.dst,
-    data.updated.map((e) => e.id),
+  const current = await withStatus(
+    `Revisando ${data.dst}…`,
+    animate,
+    () =>
+      fetchEntries(
+        cma,
+        data.dst,
+        data.updated.map((e) => e.id),
+      ),
+    () => `${data.dst} revisado`,
   );
   const items = data.updated.map((saved) => ({ saved, current: current.get(saved.id) }));
   const toRestore = items.filter((i) => shouldRestore(restoreStatus(i.saved, i.current)));
   renderRestore(data, items);
 
   if (!toRestore.length) {
-    log.info('No hay entries para restaurar.');
+    printOutro('No hay entries para restaurar.');
     return 0;
   }
   if (dryRun) {
-    log.step('Modo --dry-run: no se escribió nada.');
-    log.info(`Llamadas a la API: ${api.count}`);
+    printNote([pc.dim(`Llamadas a la API: ${api.count}`)], 'Modo --dry-run');
+    printOutro('No se escribió nada.');
     return 0;
   }
 
   const envs = await listEnvironments(cma);
   const dstEnv = envs.find((e) => e.id === data.dst) ?? { id: data.dst, aliases: [] };
   if (!(await confirmWrite(dstEnv, `¿Restaurar ${toRestore.length} entry(s) en ${pc.bold(data.dst)}?`))) {
-    console.log(pc.dim('\nCancelado.'));
+    printCancelled();
     return 0;
   }
 
   // El restore también se respalda, así que se puede deshacer.
   const backup = startBackup({ kind: 'restore', spaceId: data.spaceId, src: data.src, dst: data.dst, rootIds: [] });
   const writer = createWriter(cma, { src: data.src, dst: data.dst });
-  const { run, failures } = createRunner();
+  const { start, run, end, failures } = createRunner({ animate });
 
-  log.step('Restaurando');
+  start('Restaurando', toRestore.length);
   for (const { saved } of toRestore) {
-    await run(`${saved.title} ${pc.dim(saved.id)} restaurada`, async () => {
+    await run(`${saved.title} ${pc.dim(saved.id)}`, async () => {
       await writer.updateEntry(
         saved.id,
         () => saved.fields,
@@ -72,9 +78,12 @@ export async function restore({ dryRun, file, verbose }: CliArgs, mode: RunMode)
       backup.confirmUpdate(saved.id);
     });
   }
+  end();
 
-  log.step(failures.length ? `Terminado con ${failures.length} error(es)` : 'Listo.');
-  log.info(`Respaldo de este restore: ${backup.file}`);
-  log.info(`Llamadas a la API: ${api.count}`);
+  printNote(
+    [`${pc.bold('Respaldo de este restore')}  ${backup.file}`, `${pc.bold('Llamadas API')}              ${api.count}`],
+    failures.length ? 'Terminado con errores' : 'Restore listo',
+  );
+  printOutro(failures.length ? pc.red(`Terminado con ${failures.length} error(es).`) : pc.green('Listo.'));
   return failures.length ? 1 : 0;
 }

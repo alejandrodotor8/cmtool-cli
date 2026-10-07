@@ -128,7 +128,7 @@ ctf-migrate
 2. Elige el ambiente **origen** y el **destino**.
 3. Pega uno o varios **entry IDs**. También acepta la **URL de la entry** tal como la copias del navegador (`https://app.contentful.com/spaces/…/entries/<entry id>`).
    - Uno por línea, o separados por coma, punto y coma, espacio o tabulación: puedes **pegar una columna o una fila de Excel**.
-   - Presiona **Enter en una línea vacía** para terminar.
+   - **Enter** agrega una línea. Para continuar, presiona **Tab** (va al botón `[ submit ]`) y luego **Enter**. Así, una celda vacía en lo que pegas no envía la respuesta antes de tiempo.
    - Si algo no tiene forma de entry ID (por ejemplo, la URL de un asset), te dice cuál y te deja pegar de nuevo. Si varios IDs no existen en origen, te los lista todos.
 4. Revisa el árbol: la entry que pegaste (**padre**) y las entries a las que apunta (**hijos**).
    - El padre se crea o, si ya existe en destino, se actualiza.
@@ -209,7 +209,7 @@ Cada migración guarda un respaldo en `~/.ctf-migrate/backups/` (en Windows, `C:
 - **El token solo va a Contentful**: se lee de `CONTENTFUL_MANAGEMENT_TOKEN` o de `~/.contentfulrc.json` y solo se envía a `api.contentful.com` o `api.eu.contentful.com`. Si el archivo de sesión apunta a otro host, la herramienta se detiene. Los mensajes de error nunca imprimen la request (que lleva el token).
 - **Las imágenes solo se copian desde el CDN de Contentful** (`*.ctfassets.net`, por https).
 - **Nada se escribe antes de confirmar**: todo lo anterior al resumen es solo lectura.
-- **Dependencias**: solo 3 para correr (`contentful-management`, `@inquirer/prompts`, `picocolors`) y 3 de desarrollo (`typescript`, `@types/node`, `@biomejs/biome`), todas con versión exacta. Ninguna tiene scripts de instalación. El paquete es `private` para que no se publique en npm por error.
+- **Dependencias**: solo 3 para correr (`contentful-management`, `@clack/prompts`, `picocolors`) y 3 de desarrollo (`typescript`, `@types/node`, `@biomejs/biome`), todas con versión exacta. Ninguna tiene scripts de instalación. El paquete es `private` para que no se publique en npm por error.
 
 ## Cómo está organizado
 
@@ -253,8 +253,9 @@ src/
     prompts.ts           preguntas al usuario
     table.ts             dibujo de tablas
     log.ts               mensajes de estado
-    header.ts            título de cada comando (avisa --dry-run y modo desarrollo)
-    runner.ts            ejecuta escrituras una por una (✔ / ✖)
+    header.ts            inicio y cierre de cada comando (avisa --dry-run y modo desarrollo)
+    runner.ts            ejecuta escrituras por fases, con barra de progreso y lista de ✔ / ✖
+    status.ts            spinner para los pasos que llaman a la API
     api-calls.ts         cuenta las llamadas a la API (y las muestra con --verbose)
 ```
 
@@ -295,6 +296,20 @@ Reglas para que Node pueda ejecutar los `.ts` sin compilar:
 - Los imports llevan la extensión `.ts` (`import { x } from './core/plan.ts'`).
 - Solo sintaxis que se puede borrar: nada de `enum`, `namespace` ni parámetros con `private`/`readonly` en el constructor. Para valores fijos usa un objeto `as const`, como `ACTION` en [src/core/plan.ts](src/core/plan.ts). `tsc` avisa si algo no cumple (`erasableSyntaxOnly`).
 - Los tipos se importan con `import type`.
+
+### Librerías de terminal
+
+La interfaz usa **[@clack/prompts](https://bomb.sh/docs/clack/packages/prompts/)**: preguntas (selector con búsqueda, checks agrupados, texto de varias líneas, confirmaciones), spinners, barras de progreso y recuadros, todo sobre la misma línea vertical. Se evaluaron otras y se descartaron:
+
+| Librería | Decisión | Por qué |
+| --- | --- | --- |
+| **@clack/prompts** | ✔ Se usa | Cubre todas las preguntas y los indicadores de progreso con un solo estilo; 4 dependencias pequeñas, sin scripts de instalación. |
+| commander | ✖ | `parseArgs` de Node ya maneja los comandos y flags, con mensajes en español y tests. Commander sumaría una dependencia y mensajes en inglés sin mejorar la experiencia. |
+| Ink | ✖ | React para la terminal, pensado para pantallas completas. Trae 20+ dependencias más React y usa JSX, que Node no ejecuta sin compilar (rompería `ctf-migrate-dev`). El flujo es un asistente paso a paso: lo que hace clack. |
+| consola | ✖ | Sus logs duplican los de clack y sus prompts están hechos sobre clack: dos estilos para lo mismo. |
+| listr2 | ✖ | Para árboles de tareas en paralelo. Las escrituras van una por una a propósito; la barra de progreso de clack lo cubre con el mismo estilo, y listr2 tomaría el control de la pantalla. |
+
+Las tablas (árbol, imágenes, modelo, resumen) son propias ([src/ui/table.ts](src/ui/table.ts)) y se dibujan sobre la misma línea vertical de clack.
 
 ### Cómo extenderlo
 

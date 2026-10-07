@@ -21,7 +21,7 @@ import { AbortError } from '../errors.ts';
 import { executePlan } from '../execute.ts';
 import { loadSession } from '../session.ts';
 import { trackApiCalls } from '../ui/api-calls.ts';
-import { printHeader, type RunMode } from '../ui/header.ts';
+import { printCancelled, printHeader, printNote, printOutro, type RunMode, shouldAnimate } from '../ui/header.ts';
 import { log } from '../ui/log.ts';
 import {
   askEntryIds,
@@ -33,6 +33,7 @@ import {
   pickSource,
   pickSpace,
 } from '../ui/prompts.ts';
+import { withStatus } from '../ui/status.ts';
 import { renderAssets, renderEntryTree, renderModel, renderSummary } from '../ui/views.ts';
 
 export async function migrate(args: CliArgs, mode: RunMode): Promise<number> {
@@ -46,7 +47,13 @@ export async function migrate(args: CliArgs, mode: RunMode): Promise<number> {
   // 1. Qué migrar y hacia dónde
   const session = loadSession();
   const api = trackApiCalls(args.verbose);
-  const spaces = await listSpaces(createCma(session, undefined, api.onRequest));
+  const animate = shouldAnimate(args.verbose);
+  const spaces = await withStatus(
+    'Conectando con Contentful…',
+    animate,
+    () => listSpaces(createCma(session, undefined, api.onRequest)),
+    (found) => `Conectado · ${found.length} space(s)`,
+  );
   if (!spaces.length) throw new AbortError('Tu usuario no tiene acceso a ningún space.');
   if (args.space && !spaces.some((s) => s.sys.id === args.space)) {
     throw new AbortError(`No tienes acceso al space "${args.space}".`);
@@ -54,7 +61,12 @@ export async function migrate(args: CliArgs, mode: RunMode): Promise<number> {
   const spaceId = args.space ?? (await pickSpace(spaces, session.defaultSpaceId));
   const cma = createCma(session, spaceId, api.onRequest);
 
-  const envs = await listEnvironments(cma);
+  const envs = await withStatus(
+    'Leyendo ambientes…',
+    animate,
+    () => listEnvironments(cma),
+    (found) => `${found.length} ambientes`,
+  );
   if (envs.length < 2) throw new AbortError('Este space tiene un solo ambiente; no hay a dónde migrar.');
   const src = args.from ? requireEnvironment(envs, args.from) : await pickSource(envs);
   const dst = args.to ? requireEnvironment(envs, args.to) : await pickDestination(envs, src);
@@ -66,14 +78,18 @@ export async function migrate(args: CliArgs, mode: RunMode): Promise<number> {
   const repeat = repeatCommand({ spaceId, src, dst, rootIds });
 
   // 2. Análisis (solo lectura)
-  log.step(`Analizando ${pc.bold(src)} ${pc.dim('──▶')} ${pc.bold(dst)}…`);
-  const analysis = await analyze(cma, { src, dst, rootIds });
+  const analysis = await withStatus(
+    `Analizando ${src} ──▶ ${dst}…`,
+    animate,
+    (status) => analyze(cma, { src, dst, rootIds }, status.update),
+    (a) => `Análisis listo · ${a.tree.entries.size} entries · ${a.diffs.size} content types · ${api.count} llamadas`,
+  );
 
   // 3. Mostrar y decidir
   renderEntryTree(analysis);
   const writes = [...analysis.actions.values()].filter(isWrite).length;
   if (!dryRun && writes > LIMITS.confirmWritesAbove && !(await confirmLargeMigration(writes, dst))) {
-    console.log(pc.dim('\nCancelado.'));
+    printCancelled();
     return 0;
   }
 
@@ -100,20 +116,27 @@ export async function migrate(args: CliArgs, mode: RunMode): Promise<number> {
   if (!plan.entries.length) throw new AbortError('No queda nada para migrar.');
 
   if (dryRun) {
-    log.step('Modo --dry-run: no se escribió nada.');
-    log.info(`Para migrar: ${repeat}`);
-    log.info(`Llamadas a la API: ${api.count}`);
+    printNote(
+      [`Para migrar de verdad:`, pc.cyan(repeat), '', pc.dim(`Llamadas a la API: ${api.count}`)],
+      'Modo --dry-run',
+    );
+    printOutro('No se escribió nada.');
     return 0;
   }
 
   // 4. Confirmar, respaldar y escribir
   const dstEnv = envs.find((e) => e.id === dst) ?? { id: dst, aliases: [] };
-  if (!(await confirmWrite(dstEnv, `¿Migrar a ${pc.bold(dst)}? (entries e imágenes en draft)`))) {
-    console.log(pc.dim('\nCancelado.'));
+  if (!(await confirmWrite(dstEnv, `¿Migrar a ${pc.bold(dst)}? ${pc.dim('(entries e imágenes en draft)')}`))) {
+    printCancelled();
     return 0;
   }
   // Lo que se mostró tiene que seguir siendo cierto: si destino cambió mientras revisabas, no se escribe.
-  const changed = await changesSinceAnalysis(cma, analysis);
+  const changed = await withStatus(
+    `Verificando que ${dst} no cambió…`,
+    animate,
+    () => changesSinceAnalysis(cma, analysis),
+    (list) => (list.length ? `${dst} cambió` : `${dst} sigue igual`),
+  );
   if (changed.length) {
     throw new AbortError(
       `${dst} cambió mientras revisabas el plan (${changed.join(', ')}). No se escribió nada.`,
@@ -122,18 +145,24 @@ export async function migrate(args: CliArgs, mode: RunMode): Promise<number> {
   }
 
   const backup = startBackup({ kind: 'migrate', spaceId, src, dst, rootIds });
-  const failures = await executePlan(plan, analysis, createWriter(cma, { src, dst }), backup);
+  const failures = await executePlan(plan, analysis, createWriter(cma, { src, dst }), backup, { animate });
 
-  log.step(
-    failures.length ? `Terminado con ${failures.length} error(es)` : 'Listo. Ninguna entry ni imagen fue publicada.',
+  printNote(
+    [
+      ...rootIds.map((id) => pc.cyan(`https://${session.appHost}/spaces/${spaceId}/environments/${dst}/entries/${id}`)),
+      '',
+      `${pc.bold('Respaldo')}      ${backup.file}`,
+      `${pc.bold('Deshacer')}      ctf-migrate restore`,
+      `${pc.bold('Repetir')}       ${repeat}`,
+      `${pc.bold('Llamadas API')}  ${api.count}`,
+    ],
+    failures.length ? 'Terminado con errores' : 'Migración lista',
   );
-  for (const id of rootIds) {
-    log.info(`https://${session.appHost}/spaces/${spaceId}/environments/${dst}/entries/${id}`);
-  }
-  log.info(`Respaldo: ${backup.file}`);
-  log.info('Para deshacer: ctf-migrate restore');
-  log.info(`Para repetir: ${repeat}`);
-  log.info(`Llamadas a la API: ${api.count}`);
+  printOutro(
+    failures.length
+      ? pc.red(`Terminado con ${failures.length} error(es).`)
+      : pc.green('Listo. Ninguna entry ni imagen fue publicada.'),
+  );
   return failures.length ? 1 : 0;
 }
 

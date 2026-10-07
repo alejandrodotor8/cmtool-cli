@@ -278,7 +278,12 @@ Con tu gestor (`npm run …`, `pnpm …` o `bun run …`):
 
 Por ejemplo: `npm run check`, `pnpm check` o `bun run check`. Los tests siempre corren con Node (`node --test`), también con bun.
 
-Los tests viven en `test/` y no llaman a Contentful: usan objetos armados a mano (`test/fixtures.ts`) y un CMA falso que registra cada llamada. Cubren:
+Los tests son **unitarios**: prueban las reglas y utilidades, no hacen migraciones reales. Viven en `test/` y usan objetos armados a mano (`test/fixtures.ts`) y un CMA falso en memoria que registra cada llamada. Además, [test/setup.ts](test/setup.ts) se carga antes de cada archivo de test y garantiza que:
+
+- **No hay red**: cualquier conexión (http, https, fetch, sockets) falla, así que ningún test puede llegar a Contentful.
+- **No se toca tu carpeta personal**: los tests ven una carpeta temporal como HOME (sin tu sesión, tu token ni tus respaldos) y escriben solo en carpetas temporales que se borran al terminar.
+
+`isolation.test.ts` verifica que esa protección esté activa. Los tests cubren:
 
 - **Reglas de migración** (`plan.test.ts`): qué se crea, actualiza, reutiliza o no se crea; qué se ofrece agregar al modelo; el plan final.
 - **Transformación de valores** (`fields.test.ts`): locales, merge con la entry existente y assets.

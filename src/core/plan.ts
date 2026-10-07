@@ -4,13 +4,15 @@
 import type { Analysis } from '../analyze.ts';
 import type { Asset, Entry, EntryTree, Tag } from '../contentful/types.ts';
 import { contentTypeOf, isArchived as isArchivedEntry } from './entries.ts';
+import type { FieldComparison } from './entry-compare.ts';
 import { type ModelChanges, type ModelPick, modelChangesFrom, notAddedFields } from './model-changes.ts';
 
 export const ACTION = {
   CREATE: 'create', // no existe en destino → se crea
-  UPDATE: 'update', // la pegaste y ya existe en destino → se actualiza
+  UPDATE: 'update', // ya existe en destino y se eligió actualizarla
+  KEEP: 'keep', // la elegiste y ya existe, pero no se actualiza (sin cambios o la desmarcaste)
   REUSE: 'reuse', // hijo que ya existe en destino → no se toca
-  ORPHAN: 'orphan', // no existe, pero cuelga de un hijo reutilizado → no se crea
+  ORPHAN: 'orphan', // no existe, pero cuelga de algo que no se escribe → no se crea
 } as const;
 
 export type Action = (typeof ACTION)[keyof typeof ACTION];
@@ -38,15 +40,24 @@ export interface Plan extends ModelChanges {
 
 /**
  * Decide qué pasa con cada entry del árbol:
- *  - lo que pegas se crea o se actualiza;
+ *  - lo que eliges se crea si no existe en destino; si existe, se actualiza solo si está en
+ *    `toUpdate` (si no, queda igual: KEEP);
+ *  - un hijo que ya existe en destino se reutiliza sin tocarlo, salvo que esté en `toUpdate`;
  *  - un hijo que no existe en destino, colgando de algo que se escribe, se crea;
- *  - un hijo que ya existe en destino se reutiliza sin tocarlo;
- *  - lo que cuelga de un hijo reutilizado y no existe en destino no se crea,
- *    porque la versión de destino no apunta a ello.
+ *  - lo que cuelga de algo que no se escribe y no existe en destino no se crea, porque la
+ *    versión de destino no apunta a ello.
  */
-export function classifyTree(rootIds: string[], tree: EntryTree, existsInDst: Set<string>): Map<string, Action> {
+export function classifyTree(
+  rootIds: string[],
+  tree: EntryTree,
+  existsInDst: Set<string>,
+  /** Entries que ya existen en destino y se actualizan (padres o hijos). Por defecto, las elegidas. */
+  toUpdate: Set<string> = new Set(rootIds.filter((id) => existsInDst.has(id))),
+): Map<string, Action> {
+  // Se escribe desde lo que se crea (elegidas que no existen) o se actualiza; de ahí, sus
+  // hijos que no existen en destino.
   const written = new Set<string>();
-  const queue = [...rootIds];
+  const queue = [...rootIds.filter((id) => !existsInDst.has(id)), ...toUpdate];
   while (queue.length) {
     const id = queue.shift() as string;
     if (written.has(id) || !tree.entries.has(id)) continue;
@@ -54,11 +65,13 @@ export function classifyTree(rootIds: string[], tree: EntryTree, existsInDst: Se
     queue.push(...(tree.children.get(id) ?? []).filter((child) => !existsInDst.has(child)));
   }
 
+  const roots = new Set(rootIds);
   const actions = new Map<string, Action>();
   for (const id of tree.entries.keys()) {
     const exists = existsInDst.has(id);
     if (written.has(id)) actions.set(id, exists ? ACTION.UPDATE : ACTION.CREATE);
-    else actions.set(id, exists ? ACTION.REUSE : ACTION.ORPHAN);
+    else if (exists) actions.set(id, roots.has(id) ? ACTION.KEEP : ACTION.REUSE);
+    else actions.set(id, ACTION.ORPHAN);
   }
   return actions;
 }
@@ -128,3 +141,32 @@ export function changedInDst(ids: Iterable<string>, before: Map<string, Entry>, 
     return Boolean(a) !== Boolean(b) || (a && b && isArchivedEntry(a) !== isArchivedEntry(b));
   });
 }
+
+/** Una entry que ya existe en destino y cambió en origen: se puede actualizar. */
+export interface UpdateCandidate {
+  id: string;
+  /** La eligió el usuario (padre) o cuelga de otra (hijo). */
+  isRoot: boolean;
+  fields: FieldComparison[];
+}
+
+/** Entries del árbol que ya existen en destino (sin archivar) y tienen cambios en origen. */
+export function updateCandidates({
+  rootIds,
+  tree,
+  existsInDst,
+  archivedInDst,
+  changes,
+}: Pick<Analysis, 'rootIds' | 'tree' | 'existsInDst' | 'archivedInDst' | 'changes'>): UpdateCandidate[] {
+  const roots = new Set(rootIds);
+  return [...tree.entries.keys()].flatMap((id) => {
+    const fields = changes.get(id) ?? [];
+    return existsInDst.has(id) && !archivedInDst.has(id) && fields.length
+      ? [{ id, isRoot: roots.has(id), fields }]
+      : [];
+  });
+}
+
+/** Por defecto se actualizan las entries elegidas que cambiaron; los hijos, solo si se marcan. */
+export const defaultUpdates = (candidates: UpdateCandidate[]): Set<string> =>
+  new Set(candidates.filter((c) => c.isRoot).map((c) => c.id));

@@ -1,33 +1,56 @@
 import pc from 'picocolors';
 import type { Analysis } from '../../analyze.ts';
 import { contentTypeOf } from '../../core/entries.ts';
+import type { FieldComparison } from '../../core/entry-compare.ts';
 import { ACTION, type Action, willExistInDst } from '../../core/plan.ts';
 import { log } from '../log.ts';
 import { clip, legend, MARK, table } from '../table.ts';
 import { envColumns } from './shared.ts';
 
-const ACTION_LABEL: Record<Action, string> = {
-  [ACTION.CREATE]: pc.green('se crea'),
-  [ACTION.UPDATE]: pc.yellow('se actualiza'),
-  [ACTION.REUSE]: pc.cyan('ya existe → se reutiliza'),
-  [ACTION.ORPHAN]: pc.dim('no se crea (cuelga de una reutilizada)'),
-};
+/** Lo que necesita el árbol (sirve antes y después de decidir qué actualizar). */
+export type TreeView = Pick<
+  Analysis,
+  'src' | 'dst' | 'rootIds' | 'tree' | 'existsInDst' | 'archivedInDst' | 'actions' | 'titleOf' | 'changes'
+>;
+
+/** "2 campo(s): Título, CTA". */
+const changedFields = (fields: FieldComparison[]) =>
+  `${fields.length} campo(s): ${clip(fields.map((f) => f.name).join(', '), 40)}`;
 
 export const countActions = (actions: Map<string, Action>, action: Action): number =>
   [...actions.values()].filter((a) => a === action).length;
 
-/** Qué se hará con una entry del árbol, teniendo en cuenta si está archivada en destino. */
-function actionLabel(action: Action | undefined, archived: boolean, dst: string): string {
+/** Qué se hará con una entry del árbol: si está archivada en destino y qué campos cambian. */
+function actionLabel(
+  action: Action | undefined,
+  { archived, fields, src, dst }: { archived: boolean; fields: FieldComparison[]; src: string; dst: string },
+): string {
   if (!action) return pc.dim('ya listada arriba');
-  if (archived && action === ACTION.UPDATE) return pc.red(`archivada en ${dst} → no se toca`);
+  if (archived && (action === ACTION.UPDATE || action === ACTION.KEEP))
+    return pc.red(`archivada en ${dst} → no se toca`);
   if (archived && action === ACTION.REUSE) return pc.yellow(`archivada en ${dst} → el padre no se podrá publicar`);
-  return ACTION_LABEL[action];
+  switch (action) {
+    case ACTION.CREATE:
+      return pc.green('se crea');
+    case ACTION.UPDATE:
+      return pc.yellow(`se actualiza · ${changedFields(fields)}`);
+    case ACTION.KEEP:
+      return fields.length
+        ? pc.dim(`ya existe · no se actualiza (${fields.length} cambio(s))`)
+        : pc.dim('ya existe · sin cambios');
+    case ACTION.REUSE:
+      return fields.length
+        ? pc.yellow(`ya existe · cambió en ${src} (${fields.length} campo(s)), no se migra`)
+        : pc.cyan('ya existe → se reutiliza');
+    case ACTION.ORPHAN:
+      return pc.dim('no se crea (cuelga de algo que no se escribe)');
+  }
 }
 
 /** Árbol padre → hijos, con lo que se hará con cada entry. */
-export function renderEntryTree(analysis: Analysis): void {
-  const { src, dst, rootIds, tree, existsInDst, archivedInDst, actions, titleOf } = analysis;
-  log.step('Entries');
+export function renderEntryTree(analysis: TreeView, title = 'Entries'): void {
+  const { src, dst, rootIds, tree, existsInDst, archivedInDst, actions, titleOf, changes } = analysis;
+  log.step(title);
   const rows: string[][] = [];
   const listed = new Set<string>();
 
@@ -62,7 +85,12 @@ export function renderEntryTree(analysis: Analysis): void {
       pc.dim(id),
       MARK.yes,
       existsInDst.has(id) ? MARK.yes : MARK.no,
-      actionLabel(repeated ? undefined : actions.get(id), archivedInDst.has(id), dst),
+      actionLabel(repeated ? undefined : actions.get(id), {
+        archived: archivedInDst.has(id),
+        fields: changes.get(id) ?? [],
+        src,
+        dst,
+      }),
     ]);
     if (repeated) return;
     listed.add(id);
@@ -82,6 +110,7 @@ export function renderEntryTree(analysis: Analysis): void {
   const counts = [
     `${n(ACTION.CREATE)} se crean`,
     n(ACTION.UPDATE) && `${n(ACTION.UPDATE)} se actualizan`,
+    n(ACTION.KEEP) && `${n(ACTION.KEEP)} no se actualizan`,
     n(ACTION.REUSE) && `${n(ACTION.REUSE)} se reutilizan`,
     n(ACTION.ORPHAN) && `${n(ACTION.ORPHAN)} no se crean`,
   ].filter(Boolean);

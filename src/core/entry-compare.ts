@@ -22,16 +22,26 @@ export interface FieldComparison {
 }
 
 /**
- * Compara los valores (todos los locales) de cada campo, en el orden del modelo de origen;
- * los campos que no están en ese modelo van al final. Omite campos vacíos en ambos lados.
+ * Compara los valores de cada campo, en el orden del modelo de origen; los campos que no
+ * están en ese modelo van al final. Omite campos vacíos en ambos lados.
+ * - `locales`: solo compara esos locales (por ejemplo, los de origen: los demás no se migran).
+ * - `modelOnly`: solo los campos del modelo de origen (los que la migración puede escribir).
  */
-export function compareEntryFields(src: Entry, dst: Entry, ct: ContentType | undefined): FieldComparison[] {
+export function compareEntryFields(
+  src: Entry,
+  dst: Entry,
+  ct: ContentType | undefined,
+  { locales, modelOnly = false }: { locales?: Set<string>; modelOnly?: boolean } = {},
+): FieldComparison[] {
   const names = new Map((ct?.fields ?? []).map((f) => [f.id, f.name]));
-  const ids = [...new Set([...names.keys(), ...Object.keys(src.fields ?? {}), ...Object.keys(dst.fields ?? {})])];
+  const ids = modelOnly
+    ? [...names.keys()]
+    : [...new Set([...names.keys(), ...Object.keys(src.fields ?? {}), ...Object.keys(dst.fields ?? {})])];
+  const pick = (value: unknown) => (locales ? onlyLocales(value, locales) : value);
 
   return ids.flatMap((id) => {
-    const a = src.fields?.[id];
-    const b = dst.fields?.[id];
+    const a = pick(src.fields?.[id]);
+    const b = pick(dst.fields?.[id]);
     if (a === undefined && b === undefined) return [];
     const status =
       b === undefined
@@ -72,3 +82,14 @@ function richTextPlain(node: unknown): string {
   const n = node as { value?: string; content?: unknown[] };
   return [n.value ?? '', ...(n.content ?? []).map(richTextPlain)].join(' ').replace(/\s+/g, ' ').trim();
 }
+
+/** El valor por locale solo con `locales`; `undefined` si no queda ninguno. */
+function onlyLocales(value: unknown, locales: Set<string>): unknown {
+  if (!value || typeof value !== 'object') return value;
+  const kept = Object.entries(value as Record<string, unknown>).filter(([locale]) => locales.has(locale));
+  return kept.length ? Object.fromEntries(kept) : undefined;
+}
+
+/** Los campos que una migración cambiaría en destino (modelo de origen, locales de origen). */
+export const migrationChanges = (src: Entry, dst: Entry, ct: ContentType | undefined, srcLocales: Set<string>) =>
+  compareEntryFields(src, dst, ct, { locales: srcLocales, modelOnly: true }).filter((f) => f.status !== VALUE.SAME);

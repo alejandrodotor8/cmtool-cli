@@ -2,6 +2,7 @@
 import type { Analysis } from '../src/analyze.ts';
 import type { Asset, Cma, ContentType, Entry, EntryTree, Field, Locales, Tag } from '../src/contentful/types.ts';
 import { childEntryIds, contentTypeOf, hyperlinkedEntryIds, isArchived, makeTitleOf } from '../src/core/entries.ts';
+import { migrationChanges } from '../src/core/entry-compare.ts';
 import { diffContentType } from '../src/core/model.ts';
 import { classifyTree, writtenEntries } from '../src/core/plan.ts';
 
@@ -99,12 +100,22 @@ export function analysisOf({
   );
   const ids = srcAssets.map((a) => a.sys.id);
   const loc = locales(['es-CO']);
+  const dstById = new Map(dstEntries.map((e) => [e.sys.id, e]));
+  const changes = new Map(
+    [...dstById].flatMap(([id, current]) => {
+      const source = tree.entries.get(id);
+      return source
+        ? [[id, migrationChanges(source, current, contentTypes.src.get(contentTypeOf(source)), loc.codes)] as const]
+        : [];
+    }),
+  );
   const analysis: Analysis = {
     src: 'develop',
     dst: 'qa',
     rootIds,
     tree,
-    dstEntries: new Map(dstEntries.map((e) => [e.sys.id, e])),
+    dstEntries: dstById,
+    changes,
     existsInDst: exists,
     archivedInDst: new Set(dstEntries.filter(isArchived).map((e) => e.sys.id)),
     actions,

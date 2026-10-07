@@ -21,6 +21,8 @@ export function renderSummary(
   const rows: [string, string][] = [
     ['Entries', `${pc.green(`${created} se crean`)} · ${pc.yellow(`${plan.entries.length - created} se actualizan`)}`],
   ];
+  const kept = countActions(actions, ACTION.KEEP);
+  if (kept) rows.push(['', pc.dim(`${kept} elegida(s) ya existen en ${dst} y no se actualizan`)]);
   if (reused) rows.push(['', pc.cyan(`${reused} hijo(s) ya existen en ${dst} → se reutilizan sin tocarlos`)]);
   if (plan.skipped.length) {
     rows.push(['', pc.red(`${plan.skipped.length} no se migran (content type no existe en ${dst})`)]);

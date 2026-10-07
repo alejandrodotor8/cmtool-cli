@@ -2,6 +2,19 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.8.0 — 2026-10-07
+
+### Agregado
+
+- **Qué cambió en lo que ya existe**: el árbol de `migrate` compara cada entry que ya existe en destino con origen (sin llamadas extra) y muestra los campos que cambiarían: "se actualiza · 2 campo(s): Título, CTA", "ya existe · sin cambios" o, en un hijo, "ya existe · cambió en develop, no se migra".
+- **Pregunta qué actualizar**, padre por padre e hijo por hijo: las entries elegidas vienen marcadas y los hijos no. Un hijo marcado se actualiza y, si apunta a entries que faltan en destino, también se crean.
+
+### Cambiado
+
+- Lo que ya existe y no cambió no se actualiza (antes se volvía a guardar igual, subía la versión y quedaba como *Changed*).
+- El análisis de `migrate` va en dos etapas: primero el árbol y lo que cambió; después, según lo que decidas actualizar, el modelo, las imágenes y los tags.
+- Si no hay nada que crear ni actualizar, termina con un mensaje en vez de un error.
+
 ## 0.7.0 — 2026-10-07
 
 ### Agregado

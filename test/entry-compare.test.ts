@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { compareEntryFields, summarizeValue, VALUE } from '../src/core/entry-compare.ts';
+import { compareEntryFields, migrationChanges, summarizeValue, VALUE } from '../src/core/entry-compare.ts';
 import { contentType, entry, field, link } from './fixtures.ts';
 
 describe('compareEntryFields', () => {
@@ -62,5 +62,36 @@ describe('summarizeValue', () => {
 
   test('recorta textos largos', () => {
     assert.equal(summarizeValue('a'.repeat(100), 10), `${'a'.repeat(9)}…`);
+  });
+});
+
+describe('migrationChanges', () => {
+  const ct = contentType('banner', [field('title', 'Symbol', { localized: true }), field('cta')]);
+
+  test('solo cuenta lo que la migración cambiaría: campos del modelo de origen, en sus idiomas', () => {
+    const src = entry('b', 'banner', { title: { 'es-CO': 'Hola' }, cta: { 'es-CO': 'Ver' } });
+    const dst = entry('b', 'banner', {
+      title: { 'es-CO': 'Hola', 'pt-BR': 'Olá' },
+      cta: { 'es-CO': 'Comprar' },
+      soloDestino: { 'es-CO': 'x' },
+    });
+    assert.deepEqual(
+      migrationChanges(src, dst, ct, new Set(['es-CO'])).map((f) => f.id),
+      ['cta'],
+    );
+  });
+
+  test('sin cambios, lista vacía', () => {
+    const same = entry('b', 'banner', { title: { 'es-CO': 'Hola' } });
+    assert.deepEqual(migrationChanges(same, same, ct, new Set(['es-CO'])), []);
+  });
+
+  test('un campo vaciado en origen cuenta como cambio', () => {
+    const src = entry('b', 'banner', {});
+    const dst = entry('b', 'banner', { cta: { 'es-CO': 'Comprar' } });
+    assert.deepEqual(
+      migrationChanges(src, dst, ct, new Set(['es-CO'])).map((f) => [f.id, f.status]),
+      [['cta', VALUE.ONLY_DST]],
+    );
   });
 });

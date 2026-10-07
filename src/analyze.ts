@@ -1,5 +1,7 @@
 /**
- * Paso de análisis: reúne todo lo necesario de origen y destino. Solo lectura.
+ * Análisis de "migrar entries", en dos etapas (solo lectura):
+ *  1. analyzeTree: el árbol, qué existe en destino y qué cambió en origen;
+ *  2. completeAnalysis: con lo que se decidió actualizar, el modelo, idiomas, imágenes y tags.
  */
 import {
   fetchAssets,
@@ -11,10 +13,12 @@ import {
 } from './contentful/read.ts';
 import type { Asset, Cma, ContentType, Entry, EntryTree, Locales, Tag } from './contentful/types.ts';
 import { assetIdsOf, contentTypeOf, isArchived, makeTitleOf } from './core/entries.ts';
+import { type FieldComparison, migrationChanges } from './core/entry-compare.ts';
 import { type ContentTypeDiff, diffContentType } from './core/model.ts';
 import { type Action, changedInDst, classifyTree, writtenEntries } from './core/plan.ts';
 
-export interface Analysis {
+/** Lo que se sabe del árbol antes de decidir qué actualizar. */
+export interface TreeAnalysis {
   src: string;
   dst: string;
   rootIds: string[];
@@ -24,6 +28,12 @@ export interface Analysis {
   existsInDst: Set<string>;
   /** Entries (del árbol o enlazadas en texto) que existen en destino pero están archivadas. */
   archivedInDst: Set<string>;
+  /** Por cada entry que ya existe en destino, los campos que una migración cambiaría (vacío: sin cambios). */
+  changes: Map<string, FieldComparison[]>;
+  titleOf: (entry: Entry) => string;
+}
+
+export interface Analysis extends TreeAnalysis {
   /** Qué pasa con cada entry del árbol. */
   actions: Map<string, Action>;
   contentTypes: { src: Map<string, ContentType>; dst: Map<string, ContentType> };
@@ -34,7 +44,6 @@ export interface Analysis {
   assets: { ids: string[]; src: Map<string, Asset>; existing: Set<string>; missing: string[] };
   /** Tags de las entries que se escriben: los que ya hay en destino y los que faltan. */
   tags: { dstIds: Set<string>; missing: Tag[] };
-  titleOf: (entry: Entry) => string;
 }
 
 /** Lee modelo e idiomas de un ambiente. */
@@ -43,42 +52,79 @@ export interface Loaders {
   locales: (env: string) => Promise<Locales>;
 }
 
-export async function analyze(
+/** Avisa en qué etapa va (para el spinner). */
+type Report = (stage: string) => void;
+
+const defaultLoaders = (cma: Cma): Loaders => ({
+  contentTypes: (env) => readContentTypes(cma, env),
+  locales: (env) => readLocales(cma, env),
+});
+
+/** Etapa 1: el árbol y, de lo que ya existe en destino, qué cambió en origen. */
+export async function analyzeTree(
   cma: Cma,
   { src, dst, rootIds }: { src: string; dst: string; rootIds: string[] },
-  /** Avisa en qué etapa va (para el spinner). */
-  report: (stage: string) => void = () => {},
-  /** Lectores de modelo e idiomas; por defecto leen de la API (el contexto los reutiliza). */
-  load: Loaders = {
-    contentTypes: (env) => readContentTypes(cma, env),
-    locales: (env) => readLocales(cma, env),
-  },
-): Promise<Analysis> {
-  // Árbol de entries y qué pasa con cada una.
+  report: Report = () => {},
+  load: Loaders = defaultLoaders(cma),
+): Promise<TreeAnalysis> {
   report(`Leyendo las entries y sus hijos en ${src}…`);
   const tree = await readEntryTree(cma, src, rootIds);
   // También se revisan en destino las entries enlazadas en texto, para avisar si no existen.
   const hyperlinked = [...new Set([...tree.hyperlinks.values()].flat())].filter((id) => !tree.entries.has(id));
   report(`Buscando qué ya existe en ${dst}…`);
   const dstEntries = await fetchEntries(cma, dst, [...tree.entries.keys(), ...hyperlinked]);
-  const existsInDst = new Set(dstEntries.keys());
-  const archivedInDst = new Set([...dstEntries.values()].filter(isArchived).map((e) => e.sys.id));
-  const actions = classifyTree(rootIds, tree, existsInDst);
-  const written = writtenEntries({ tree, actions });
+
+  report(`Comparando con ${dst}…`);
+  const [srcCTs, srcLocales] = await Promise.all([load.contentTypes(src), load.locales(src)]);
+  const changes = new Map<string, FieldComparison[]>();
+  for (const [id, entry] of tree.entries) {
+    const current = dstEntries.get(id);
+    if (current) changes.set(id, migrationChanges(entry, current, srcCTs.get(contentTypeOf(entry)), srcLocales.codes));
+  }
+
+  return {
+    src,
+    dst,
+    rootIds,
+    tree,
+    dstEntries,
+    existsInDst: new Set(dstEntries.keys()),
+    archivedInDst: new Set([...dstEntries.values()].filter(isArchived).map((e) => e.sys.id)),
+    changes,
+    titleOf: makeTitleOf(srcCTs, srcLocales.default),
+  };
+}
+
+/** Las acciones del árbol con lo que se decidió actualizar (para mostrarlo antes de seguir). */
+export const withActions = <T extends TreeAnalysis>(t: T, toUpdate: Set<string>) => ({
+  ...t,
+  actions: classifyTree(t.rootIds, t.tree, t.existsInDst, toUpdate),
+});
+
+/** Etapa 2: con lo que se decidió actualizar, el modelo, los idiomas, las imágenes y los tags. */
+export async function completeAnalysis(
+  cma: Cma,
+  tree: TreeAnalysis,
+  toUpdate: Set<string>,
+  report: Report = () => {},
+  load: Loaders = defaultLoaders(cma),
+): Promise<Analysis> {
+  const { src, dst } = tree;
+  const { actions } = withActions(tree, toUpdate);
+  const written = writtenEntries({ tree: tree.tree, actions });
 
   // Modelo: todos los content types del árbol, incluidos los de entries reutilizadas.
   report('Comparando modelos…');
   const contentTypes = { src: await load.contentTypes(src), dst: await load.contentTypes(dst) };
   const diffs = new Map<string, ContentTypeDiff>();
-  for (const id of new Set([...tree.entries.values()].map(contentTypeOf))) {
+  for (const id of new Set([...tree.tree.entries.values()].map(contentTypeOf))) {
     const srcCT = contentTypes.src.get(id);
     if (!srcCT) throw new Error(`El content type "${id}" no existe en ${src}.`);
     diffs.set(id, diffContentType(srcCT, contentTypes.dst.get(id)));
   }
 
   report('Revisando idiomas, imágenes y tags…');
-  const srcLocales = await load.locales(src);
-  const dstLocales = await load.locales(dst);
+  const [srcLocales, dstLocales] = await Promise.all([load.locales(src), load.locales(dst)]);
   const locales = {
     src: srcLocales,
     dst: dstLocales,
@@ -106,22 +152,7 @@ export async function analyze(
     tags.missing = missingIds.flatMap((id) => srcTags.get(id) ?? []);
   }
 
-  return {
-    src,
-    dst,
-    rootIds,
-    tree,
-    dstEntries,
-    existsInDst,
-    archivedInDst,
-    actions,
-    contentTypes,
-    diffs,
-    locales,
-    assets,
-    tags,
-    titleOf: makeTitleOf(contentTypes.src, srcLocales.default),
-  };
+  return { ...tree, actions, contentTypes, diffs, locales, assets, tags };
 }
 
 /**

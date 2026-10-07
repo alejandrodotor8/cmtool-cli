@@ -167,10 +167,11 @@ Sin comando, la herramienta muestra este menú. Los comandos que comparan pueden
    - **Enter** agrega una línea. Para continuar, presiona **Tab** (va al botón `[ submit ]`) y luego **Enter**. Así, una celda vacía en lo que pegas no envía la respuesta antes de tiempo.
    - Si algo no tiene forma de entry ID (por ejemplo, la URL de un asset), te dice cuál y te deja pegar de nuevo. Si varios IDs no existen en origen, te los lista todos.
 3. Revisa el árbol: la entry que pegaste (**padre**) y las entries a las que apunta (**hijos**).
-   - El padre se crea o, si ya existe en destino, se actualiza.
+   - El padre se crea si no existe en destino.
    - Un hijo que ya existe en destino **se reutiliza sin tocarlo**. Igual se muestra lo que tiene debajo y se revisa su modelo.
+   - De lo que ya existe en destino, el árbol muestra **qué cambió en origen**: *"se actualiza · 2 campo(s): Título, CTA"*, *"ya existe · sin cambios"* o, en un hijo, *"ya existe · cambió en develop, no se migra"*. Solo cuenta lo que la migración cambiaría (campos del modelo de origen, en los idiomas de origen).
+   - Si algo que ya existe cambió, te pregunta **qué actualizar**, padre por padre e hijo por hijo: las entries que elegiste vienen marcadas y los hijos no. Lo que no marques (o no tenga cambios) no se toca. Un hijo marcado se trata como un padre: si apunta a entries que no existen en destino, también se crean.
    - Un hijo que no existe en destino se crea, y se revisan sus propios hijos con la misma regla.
-   - Para actualizar un hijo que ya existe, elígelo también.
    - Un **texto enlazado** dentro de un rich text (`↗`) no es un hijo: no se migra. Si apunta a una entry que no existe en destino, te avisa que el enlace quedará roto.
    - Si una entry está **archivada** en destino, no se actualiza (y si es un hijo reutilizado, te avisa que el padre no se podrá publicar).
    - Si se van a escribir más de 20 entries, te pide confirmar que el árbol es lo que esperabas.

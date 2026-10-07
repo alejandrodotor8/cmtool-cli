@@ -7,20 +7,27 @@
  */
 
 import pc from 'picocolors';
-import { analyze, changesSinceAnalysis } from '../analyze.ts';
+import { analyzeTree, changesSinceAnalysis, completeAnalysis, withActions } from '../analyze.ts';
 import { APP_NAME } from '../app.ts';
 import { type CliArgs, repeatCommand } from '../cli-args.ts';
 import { LIMITS } from '../config.ts';
 import { contentTypeOf } from '../core/entries.ts';
 import { modelOptions } from '../core/model-changes.ts';
-import { brokenHyperlinks, buildPlan, isWrite, writtenContentTypes } from '../core/plan.ts';
+import {
+  brokenHyperlinks,
+  buildPlan,
+  defaultUpdates,
+  isWrite,
+  updateCandidates,
+  writtenContentTypes,
+} from '../core/plan.ts';
 import { requiredGaps } from '../core/publish-check.ts';
 import { AbortError } from '../errors.ts';
 import { executePlan } from '../execute.ts';
 import { selectEntryIds } from '../selection/entries.ts';
 import { printCancelled, printTitle } from '../ui/header.ts';
 import { log } from '../ui/log.ts';
-import { askModelChanges, askWithAssets, confirmLargeMigration } from '../ui/prompts.ts';
+import { askEntryUpdates, askModelChanges, askWithAssets, confirmLargeMigration } from '../ui/prompts.ts';
 import { withStatus } from '../ui/status.ts';
 import { renderAssets } from '../ui/views/assets.ts';
 import { renderEntryTree } from '../ui/views/entries.ts';
@@ -38,22 +45,41 @@ export async function migrate(args: CliArgs): Promise<number> {
   if (!rootIds.length) return finishReading(ctx, 'No se eligió ninguna entry.');
   const repeat = repeatCommand({ spaceId: ctx.spaceId, src, dst, rootIds });
 
-  // 2. Análisis (solo lectura)
-  const analysis = await withStatus(
+  // 2. Árbol: qué existe en destino y qué cambió (solo lectura)
+  const tree = await withStatus(
     `Analizando ${src} ──▶ ${dst}…`,
     ctx.animate,
-    (status) => analyze(ctx.cma, { src, dst, rootIds }, status.update, ctx),
-    (a) =>
-      `Análisis listo · ${a.tree.entries.size} entries · ${a.diffs.size} content types · ${ctx.api.count} llamadas`,
+    (status) => analyzeTree(ctx.cma, { src, dst, rootIds }, status.update, ctx),
+    (t) => `Árbol listo · ${t.tree.entries.size} entries · ${ctx.api.count} llamadas`,
   );
 
-  // 3. Mostrar y decidir
-  renderEntryTree(analysis);
-  const writes = [...analysis.actions.values()].filter(isWrite).length;
+  // 3. Mostrar y decidir qué actualizar de lo que ya existe
+  const candidates = updateCandidates(tree);
+  let toUpdate = defaultUpdates(candidates);
+  renderEntryTree(withActions(tree, toUpdate));
+  if (candidates.length) {
+    const titleOf = (id: string) => {
+      const entry = tree.tree.entries.get(id);
+      return entry ? tree.titleOf(entry) : id;
+    };
+    const chosen = new Set(await askEntryUpdates(candidates, { titleOf, src, dst }));
+    const changedChoice = chosen.size !== toUpdate.size || [...chosen].some((id) => !toUpdate.has(id));
+    toUpdate = chosen;
+    if (changedChoice) renderEntryTree(withActions(tree, toUpdate), 'Entries con tu elección');
+  }
+  const writes = [...withActions(tree, toUpdate).actions.values()].filter(isWrite).length;
+  if (!writes) return finishReading(ctx, `No hay nada que crear ni actualizar en ${dst}.`);
   if (!args.dryRun && writes > LIMITS.confirmWritesAbove && !(await confirmLargeMigration(writes, dst))) {
     printCancelled();
     return 0;
   }
+
+  const analysis = await withStatus(
+    'Revisando modelo, imágenes y tags…',
+    ctx.animate,
+    (status) => completeAnalysis(ctx.cma, tree, toUpdate, status.update, ctx),
+    (a) => `Análisis listo · ${a.diffs.size} content types · ${ctx.api.count} llamadas`,
+  );
 
   let withAssets = false;
   if (analysis.assets.ids.length) {

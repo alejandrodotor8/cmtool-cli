@@ -10,6 +10,7 @@ import type { ContentType, Environment, Space } from '../contentful/types.ts';
 import { parseIds } from '../core/ids.ts';
 import { fieldType } from '../core/model.ts';
 import type { ModelOption, ModelPick } from '../core/model-changes.ts';
+import type { UpdateCandidate } from '../core/plan.ts';
 import { parseSince } from '../core/query.ts';
 import { AbortError, CancelError } from '../errors.ts';
 import { log } from './log.ts';
@@ -182,6 +183,25 @@ export async function askSince(): Promise<string> {
         })
       : choice;
   return parseSince(text) as string;
+}
+
+/**
+ * Entries que ya existen en destino y cambiaron en origen: cuáles actualizar. Las que
+ * eligió el usuario vienen marcadas; los hijos, no.
+ */
+export function askEntryUpdates(
+  candidates: UpdateCandidate[],
+  { titleOf, src, dst }: { titleOf: (id: string) => string; src: string; dst: string },
+): Promise<string[]> {
+  return chooseMany(
+    `Estas entries ya existen en ${pc.bold(dst)} y cambiaron en ${pc.bold(src)}: ¿cuáles actualizo? ${pc.dim('(sin marcar, no se tocan)')}`,
+    candidates.map((c) => ({
+      value: c.id,
+      label: `${clip(titleOf(c.id), 40)} ${pc.dim(c.isRoot ? '· la elegiste' : '· hijo')}`,
+      hint: `${c.fields.length} campo(s): ${clip(c.fields.map((f) => f.name).join(', '), 50)}`,
+    })),
+    { initialValues: candidates.filter((c) => c.isRoot).map((c) => c.id), required: false },
+  );
 }
 
 /** Pide confirmación cuando se van a escribir muchas entries de una vez. */

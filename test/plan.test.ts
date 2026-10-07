@@ -8,6 +8,8 @@ import {
   buildPlan,
   changedInDst,
   classifyTree,
+  defaultUpdates,
+  updateCandidates,
   writtenContentTypes,
 } from '../src/core/plan.ts';
 import { analysisOf, asset, contentType, entry, field, link, tag, treeOf, writtenIds } from './fixtures.ts';
@@ -248,5 +250,69 @@ describe('changedInDst', () => {
   test('si nada cambió, no hay diferencias', () => {
     const state = new Map([['a', entry('a', 'x')]]);
     assert.deepEqual(changedInDst(['a', 'b'], state, new Map(state)), []);
+  });
+});
+
+describe('classifyTree con lo que se decide actualizar', () => {
+  // banner (pegado, existe) → slide (existe) → item (no existe)
+  const tree = treeOf([
+    entry('banner', 'banner', { slide: { 'es-CO': link('slide') } }),
+    entry('slide', 'slide', { item: { 'es-CO': link('item') } }),
+    entry('item', 'item'),
+  ]);
+  const exists = new Set(['banner', 'slide']);
+
+  test('si desmarcas la entry que elegiste, queda igual (KEEP) y lo que cuelga no se crea', () => {
+    const actions = classifyTree(['banner'], tree, exists, new Set());
+    assert.equal(actions.get('banner'), ACTION.KEEP);
+    assert.equal(actions.get('slide'), ACTION.REUSE);
+    assert.equal(actions.get('item'), ACTION.ORPHAN);
+  });
+
+  test('si marcas un hijo, se actualiza y se crean sus hijos que faltan', () => {
+    const actions = classifyTree(['banner'], tree, exists, new Set(['slide']));
+    assert.equal(actions.get('banner'), ACTION.KEEP);
+    assert.equal(actions.get('slide'), ACTION.UPDATE);
+    assert.equal(actions.get('item'), ACTION.CREATE);
+  });
+
+  test('padre e hijo marcados: los dos se actualizan', () => {
+    const actions = classifyTree(['banner'], tree, exists, new Set(['banner', 'slide']));
+    assert.equal(actions.get('banner'), ACTION.UPDATE);
+    assert.equal(actions.get('slide'), ACTION.UPDATE);
+  });
+});
+
+describe('updateCandidates', () => {
+  const ct = (id: string) => contentType(id, [field('title')]);
+  const analysis = analysisOf({
+    rootIds: ['banner', 'igual'],
+    entries: [
+      entry('banner', 'banner', { title: { 'es-CO': 'Nuevo' }, slide: { 'es-CO': link('slide') } }),
+      entry('slide', 'slide', { title: { 'es-CO': 'Slide editado' } }),
+      entry('igual', 'banner', { title: { 'es-CO': 'Igual' } }),
+    ],
+    dstEntries: [
+      entry('banner', 'banner', { title: { 'es-CO': 'Viejo' } }),
+      entry('slide', 'slide', { title: { 'es-CO': 'Slide' } }),
+      entry('igual', 'banner', { title: { 'es-CO': 'Igual' } }),
+    ],
+    srcCTs: [ct('banner'), ct('slide')],
+    dstCTs: [ct('banner'), ct('slide')],
+  });
+
+  test('lista padres e hijos que ya existen y cambiaron; no las que están iguales', () => {
+    const candidates = updateCandidates(analysis);
+    assert.deepEqual(
+      candidates.map((c) => [c.id, c.isRoot, c.fields.map((f) => f.id)]),
+      [
+        ['banner', true, ['title']],
+        ['slide', false, ['title']],
+      ],
+    );
+  });
+
+  test('por defecto se actualizan solo las que elegiste', () => {
+    assert.deepEqual([...defaultUpdates(updateCandidates(analysis))], ['banner']);
   });
 });

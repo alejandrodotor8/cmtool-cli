@@ -11,7 +11,7 @@ import type { Account, Entry, TagLink } from './contentful/types.ts';
 import { contentTypeOf } from './core/entries.ts';
 import { AbortError } from './errors.ts';
 
-export const BACKUP_DIR = path.join(os.homedir(), '.ctf-migrate', 'backups');
+const BACKUP_DIR = path.join(os.homedir(), '.ctf-migrate', 'backups');
 
 /** Cómo estaba una entry en destino justo antes de actualizarla. */
 export interface SavedEntry {

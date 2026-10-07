@@ -200,7 +200,7 @@ export const askWithAssets = (missingCount: number): Promise<boolean> =>
 /** Checks agrupados por content type con lo que falta en el modelo de destino. Devuelve lo marcado. */
 export async function askModelChanges(options: ModelOption[], dst: string): Promise<ModelPick[]> {
   const groups: Record<string, { value: ModelPick; label: string; hint?: string }[]> = {};
-  for (const { diff, onlyReused } of options) {
+  for (const { diff, onlyReused, editorFields } of options) {
     const note = diff.missingCT
       ? pc.yellow(`  · nuevo: no existe en ${dst}`)
       : onlyReused
@@ -217,12 +217,24 @@ export async function askModelChanges(options: ModelOption[], dst: string): Prom
       ];
       continue;
     }
-    const nameWidth = Math.max(...diff.missing.map((f) => clip(f.name, 28).length));
-    groups[group] = diff.missing.map((field) => ({
-      value: { ctId: diff.id, field },
-      label: `${pad(clip(field.name, 28), nameWidth)}  ${pc.dim(field.id)}`,
-      hint: fieldType(field),
-    }));
+    const nameWidth = Math.max(0, ...diff.missing.map((f) => clip(f.name, 28).length));
+    const fieldName = new Map(diff.rows.map((r) => [r.field.id, r.field.name]));
+    groups[group] = [
+      ...diff.missing.map((field) => ({
+        value: { ctId: diff.id, field },
+        label: `${pad(clip(field.name, 28), nameWidth)}  ${pc.dim(field.id)}`,
+        hint: fieldType(field),
+      })),
+      ...(editorFields.length
+        ? [
+            {
+              value: { ctId: diff.id, editor: true },
+              label: `Copiar apariencia del editor de ${editorFields.length} campo(s)`,
+              hint: `help text y widget: ${clip(editorFields.map((id) => fieldName.get(id) ?? id).join(', '), 50)}`,
+            },
+          ]
+        : []),
+    ];
   }
 
   const { question, note } = modelChangesQuestion(options, dst);

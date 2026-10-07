@@ -46,6 +46,8 @@ export function renderRestore(data: BackupData, items: { saved: SavedEntry; curr
   }
   const added = Object.entries(data.fieldsAdded).map(([ctId, ids]) => `${ctId}.${ids.join(`, ${ctId}.`)}`);
   if (added.length) log.info(`Campos agregados al modelo (no se quitan): ${clip(added.join(', '), 100)}`);
+  const editor = Object.entries(data.editorUpdated ?? {}).map(([ctId, ids]) => `${ctId} (${ids.length})`);
+  if (editor.length) log.info(`Apariencia del editor actualizada (no se revierte): ${clip(editor.join(', '), 100)}`);
 }
 
 /** "2 entry(s), 1 imagen(es)…" con lo que se creó en una ejecución. */

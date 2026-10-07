@@ -7,7 +7,7 @@
  * - Lo único que publica son content types, porque Contentful lo exige para usar
  *   campos nuevos. Entries y assets quedan en draft.
  */
-import type { Asset, Cma, ContentType, Entry, Field, Tag, TagLink } from './types.ts';
+import type { Asset, Cma, ContentType, EditorInterface, Entry, Field, Tag, TagLink } from './types.ts';
 
 export type Writer = ReturnType<typeof createWriter>;
 
@@ -42,6 +42,12 @@ export function createWriter(cma: Cma, { src, dst }: { src: string; dst: string 
         { ...dstCT, fields: [...dstCT.fields, ...fields] },
       );
       return publishContentType(ct);
+    },
+
+    /** Lee la apariencia del editor actual en destino y la actualiza con `build(actual)`. */
+    async updateEditorInterface(contentTypeId: string, build: (current: EditorInterface) => EditorInterface) {
+      const current = await cma.editorInterface.get({ ...env, contentTypeId });
+      return cma.editorInterface.update({ ...env, contentTypeId }, build(current));
     },
 
     async createAsset(id: string, fields: Asset['fields']): Promise<void> {

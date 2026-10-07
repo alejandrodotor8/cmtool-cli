@@ -103,3 +103,15 @@ export function renderModelOverview(
     rows,
   });
 }
+
+/** Campos con otra apariencia del editor en destino (help text, widget), por content type. */
+export function renderEditorDiffs(editorDiffs: Map<string, string[]>, diffs: ContentTypeDiff[], dst: string): void {
+  const byId = new Map(diffs.map((d) => [d.id, d]));
+  const lines = [...editorDiffs].map(([ctId, ids]) => {
+    const diff = byId.get(ctId);
+    const names = new Map(diff?.rows.map((r) => [r.field.id, r.field.name]));
+    return `${pc.bold(diff?.name ?? ctId)} ${pc.dim(ctId)}: ${ids.map((id) => names.get(id) ?? id).join(', ')}`;
+  });
+  log.warn(`Apariencia del editor distinta en ${dst} (help text, widget):`);
+  log.block(lines.join('\n'));
+}

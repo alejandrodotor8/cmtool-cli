@@ -6,8 +6,9 @@
 import pc from 'picocolors';
 import type { Analysis } from './analyze.ts';
 import type { Backup } from './backup.ts';
-import type { Asset, ContentType, Locales, Tag } from './contentful/types.ts';
+import type { Asset, ContentType, EditorInterface, Field, Locales, Tag } from './contentful/types.ts';
 import type { Writer } from './contentful/write.ts';
+import { mergeControls } from './core/editor.ts';
 import { contentTypeOf } from './core/entries.ts';
 import { assetFieldsForDestination, fieldsForDestination, mergeWithExisting } from './core/fields.ts';
 import type { ModelChanges } from './core/model-changes.ts';
@@ -35,15 +36,45 @@ async function applyTags(tags: Tag[], dstTagIds: Set<string>, { writer, backup, 
   runner.end();
 }
 
-/** Crea content types y agrega campos. Actualiza `dstCTs` con las versiones nuevas. */
+/**
+ * Crea content types, agrega campos y copia la apariencia del editor de los campos que
+ * correspondan. Actualiza `dstCTs` con las versiones nuevas. `srcEditors` lee la apariencia
+ * de origen (solo se llama si hay apariencias que copiar).
+ */
 export async function applyModelChanges(
-  { contentTypesToCreate, fieldsToAdd }: ModelChanges,
+  { contentTypesToCreate, fieldsToAdd, editorFields }: ModelChanges,
+  dstCTs: Map<string, ContentType>,
+  srcEditors: () => Promise<Map<string, EditorInterface>>,
+  ctx: WriteContext,
+) {
+  const { writer, backup, runner } = ctx;
+  const total = contentTypesToCreate.length + fieldsToAdd.size;
+  if (total) await applyStructure(contentTypesToCreate, fieldsToAdd, dstCTs, ctx);
+  if (!editorFields.size) return;
+
+  const editors = await srcEditors();
+  runner.start('Apariencia del editor', editorFields.size);
+  for (const [ctId, ids] of editorFields) {
+    await runner.run(`${ctId}: ${ids.size} campo(s)`, async () => {
+      const src = editors.get(ctId);
+      if (!src) throw new Error(`no encontré la apariencia de "${ctId}" en origen`);
+      await writer.updateEditorInterface(ctId, (current) => ({
+        ...current,
+        controls: mergeControls(current.controls, src.controls, ids),
+      }));
+      backup.recordEditor(ctId, [...ids]);
+    });
+  }
+  runner.end();
+}
+
+async function applyStructure(
+  contentTypesToCreate: ContentType[],
+  fieldsToAdd: Map<string, Field[]>,
   dstCTs: Map<string, ContentType>,
   { writer, backup, runner }: WriteContext,
 ) {
-  const total = contentTypesToCreate.length + fieldsToAdd.size;
-  if (!total) return;
-  runner.start('Modelo', total);
+  runner.start('Modelo', contentTypesToCreate.length + fieldsToAdd.size);
   for (const ct of contentTypesToCreate) {
     await runner.run(`content type ${ct.sys.id} creado`, async () => {
       dstCTs.set(ct.sys.id, await writer.createContentType(ct));
@@ -77,14 +108,19 @@ export async function applyAssets(assets: Asset[], dstLocales: Locales, { writer
 }
 
 /** Migrar entries: todas las fases en orden. Devuelve los fallos. */
-export async function executePlan(plan: Plan, analysis: Analysis, ctx: WriteContext): Promise<string[]> {
+export async function executePlan(
+  plan: Plan,
+  analysis: Analysis,
+  srcEditors: () => Promise<Map<string, EditorInterface>>,
+  ctx: WriteContext,
+): Promise<string[]> {
   const { titleOf, locales, diffs } = analysis;
   const { writer, backup, runner } = ctx;
   const dstCTs = new Map(analysis.contentTypes.dst); // se actualiza con los cambios de modelo
   const dstTagIds = new Set(analysis.tags.dstIds);
 
   await applyTags(plan.tagsToCreate, dstTagIds, ctx);
-  await applyModelChanges(plan, dstCTs, ctx);
+  await applyModelChanges(plan, dstCTs, srcEditors, ctx);
   await applyAssets(plan.assetsToCreate, locales.dst, ctx);
 
   runner.start('Entries', plan.entries.length);

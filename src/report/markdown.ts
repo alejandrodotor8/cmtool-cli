@@ -42,6 +42,7 @@ function modelOverview({ diffs, onlyInDst }: ModelComparison, dst: string): stri
 export function modelComparisonReport(
   comparison: ModelComparison,
   envs: Envs & { dstDefault: string | undefined },
+  editorDiffs: Map<string, string[]> = new Map(),
   now = new Date(),
 ): string {
   const details = comparison.diffs.filter(hasDifferences).map((diff) =>
@@ -58,11 +59,20 @@ export function modelComparisonReport(
       ),
     ].join('\n\n'),
   );
+  const names = new Map(comparison.diffs.map((d) => [d.id, d]));
+  const editor = [...editorDiffs].map(([ctId, ids]) => {
+    const diff = names.get(ctId);
+    const fieldName = new Map(diff?.rows.map((r) => [r.field.id, r.field.name]));
+    return [diff?.name ?? ctId, ctId, ids.map((id) => fieldName.get(id) ?? id).join(', ')];
+  });
   return [
     header('Comparación de modelos', envs, now),
     '## Resumen',
     modelOverview(comparison, envs.dst),
     ...(details.length ? ['## Diferencias', ...details] : []),
+    ...(editor.length
+      ? ['## Apariencia del editor distinta (help text, widget)', mdTable(['Content type', 'ID', 'Campos'], editor)]
+      : []),
   ].join('\n\n');
 }
 

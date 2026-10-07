@@ -99,7 +99,7 @@ export async function migrate(args: CliArgs): Promise<number> {
   }
 
   const write = await startWriting(ctx, 'migrate', rootIds);
-  await executePlan(plan, analysis, write);
+  await executePlan(plan, analysis, () => ctx.editorInterfaces(src), write);
   return finishWriting(ctx, write, {
     title: 'Migración lista',
     lines: [

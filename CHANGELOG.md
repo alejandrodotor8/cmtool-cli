@@ -2,6 +2,17 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.7.0 — 2026-10-07
+
+### Agregado
+
+- **Apariencia del editor** (help text, widget y ajustes de cada campo), que Contentful guarda aparte del modelo y antes se perdía:
+  - Se copia sola al crear un content type o agregar campos (en `migrate` y `migrate-model`).
+  - `migrate-model` detecta campos que ya existen con otra apariencia y ofrece "Copiar apariencia del editor": sirve para arreglar content types ya migrados (por ejemplo, un help text que no llegó).
+  - `compare-models` muestra qué campos tienen otra apariencia, también en el reporte.
+  - De un widget de app o extensión solo se copia el help text, para no romper el editor si la app no está instalada en destino.
+  - Queda registrada en el respaldo (no se revierte con `restore`).
+
 ## 0.6.1 — 2026-10-07
 
 ### Corregido

@@ -1,6 +1,6 @@
 import pc from 'picocolors';
 import type { Analysis } from '../../analyze.ts';
-import { countNewFields, hasModelChanges } from '../../core/model-changes.ts';
+import { countEditorFields, countNewFields, hasModelChanges, type ModelChanges } from '../../core/model-changes.ts';
 import { ACTION, type Plan } from '../../core/plan.ts';
 import type { RequiredGap } from '../../core/publish-check.ts';
 import { log } from '../log.ts';
@@ -67,9 +67,12 @@ export function renderSummary(
 }
 
 /** "+1 content type(s) · +2 campo(s) (se publica el modelo)" o "sin cambios". */
-export function modelSummary(changes: Plan | Pick<Plan, 'contentTypesToCreate' | 'fieldsToAdd'>): string {
-  return hasModelChanges(changes)
-    ? pc.yellow(`+${changes.contentTypesToCreate.length} content type(s) · +${countNewFields(changes)} campo(s)`) +
-        pc.dim(' (se publica el modelo)')
-    : pc.dim('sin cambios');
+export function modelSummary(changes: ModelChanges): string {
+  if (!hasModelChanges(changes)) return pc.dim('sin cambios');
+  const parts = [
+    changes.contentTypesToCreate.length && `+${changes.contentTypesToCreate.length} content type(s)`,
+    countNewFields(changes) && `+${countNewFields(changes)} campo(s)`,
+    countEditorFields(changes) && `apariencia de ${countEditorFields(changes)} campo(s)`,
+  ].filter(Boolean);
+  return pc.yellow(parts.join(' · ')) + pc.dim(' (se publica el modelo)');
 }

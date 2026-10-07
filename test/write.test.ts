@@ -20,8 +20,10 @@ describe('createWriter', () => {
     await writer.createAsset('img1', asset('img1', { 'es-CO': { url: '//images.ctfassets.net/a.jpg' } }).fields);
     await writer.createEntry('e2', 'banner', { title: { 'es-CO': 'Nuevo' } }, []);
     await writer.updateEntry('e1', (current) => ({ ...current, title: { 'es-CO': 'Nuevo' } }), []);
+    await writer.updateEditorInterface('banner', (current) => current);
 
     assert.ok(calls.length > 0);
+    assert.ok(calls.some((c) => c.method === 'editorInterface.update'));
     for (const call of calls) {
       assert.equal(call.params.environmentId, 'qa', `${call.method} no fue a qa`);
       assert.doesNotMatch(call.method, /delete|archive|unpublish/i);

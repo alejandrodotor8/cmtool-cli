@@ -22,10 +22,16 @@ describe('mdTable', () => {
 
 describe('reportes', () => {
   test('comparación de modelos: resumen y diferencias campo por campo', () => {
-    const md = modelComparisonReport(model, { ...envs, dstDefault: 'es-CO' }, now);
+    const md = modelComparisonReport(model, { ...envs, dstDefault: 'es-CO' }, new Map(), now);
     assert.match(md, /^# Comparación de modelos: develop → qa/);
     assert.match(md, /\| banner \| banner \| 2 \| 1 falta\(n\) \|/);
     assert.match(md, /\| cta \| cta \| Symbol \| falta en qa \|/);
+  });
+
+  test('comparación de modelos: incluye la apariencia del editor distinta', () => {
+    const md = modelComparisonReport(model, { ...envs, dstDefault: 'es-CO' }, new Map([['banner', ['title']]]), now);
+    assert.match(md, /## Apariencia del editor distinta/);
+    assert.match(md, /\| banner \| banner \| title \|/);
   });
 
   test('estado de los ambientes', () => {

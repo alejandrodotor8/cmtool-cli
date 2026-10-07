@@ -4,7 +4,18 @@
 import { LIMITS } from '../config.ts';
 import { childEntryIds, hyperlinkedEntryIds } from '../core/entries.ts';
 import { AbortError } from '../errors.ts';
-import type { Asset, Cma, ContentType, Entry, EntryTree, Environment, Locales, Space, Tag } from './types.ts';
+import type {
+  Asset,
+  Cma,
+  ContentType,
+  EditorInterface,
+  Entry,
+  EntryTree,
+  Environment,
+  Locales,
+  Space,
+  Tag,
+} from './types.ts';
 
 /** Las entries pueden ser pesadas (rich text); lotes más chicos evitan respuestas demasiado grandes. */
 const ENTRY_BATCH = 50;
@@ -169,4 +180,10 @@ export async function listEntries(
 export async function currentUser(cma: Cma): Promise<{ id: string; email: string | undefined }> {
   const user = await cma.user.getCurrent();
   return { id: user.sys.id, email: user.email };
+}
+
+/** La apariencia del editor de todos los content types del ambiente, por content type (1 llamada). */
+export async function readEditorInterfaces(cma: Cma, environmentId: string): Promise<Map<string, EditorInterface>> {
+  const res = await cma.editorInterface.getMany({ environmentId, query: { limit: 1000 } });
+  return new Map(res.items.map((ei) => [ei.sys.contentType.sys.id, ei]));
 }

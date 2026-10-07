@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { diffContentType } from '../src/core/model.ts';
 import {
+  countEditorFields,
   countNewFields,
   hasModelChanges,
   modelChangesFrom,
@@ -69,5 +70,37 @@ describe('modelChangesFrom y notAddedFields', () => {
 
   test('sin nada marcado, no hay cambios', () => {
     assert.equal(hasModelChanges(modelChangesFrom([], new Map())), false);
+  });
+});
+
+describe('apariencia del editor en los cambios de modelo', () => {
+  test('al crear un content type o agregar campos, se copia su apariencia', () => {
+    const changes = modelChangesFrom(
+      [{ ctId: 'banner', field: subtitle }, { ctId: 'promo' }],
+      new Map([['promo', promoCT]]),
+    );
+    assert.deepEqual(
+      [...changes.editorFields].map(([ct, ids]) => [ct, [...ids]]),
+      [
+        ['banner', ['subtitle']],
+        ['promo', ['title']],
+      ],
+    );
+  });
+
+  test('"copiar apariencia" usa los campos que difieren y no crea el content type', () => {
+    const changes = modelChangesFrom([{ ctId: 'slide', editor: true }], new Map(), new Map([['slide', ['title']]]));
+    assert.deepEqual(changes.contentTypesToCreate, []);
+    assert.deepEqual([...(changes.editorFields.get('slide') ?? [])], ['title']);
+    assert.equal(countEditorFields(changes), 1);
+    assert.equal(hasModelChanges(changes), true);
+  });
+
+  test('ofrece content types que solo difieren en apariencia', () => {
+    const options = modelOptions([slide], undefined, new Map([['slide', ['title']]]));
+    assert.deepEqual(
+      options.map((o) => [o.diff.id, o.editorFields]),
+      [['slide', ['title']]],
+    );
   });
 });

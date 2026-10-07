@@ -3,6 +3,7 @@ import type {
   AssetProps,
   ContentFields,
   ContentTypeProps,
+  EditorInterfaceProps,
   EntryProps,
   PlainClientAPI,
   SpaceProps,
@@ -16,6 +17,9 @@ export type Asset = AssetProps;
 export type ContentType = ContentTypeProps;
 export type Field = ContentFields;
 export type Tag = TagProps;
+/** Apariencia del editor de un content type: widget y ajustes (como el help text) de cada campo. */
+export type EditorInterface = EditorInterfaceProps;
+export type EditorControl = NonNullable<EditorInterface['controls']>[number];
 export type TagLink = NonNullable<Entry['metadata']>['tags'][number];
 
 /** La cuenta de Contentful con la que se trabaja: separa respaldos e historial. */

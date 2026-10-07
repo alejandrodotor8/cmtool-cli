@@ -74,12 +74,19 @@ export function contentTypeStatusParts(diff: ContentTypeDiff, dst: string): stri
 
 /**
  * La pregunta de cambios de modelo según lo que haya: content types que no existen en
- * destino (se crean), campos que faltan (se agregan) o ambos.
+ * destino (se crean), campos que faltan (se agregan) y campos con otra apariencia del
+ * editor (se actualizan).
  */
-export function modelChangesQuestion(options: { diff: { missingCT: boolean } }[], dst: string) {
+export function modelChangesQuestion(
+  options: { diff: { missingCT: boolean; missing: unknown[] }; editorFields: string[] }[],
+  dst: string,
+) {
   const newCTs = options.filter((o) => o.diff.missingCT).length;
-  const withFields = options.length - newCTs;
-  if (newCTs && !withFields) {
+  const add = options.some((o) => !o.diff.missingCT && o.diff.missing.length > 0);
+  const update = options.some((o) => o.editorFields.length > 0);
+  const verb = add && update ? 'agrego o actualizo' : update ? 'actualizo' : 'agrego';
+
+  if (newCTs && !add && !update) {
     return {
       question:
         newCTs === 1
@@ -90,9 +97,12 @@ export function modelChangesQuestion(options: { diff: { missingCT: boolean } }[]
   }
   if (newCTs) {
     return {
-      question: `¿Qué creo o agrego en el modelo de ${dst}?`,
-      note: `${newCTs} content type(s) nuevo(s) y campos que faltan; sin marcar nada, el modelo no se toca`,
+      question: `¿Qué creo o ${verb} en el modelo de ${dst}?`,
+      note: `${newCTs} content type(s) nuevo(s); sin marcar nada, el modelo no se toca`,
     };
   }
-  return { question: `¿Qué campos agrego al modelo de ${dst}?`, note: 'sin marcar nada, el modelo no se toca' };
+  return {
+    question: add && !update ? `¿Qué campos agrego al modelo de ${dst}?` : `¿Qué ${verb} en el modelo de ${dst}?`,
+    note: 'sin marcar nada, el modelo no se toca',
+  };
 }

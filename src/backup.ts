@@ -42,6 +42,8 @@ export interface BackupData {
   created: { entries: string[]; assets: string[]; contentTypes: string[]; tags: string[] };
   /** Campos agregados al modelo, por content type. */
   fieldsAdded: Record<string, string[]>;
+  /** Campos cuya apariencia del editor se cambió, por content type (falta en respaldos anteriores). */
+  editorUpdated?: Record<string, string[]>;
 }
 
 export type CreatedKind = keyof BackupData['created'];
@@ -103,6 +105,10 @@ export function startBackup(
     },
     recordFields(ctId: string, fieldIds: string[]) {
       data.fieldsAdded[ctId] = [...(data.fieldsAdded[ctId] ?? []), ...fieldIds];
+      save();
+    },
+    recordEditor(ctId: string, fieldIds: string[]) {
+      data.editorUpdated = { ...data.editorUpdated, [ctId]: [...(data.editorUpdated?.[ctId] ?? []), ...fieldIds] };
       save();
     },
   };

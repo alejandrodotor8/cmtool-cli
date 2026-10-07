@@ -9,8 +9,15 @@ import { APP_NAME } from '../app.ts';
 import { type BackupData, startBackup } from '../backup.ts';
 import type { CliArgs } from '../cli-args.ts';
 import { createCma } from '../contentful/client.ts';
-import { currentUser, listEnvironments, listSpaces, readContentTypes, readLocales } from '../contentful/read.ts';
-import type { Account, Cma, ContentType, Environment } from '../contentful/types.ts';
+import {
+  currentUser,
+  listEnvironments,
+  listSpaces,
+  readContentTypes,
+  readEditorInterfaces,
+  readLocales,
+} from '../contentful/read.ts';
+import type { Account, Cma, ContentType, EditorInterface, Environment } from '../contentful/types.ts';
 import { createWriter } from '../contentful/write.ts';
 import { resolveEnvironment } from '../core/environments.ts';
 import { AbortError } from '../errors.ts';
@@ -55,6 +62,8 @@ export function openSession(args: Pick<CliArgs, 'verbose'>) {
 export type SessionContext = ReturnType<typeof openSession>;
 
 export interface Context extends SessionContext, Loaders {
+  /** Apariencia del editor de todos los content types de un ambiente (1 llamada, memorizada). */
+  editorInterfaces: (env: string) => Promise<Map<string, EditorInterface>>;
   cma: Cma;
   spaceId: string;
   src: string;
@@ -124,6 +133,7 @@ export function buildContext(
     dstEnv: envs.find((e) => e.id === dst) ?? { id: dst, aliases: [] },
     contentTypes: memo((env) => readContentTypes(cma, env)),
     locales: memo((env) => readLocales(cma, env)),
+    editorInterfaces: memo((env) => readEditorInterfaces(cma, env)),
   };
 }
 
@@ -134,6 +144,16 @@ export function loadModels(ctx: Context): Promise<[Map<string, ContentType>, Map
     ctx.animate,
     () => Promise.all([ctx.contentTypes(ctx.src), ctx.contentTypes(ctx.dst)]),
     ([src, dst]) => `${src.size} content types en ${ctx.src} · ${dst.size} en ${ctx.dst}`,
+  );
+}
+
+/** Apariencia del editor de origen y destino (2 llamadas la primera vez). */
+export function loadEditors(ctx: Context): Promise<[Map<string, EditorInterface>, Map<string, EditorInterface>]> {
+  return withStatus(
+    'Leyendo la apariencia del editor…',
+    ctx.animate,
+    () => Promise.all([ctx.editorInterfaces(ctx.src), ctx.editorInterfaces(ctx.dst)]),
+    () => 'Apariencia del editor leída',
   );
 }
 

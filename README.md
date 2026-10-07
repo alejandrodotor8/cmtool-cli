@@ -186,9 +186,9 @@ Sin comando, la herramienta muestra este menú. Los comandos que comparan pueden
 
 ### Migrar modelo, imágenes, comparar y estado
 
-- **`migrate-model`**: muestra los content types de origen a los que les falta algo en destino, y eliges con checks qué crear o agregar. Nunca borra ni modifica campos existentes. `--content-type a,b` para limitarlo.
+- **`migrate-model`**: muestra los content types de origen a los que les falta algo en destino —content types, campos o la **apariencia del editor** (help text, widget)— y eliges con checks qué crear, agregar o actualizar. Nunca borra campos ni cambia su tipo o validaciones. `--content-type a,b` para limitarlo.
 - **`migrate-assets`**: elige archivos por ID/URL (`/assets/<id>`) o buscando por nombre (`--search`). Los que ya existen en destino se reutilizan.
-- **`compare-models`**: una tabla con todos los content types y su estado, y el detalle campo por campo de los que difieren. `--content-type a,b` para ver solo esos.
+- **`compare-models`**: una tabla con todos los content types y su estado, el detalle campo por campo de los que difieren y qué campos tienen otra **apariencia del editor**. `--content-type a,b` para ver solo esos.
 - **`compare-entry`**: elige entries igual que al migrar (ID, búsqueda, recientes, tag, archivo) y ve, campo por campo, qué valor tienen en cada ambiente.
 - **`status`**: resumen de content types iguales, con diferencias, que faltan o que sobran, más idiomas y tags que faltan.
 - **`history`**: las migraciones anteriores **de la cuenta con la que iniciaste sesión** (fecha, tipo, ambientes, qué se actualizó y creó, y su respaldo).
@@ -251,7 +251,8 @@ Cada migración guarda un respaldo en `~/.ctf-migrate/backups/<cuenta>/` (en Win
 ## Garantías
 
 - Nunca publica entries ni assets.
-- El modelo solo cambia si marcas campos o content types para agregar. Nunca borra ni modifica campos existentes. Lo que agregues sí se publica, porque Contentful lo exige para poder usar esos campos.
+- El modelo solo cambia si marcas campos o content types para agregar. Nunca borra campos ni cambia su tipo o validaciones. Lo que agregues sí se publica, porque Contentful lo exige para poder usar esos campos.
+- **Apariencia del editor** (help text, widget de cada campo): Contentful la guarda aparte del modelo. Se copia sola al crear un content type o agregar campos; la de campos que ya existen solo se actualiza si la marcas en `migrate-model`. De un widget de app o extensión (que podría no estar instalada en destino) solo se copia el help text. No se revierte con `restore`, pero queda registrada en el respaldo.
 - Si una entry ya existe en destino, se actualizan solo los campos que existen en ambos modelos con el mismo tipo. Los campos que solo existen en destino conservan su valor.
 - Si una entry ya existe y está publicada, queda como **Changed**: lo publicado sigue en vivo.
 - Los tags que falten en destino se crean.
@@ -305,6 +306,7 @@ src/
     plan.ts              qué se crea, actualiza, reutiliza; plan de escritura
     model.ts             comparación de content types (uno o todos) campo por campo
     model-changes.ts     qué se puede agregar al modelo y qué marcó el usuario
+    editor.ts            apariencia del editor (help text, widget): qué se copia, diferencias, mezcla
     query.ts             filtros de búsqueda → parámetros de una sola llamada; --since
     entry-compare.ts     comparación de una entry entre ambientes, valor por valor
     status.ts            estado de dos ambientes (content types, idiomas, tags)

@@ -18,7 +18,7 @@ describe('loadSession', () => {
   };
 
   beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctf-migrate-'));
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cfm-'));
     delete process.env.CONTENTFUL_MANAGEMENT_TOKEN;
   });
 

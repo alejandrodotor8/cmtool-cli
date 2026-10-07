@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import { VERSION } from '../src/app.ts';
 import { COMMANDS, FLAGS, parseCliArgs, repeatCommand, usage, validateFlags } from '../src/cli-args.ts';
 import { AbortError } from '../src/errors.ts';
-import { VERSION } from '../src/version.ts';
 
 describe('parseCliArgs: comandos', () => {
   test('sin argumentos no hay comando: se elige en el menú', () => {
@@ -110,7 +110,7 @@ describe('repeatCommand', () => {
   test('arma el comando con flags para repetir la migración', () => {
     assert.equal(
       repeatCommand({ spaceId: 's1', src: 'develop', dst: 'qa', rootIds: ['a', 'b'] }),
-      'ctf-migrate migrate --space s1 --from develop --to qa --ids a,b',
+      'cfm migrate --space s1 --from develop --to qa --ids a,b',
     );
   });
 

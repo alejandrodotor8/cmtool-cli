@@ -1,3 +1,5 @@
+import { APP_NAME } from './app.ts';
+
 /** Error esperado: corta el flujo mostrando un mensaje claro, sin stack trace. */
 export class AbortError extends Error {
   readonly hint: string | undefined;
@@ -40,7 +42,7 @@ export function formatError(e: unknown): string {
       .join('; ');
     const conflict =
       e instanceof Error && e.name === 'VersionMismatch'
-        ? ' (alguien la modificó al mismo tiempo en Contentful; vuelve a correr ctf-migrate)'
+        ? ` (alguien la modificó al mismo tiempo en Contentful; vuelve a correr ${APP_NAME})`
         : '';
     return `${body.status} ${body.statusText}: ${body.message}${details ? ` → ${details}` : ''}${conflict}`;
   } catch {

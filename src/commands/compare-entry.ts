@@ -1,4 +1,4 @@
-/** `ctf-migrate compare-entry`: una o varias entries campo por campo entre dos ambientes. Solo lectura. */
+/** `cfm compare-entry`: una o varias entries campo por campo entre dos ambientes. Solo lectura. */
 import type { CliArgs } from '../cli-args.ts';
 import { fetchEntries } from '../contentful/read.ts';
 import { contentTypeOf, makeTitleOf } from '../core/entries.ts';

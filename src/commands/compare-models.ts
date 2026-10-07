@@ -1,4 +1,4 @@
-/** `ctf-migrate compare-models`: diferencias de modelo entre dos ambientes. Solo lectura. */
+/** `cfm compare-models`: diferencias de modelo entre dos ambientes. Solo lectura. */
 import type { CliArgs } from '../cli-args.ts';
 import { compareModels, hasDifferences } from '../core/model.ts';
 import { modelComparisonReport } from '../report/markdown.ts';

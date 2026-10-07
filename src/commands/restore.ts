@@ -1,5 +1,5 @@
 /**
- * `ctf-migrate restore`: deshace una ejecución con su respaldo.
+ * `cfm restore`: deshace una ejecución con su respaldo.
  * Devuelve las entries actualizadas a como estaban. Lo que se creó no se borra (la
  * herramienta nunca borra): solo se lista.
  */

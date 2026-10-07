@@ -1,5 +1,5 @@
 /**
- * `ctf-migrate migrate-assets`: copia imágenes y archivos sueltos (sin entries). Los que
+ * `cfm migrate-assets`: copia imágenes y archivos sueltos (sin entries). Los que
  * ya existen en destino se reutilizan; los nuevos quedan en draft.
  */
 import pc from 'picocolors';

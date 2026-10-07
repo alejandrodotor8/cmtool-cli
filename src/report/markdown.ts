@@ -2,6 +2,7 @@
  * Reportes en Markdown para compartir con el equipo. Usan los mismos textos que la
  * terminal (ui/text.ts), sin colores. Funciones puras.
  */
+import { APP_NAME } from '../app.ts';
 import { type FieldComparison, summarizeValue, VALUE } from '../core/entry-compare.ts';
 import { type ContentTypeDiff, fieldType, hasDifferences, type ModelComparison } from '../core/model.ts';
 import type { EnvironmentStatus } from '../core/status.ts';
@@ -24,7 +25,7 @@ interface Envs {
 }
 
 const header = (title: string, { src, dst }: Envs, now: Date) =>
-  `# ${title}: ${src} → ${dst}\n\n_Generado por ctf-migrate el ${now.toLocaleString('es-CO')}._`;
+  `# ${title}: ${src} → ${dst}\n\n_Generado por ${APP_NAME} el ${now.toLocaleString('es-CO')}._`;
 
 const ctStatus = (diff: ContentTypeDiff, dst: string) => contentTypeStatusParts(diff, dst).join(' · ') || 'al día';
 

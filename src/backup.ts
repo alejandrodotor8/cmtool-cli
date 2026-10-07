@@ -1,6 +1,7 @@
 /**
- * Respaldos locales de cada ejecución, para poder deshacerla con `ctf-migrate restore`.
- * Se guardan en ~/.ctf-migrate/backups/, legibles solo por el usuario.
+ * Respaldos locales de cada ejecución, para poder deshacerla con `cfm restore`.
+ * Se guardan en ~/.ctf-migrate/backups/, legibles solo por el usuario. La carpeta conserva el
+ * nombre anterior de la herramienta para no perder los respaldos que ya existen.
  */
 import fs from 'node:fs';
 import os from 'node:os';

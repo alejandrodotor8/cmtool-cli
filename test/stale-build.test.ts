@@ -14,7 +14,7 @@ describe('buildIsStale', () => {
   const touch = (file: string, seconds: number) => fs.utimesSync(file, seconds, seconds);
 
   beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctf-migrate-build-'));
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cfm-build-'));
     src = path.join(dir, 'src');
     fs.mkdirSync(path.join(src, 'core'), { recursive: true });
     fs.writeFileSync(path.join(src, 'main.ts'), '');

@@ -1,12 +1,13 @@
 /**
- * Entrada de ctf-migrate: lee los argumentos, muestra el menú si no se dio un comando y
+ * Entrada de cfm: lee los argumentos, muestra el menú si no se dio un comando y
  * corre el comando. Devuelve el código de salida.
  */
+
+import { VERSION } from './app.ts';
 import { parseCliArgs, usage, validateFlags } from './cli-args.ts';
 import { RUNNERS } from './commands/registry.ts';
 import { printIntro, type RunMode } from './ui/header.ts';
 import { pickCommand } from './ui/prompts.ts';
-import { VERSION } from './version.ts';
 
 export async function main(argv: string[], mode: RunMode): Promise<number> {
   const args = parseCliArgs(argv);

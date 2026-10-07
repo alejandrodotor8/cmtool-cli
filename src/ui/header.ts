@@ -1,6 +1,6 @@
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
-import { VERSION } from '../version.ts';
+import { APP_NAME, VERSION } from '../app.ts';
 
 /** De dónde corre la herramienta: el build (dist/) o el código fuente (src/). */
 export type RunMode = 'build' | 'dev';
@@ -9,7 +9,7 @@ export type RunMode = 'build' | 'dev';
 export function printIntro(mode: RunMode) {
   const dev = mode === 'dev' ? pc.yellow('  [desarrollo: código fuente]') : '';
   console.log();
-  p.intro(`${pc.bgCyan(pc.black(' ctf-migrate '))} ${pc.dim(`v${VERSION}`)}${dev}`);
+  p.intro(`${pc.bgCyan(pc.black(` ${APP_NAME} `))} ${pc.dim(`v${VERSION}`)}${dev}`);
 }
 
 /** Título del comando, con aviso de --dry-run o una nota. */

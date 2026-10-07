@@ -2,8 +2,10 @@
  * Lo que comparten los comandos: sesión, elección de space y ambientes, lecturas que se
  * hacen una sola vez, confirmación antes de escribir, respaldo y cierre.
  */
+
 import pc from 'picocolors';
 import type { Loaders } from '../analyze.ts';
+import { APP_NAME } from '../app.ts';
 import { type BackupData, startBackup } from '../backup.ts';
 import type { CliArgs } from '../cli-args.ts';
 import { createCma } from '../contentful/client.ts';
@@ -144,7 +146,7 @@ export function finishWriting(
       ...lines,
       ...(lines.length ? [''] : []),
       `${pc.bold('Respaldo')}      ${backup.file}`,
-      `${pc.bold('Deshacer')}      ctf-migrate restore`,
+      `${pc.bold('Deshacer')}      ${APP_NAME} restore`,
       `${pc.bold('Llamadas API')}  ${ctx.api.count}`,
     ],
     failed ? 'Terminado con errores' : title,

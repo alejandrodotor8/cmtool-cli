@@ -19,7 +19,7 @@ const meta: Pick<BackupData, 'kind' | 'spaceId' | 'src' | 'dst' | 'rootIds'> = {
 describe('backup', () => {
   let dir: string;
   beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctf-migrate-backup-'));
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cfm-backup-'));
   });
   afterEach(() => {
     fs.rmSync(dir, { recursive: true, force: true });

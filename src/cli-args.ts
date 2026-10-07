@@ -2,10 +2,10 @@
  * Comandos y flags: una sola definición de la que salen el menú, la ayuda y la validación.
  */
 import { parseArgs } from 'node:util';
+import { APP_NAME, VERSION } from './app.ts';
 import { parseEntryIds } from './core/ids.ts';
 import { parseSince } from './core/query.ts';
 import { AbortError } from './errors.ts';
-import { VERSION } from './version.ts';
 
 /** Comandos, en el orden del menú. */
 export const COMMANDS = {
@@ -154,7 +154,7 @@ export interface CliArgs {
   given: FlagName[];
 }
 
-const HELP_HINT = 'Corre ctf-migrate --help para ver los comandos y las opciones.';
+const HELP_HINT = `Corre ${APP_NAME} --help para ver los comandos y las opciones.`;
 
 const parse = (args: string[]) =>
   parseArgs({
@@ -261,7 +261,7 @@ export function repeatCommand({
   dst: string;
   rootIds: string[];
 }) {
-  return `ctf-migrate migrate --space ${spaceId} --from ${src} --to ${dst} --ids ${rootIds.join(',')}`;
+  return `${APP_NAME} migrate --space ${spaceId} --from ${src} --to ${dst} --ids ${rootIds.join(',')}`;
 }
 
 /** Ayuda generada a partir de COMMANDS y FLAGS. */
@@ -275,20 +275,20 @@ export function usage(): string {
     groups.set(f.group, [...(groups.get(f.group) ?? []), `  ${pad(flag, 30)} ${f.help}${where}`]);
   }
   return [
-    `ctf-migrate ${VERSION}`,
+    `${APP_NAME} ${VERSION}`,
     '',
     'Uso:',
-    '  ctf-migrate                       menú: elige qué hacer',
-    '  ctf-migrate <comando> [opciones]',
+    `  ${APP_NAME}                       menú: elige qué hacer`,
+    `  ${APP_NAME} <comando> [opciones]`,
     '',
     'Comandos:',
     ...commands,
     ...[...groups].flatMap(([group, lines]) => ['', `${group}:`, ...lines]),
     '',
     'Ejemplos:',
-    '  ctf-migrate migrate --from develop --to qa --ids 5NIY0nRGNkKvvjO8yc8Pp1',
-    '  ctf-migrate migrate --from develop --to qa --since 7d --mine',
-    '  ctf-migrate compare-models --from develop --to qa --report modelos.md',
+    `  ${APP_NAME} migrate --from develop --to qa --ids 5NIY0nRGNkKvvjO8yc8Pp1`,
+    `  ${APP_NAME} migrate --from develop --to qa --since 7d --mine`,
+    `  ${APP_NAME} compare-models --from develop --to qa --report modelos.md`,
     '',
     'Las preguntas de imágenes y modelo, y la confirmación final, se hacen siempre.',
   ].join('\n');

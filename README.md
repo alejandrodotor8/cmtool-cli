@@ -1,4 +1,6 @@
-# ctf-migrate
+# cfm
+
+_Antes se llamaba `ctf-migrate`._
 
 Migra entries de Contentful entre ambientes (por ejemplo, un banner de `develop` a `qa`), junto con sus hijos. **Todo queda en draft.**
 
@@ -52,14 +54,14 @@ Desde la carpeta del proyecto, con tu gestor:
 | **Instalar dependencias** | `npm install` | `pnpm install` | `bun install` |
 | **Compilar (build)** | `npm run build` | `pnpm build` | `bun run build` |
 | **Instalar los comandos** | `npm link` | `pnpm add -g "link:$PWD"` | `bun link` |
-| **Quitar los comandos** | `npm rm -g ctf-migrate` | `pnpm rm -g ctf-migrate` | `bun unlink` (desde la carpeta) |
+| **Quitar los comandos** | `npm rm -g cfm` | `pnpm rm -g cfm` | `bun unlink` (desde la carpeta) |
 | **Correr el build sin instalar** | `npm start -- --dry-run` | `pnpm start --dry-run` | `bun run start --dry-run` |
 | **Correr el código fuente sin instalar** | `npm run dev -- --dry-run` | `pnpm dev --dry-run` | `bun run dev --dry-run` |
 
 Los comandos son los mismos en macOS y Windows (en PowerShell, `$PWD` también es la carpeta actual).
 
-- **Se instalan dos comandos** (ver [Build y desarrollo](#build-y-desarrollo)): `ctf-migrate`, que corre el build, y `ctf-migrate-dev`, que corre el código fuente.
-- **El comando es un enlace a esta carpeta, no una copia.** Por eso con pnpm se usa `link:` (en pnpm 10+ ya no existe `pnpm link --global`). `ctf-migrate-dev` además lo necesita: Node no ejecuta `.ts` dentro de `node_modules`.
+- **Se instalan dos comandos** (ver [Build y desarrollo](#build-y-desarrollo)): `cfm`, que corre el build, y `cfm-dev`, que corre el código fuente.
+- **El comando es un enlace a esta carpeta, no una copia.** Por eso con pnpm se usa `link:` (en pnpm 10+ ya no existe `pnpm link --global`). `cfm-dev` además lo necesita: Node no ejecuta `.ts` dentro de `node_modules`.
 - **Instala los comandos con un solo gestor.** Si tienes dos instalaciones, gana la que esté primero en el PATH y es fácil confundirse.
 
 ### Cambiar de gestor de paquetes
@@ -92,14 +94,14 @@ Crea un token en Contentful (*Settings → CMA tokens*) y defínelo en la termin
 
 | Comando | Qué corre | Cuándo cambia |
 | --- | --- | --- |
-| `ctf-migrate` | el **build**: JavaScript compilado en `dist/` | solo cuando vuelves a correr el script `build` |
-| `ctf-migrate-dev` | el **código fuente** de `src/`, sin compilar | al instante, con cada cambio que guardes |
+| `cfm` | el **build**: JavaScript compilado en `dist/` | solo cuando vuelves a correr el script `build` |
+| `cfm-dev` | el **código fuente** de `src/`, sin compilar | al instante, con cada cambio que guardes |
 
-- Usa **`ctf-migrate`** para trabajar: no le afectan los cambios a medio hacer ni cambiar de rama en git.
-- Usa **`ctf-migrate-dev`** mientras programas: lo indica en la cabecera con *[desarrollo: código fuente]*.
-- **Después de actualizar el código** (cambiar de rama, fusionar, recibir una versión nueva), vuelve a correr el script `build` para que `ctf-migrate` use lo nuevo.
-- Si corres `ctf-migrate` sin haber compilado, te dice que corras el `build` (o que uses `ctf-migrate-dev`).
-- Si el código de `src/` es más nuevo que el build, `ctf-migrate` **avisa** antes de empezar (y sigue corriendo la versión anterior).
+- Usa **`cfm`** para trabajar: no le afectan los cambios a medio hacer ni cambiar de rama en git.
+- Usa **`cfm-dev`** mientras programas: lo indica en la cabecera con *[desarrollo: código fuente]*.
+- **Después de actualizar el código** (cambiar de rama, fusionar, recibir una versión nueva), vuelve a correr el script `build` para que `cfm` use lo nuevo.
+- Si corres `cfm` sin haber compilado, te dice que corras el `build` (o que uses `cfm-dev`).
+- Si el código de `src/` es más nuevo que el build, `cfm` **avisa** antes de empezar (y sigue corriendo la versión anterior).
 - **No hace falta volver a instalar los comandos** después de un build: apuntan a esta carpeta y toman el `dist/` nuevo. Solo hay que repetir la instalación si mueves la carpeta, si cambian los comandos en `package.json` o, con npm, si cambias de versión de Node.
 - `dist/` no se sube al repo: cada quien lo genera con su gestor.
 
@@ -113,7 +115,7 @@ Crea un token en Contentful (*Settings → CMA tokens*) y defínelo en la termin
 
 No hay repositorio remoto, así que se comparte como archivo:
 
-- **Con historial de git** (recomendado): `git bundle create ctf-migrate.bundle --all`. La otra persona lo clona con `git clone ctf-migrate.bundle ctf-migrate`.
+- **Con historial de git** (recomendado): `git bundle create cfm.bundle --all`. La otra persona lo clona con `git clone cfm.bundle cfm`.
 - **Sin historial**: un zip de la carpeta **sin** `node_modules` ni lockfiles.
 
 Después sigue los pasos de instalación con su sistema y su gestor.
@@ -121,10 +123,10 @@ Después sigue los pasos de instalación con su sistema y su gestor.
 ## Uso
 
 ```bash
-ctf-migrate              # menú: elige qué hacer
-ctf-migrate <comando>    # directo a un comando
-ctf-migrate --help       # comandos y opciones
-ctf-migrate --version    # versión instalada
+cfm              # menú: elige qué hacer
+cfm <comando>    # directo a un comando
+cfm --help       # comandos y opciones
+cfm --version    # versión instalada
 ```
 
 ### Qué puedes hacer
@@ -196,33 +198,33 @@ Sin comando, la herramienta muestra este menú. Los comandos que comparan pueden
 Todo lo que se pregunta al principio se puede pasar por flags, para ir más rápido:
 
 ```bash
-ctf-migrate migrate --space <space> --from develop --to qa --ids 5NIY0nRGNkKvvjO8yc8Pp1,otroId
-ctf-migrate migrate --from develop --to qa --since 7d --mine        # lo que editaste esta semana
-ctf-migrate migrate --from develop --to qa --missing --content-type banner
-ctf-migrate compare-models --from develop --to qa --report modelos.md
-ctf-migrate status --from develop --to qa
+cfm migrate --space <space> --from develop --to qa --ids 5NIY0nRGNkKvvjO8yc8Pp1,otroId
+cfm migrate --from develop --to qa --since 7d --mine        # lo que editaste esta semana
+cfm migrate --from develop --to qa --missing --content-type banner
+cfm compare-models --from develop --to qa --report modelos.md
+cfm status --from develop --to qa
 ```
 
 - `--from`/`--to` aceptan aliases como `master`.
 - Con flags para elegir entries y sin comando, se asume `migrate`.
 - Las preguntas de imágenes y modelo, y la confirmación final, se hacen siempre.
 - Al terminar una migración, la herramienta imprime el comando equivalente (**"Repetir"**) para copiarlo.
-- `ctf-migrate --help` lista cada flag y a qué comandos sirve.
+- `cfm --help` lista cada flag y a qué comandos sirve.
 
 ### Ver cada llamada a la API: `--verbose`
 
 ```bash
-ctf-migrate --verbose
+cfm --verbose
 ```
 
 Muestra cada llamada (método, ruta y parámetros; nunca headers ni token). Siempre, al terminar, dice cuántas llamadas se hicieron.
 
-`ctf-migrate --help` muestra todas las opciones.
+`cfm --help` muestra todas las opciones.
 
 ### Probar sin escribir: `--dry-run`
 
 ```bash
-ctf-migrate --dry-run
+cfm --dry-run
 ```
 
 Hace todo el análisis, muestra las tablas y el resumen, y se detiene ahí. No escribe nada en Contentful ni crea respaldo.
@@ -230,9 +232,9 @@ Hace todo el análisis, muestra las tablas y el resumen, y se detiene ahí. No e
 ### Deshacer una migración: `restore`
 
 ```bash
-ctf-migrate restore                 # elige el respaldo de una lista
-ctf-migrate restore <respaldo.json> # o indica el archivo
-ctf-migrate restore --dry-run       # muestra qué restauraría, sin escribir
+cfm restore                 # elige el respaldo de una lista
+cfm restore <respaldo.json> # o indica el archivo
+cfm restore --dry-run       # muestra qué restauraría, sin escribir
 ```
 
 Cada migración guarda un respaldo en `~/.ctf-migrate/backups/` (en Windows, `C:\Users\<usuario>\.ctf-migrate\backups\`). Antes de actualizar una entry que ya existía en destino, guarda cómo estaba; si no puede guardarlo, no la actualiza.
@@ -270,9 +272,9 @@ Cada comando se lee de arriba abajo en [src/commands/](src/commands/). El códig
 
 ```text
 bin/
-  ctf-migrate.mjs        comando del build: carga dist/cli.js (avisa si el build quedó viejo)
+  cfm.mjs        comando del build: carga dist/cli.js (avisa si el build quedó viejo)
   stale-build.mjs        compara las fechas de src/ y del build
-  ctf-migrate-dev.mjs    comando de desarrollo: carga src/cli.ts sin compilar
+  cfm-dev.mjs    comando de desarrollo: carga src/cli.ts sin compilar
 dist/                    build generado (no se sube); tsconfig.build.json lo configura
 src/
   cli.ts                 arranque: corre main y traduce errores a mensajes y códigos de salida
@@ -325,7 +327,7 @@ src/
 
 ## Desarrollo
 
-El código es TypeScript. `ctf-migrate-dev` lo ejecuta directo (Node quita los tipos al vuelo): editas un `.ts` y lo corres. `ctf-migrate` usa el build, que se regenera con el script `build`.
+El código es TypeScript. `cfm-dev` lo ejecuta directo (Node quita los tipos al vuelo): editas un `.ts` y lo corres. `cfm` usa el build, que se regenera con el script `build`.
 
 Con tu gestor (`npm run …`, `pnpm …` o `bun run …`):
 
@@ -336,7 +338,7 @@ Con tu gestor (`npm run …`, `pnpm …` o `bun run …`):
 | `format` | aplica el formato y los arreglos automáticos de Biome |
 | `test` | tests (`node:test`, sin dependencias extra) |
 | `check` | typecheck + lint + tests; córrelo antes de hacer commit |
-| `build` | compila `src/` a `dist/` (lo que corre `ctf-migrate`) |
+| `build` | compila `src/` a `dist/` (lo que corre `cfm`) |
 | `start` | corre el build desde la carpeta, sin el comando global |
 | `dev` | corre el código fuente desde la carpeta, sin el comando global |
 
@@ -375,7 +377,7 @@ La interfaz usa **[@clack/prompts](https://bomb.sh/docs/clack/packages/prompts/)
 | --- | --- | --- |
 | **@clack/prompts** | ✔ Se usa | Cubre todas las preguntas y los indicadores de progreso con un solo estilo; 4 dependencias pequeñas, sin scripts de instalación. |
 | commander | ✖ | `parseArgs` de Node ya maneja los comandos y flags, con mensajes en español y tests. Commander sumaría una dependencia y mensajes en inglés sin mejorar la experiencia. |
-| Ink | ✖ | React para la terminal, pensado para pantallas completas. Trae 20+ dependencias más React y usa JSX, que Node no ejecuta sin compilar (rompería `ctf-migrate-dev`). El flujo es un asistente paso a paso: lo que hace clack. |
+| Ink | ✖ | React para la terminal, pensado para pantallas completas. Trae 20+ dependencias más React y usa JSX, que Node no ejecuta sin compilar (rompería `cfm-dev`). El flujo es un asistente paso a paso: lo que hace clack. |
 | consola | ✖ | Sus logs duplican los de clack y sus prompts están hechos sobre clack: dos estilos para lo mismo. |
 | listr2 | ✖ | Para árboles de tareas en paralelo. Las escrituras van una por una a propósito; la barra de progreso de clack lo cubre con el mismo estilo, y listr2 tomaría el control de la pantalla. |
 

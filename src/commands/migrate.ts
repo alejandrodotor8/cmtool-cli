@@ -1,12 +1,14 @@
 /**
- * `ctf-migrate migrate`: migra entries (padre + hijos) de un ambiente a otro.
+ * `cfm migrate`: migra entries (padre + hijos) de un ambiente a otro.
  *   1. elegir space, ambientes y entries;
  *   2. analizar (solo lectura);
  *   3. mostrar y decidir (imágenes, modelo);
  *   4. confirmar, respaldar y escribir en destino.
  */
+
 import pc from 'picocolors';
 import { analyze, changesSinceAnalysis } from '../analyze.ts';
+import { APP_NAME } from '../app.ts';
 import { type CliArgs, repeatCommand } from '../cli-args.ts';
 import { LIMITS } from '../config.ts';
 import { contentTypeOf } from '../core/entries.ts';
@@ -92,7 +94,7 @@ export async function migrate(args: CliArgs): Promise<number> {
   if (changed.length) {
     throw new AbortError(
       `${dst} cambió mientras revisabas el plan (${changed.join(', ')}). No se escribió nada.`,
-      'Vuelve a correr ctf-migrate para analizar de nuevo.',
+      `Vuelve a correr ${APP_NAME} para analizar de nuevo.`,
     );
   }
 

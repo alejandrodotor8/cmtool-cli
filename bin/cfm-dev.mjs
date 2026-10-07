@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ctf-migrate-dev: corre el código fuente (src/) sin compilar. Node (>= 22.18) quita los
+ * cfm-dev: corre el código fuente (src/) sin compilar. Node (>= 22.18) quita los
  * tipos de los .ts al vuelo, así que cualquier cambio se ve en la siguiente ejecución.
  */
 import { run } from '../src/cli.ts';

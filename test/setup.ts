@@ -25,7 +25,7 @@ Object.assign(tls, { connect: noNetwork('tls.connect') });
 globalThis.fetch = noNetwork('fetch') as unknown as typeof fetch;
 syncBuiltinESMExports();
 
-const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ctf-migrate-test-home-'));
+const home = fs.mkdtempSync(path.join(os.tmpdir(), 'cfm-test-home-'));
 process.env.HOME = home;
 process.env.USERPROFILE = home;
 delete process.env.CONTENTFUL_MANAGEMENT_TOKEN;

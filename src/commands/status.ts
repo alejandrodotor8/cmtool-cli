@@ -1,4 +1,5 @@
-/** `ctf-migrate status`: resumen de en qué se diferencian dos ambientes. Solo lectura. */
+/** `cfm status`: resumen de en qué se diferencian dos ambientes. Solo lectura. */
+import { APP_NAME } from '../app.ts';
 import type { CliArgs } from '../cli-args.ts';
 import { readTags } from '../contentful/read.ts';
 import { compareModels, hasDifferences } from '../core/model.ts';
@@ -35,7 +36,7 @@ export async function status(args: CliArgs): Promise<number> {
   const differing = { diffs: model.diffs.filter(hasDifferences), onlyInDst: model.onlyInDst };
   if (differing.diffs.length || differing.onlyInDst.length) {
     renderModelOverview(differing, ctx);
-    log.info('Detalle campo por campo: ctf-migrate compare-models');
+    log.info(`Detalle campo por campo: ${APP_NAME} compare-models`);
   }
 
   await offerReport(args, reportName('estado', ctx.src, ctx.dst), () => statusReport(result, model, ctx));

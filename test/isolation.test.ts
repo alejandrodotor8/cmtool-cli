@@ -15,8 +15,8 @@ describe('aislamiento de los tests', () => {
   });
 
   test('la carpeta personal es temporal: no se ve tu sesión ni tus respaldos', () => {
-    assert.ok(os.homedir().startsWith(os.tmpdir()) || os.homedir().includes('ctf-migrate-test-home-'));
+    assert.ok(os.homedir().startsWith(os.tmpdir()) || os.homedir().includes('cfm-test-home-'));
     assert.equal(process.env.CONTENTFUL_MANAGEMENT_TOKEN, undefined);
-    assert.ok(process.cwd().includes('ctf-migrate-test-home-'));
+    assert.ok(process.cwd().includes('cfm-test-home-'));
   });
 });

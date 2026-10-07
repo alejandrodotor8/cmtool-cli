@@ -1,8 +1,10 @@
 /**
- * `ctf-migrate migrate-model`: agrega al modelo de destino content types y campos que
+ * `cfm migrate-model`: agrega al modelo de destino content types y campos que
  * faltan, sin tocar contenido. Nunca borra ni modifica campos existentes.
  */
+
 import pc from 'picocolors';
+import { APP_NAME } from '../app.ts';
 import type { CliArgs } from '../cli-args.ts';
 import { compareModels } from '../core/model.ts';
 import { hasModelChanges, modelChangesFrom, modelOptions, notAddedFields } from '../core/model-changes.ts';
@@ -40,7 +42,7 @@ export async function migrateModel(args: CliArgs): Promise<number> {
   const view = { src: ctx.src, dst: ctx.dst, dstDefault: (await ctx.locales(ctx.dst)).default };
   renderModelOverview({ diffs: candidates, onlyInDst: [] }, view);
   if (candidates.length <= DETAIL_LIMIT) renderModelDiffs(candidates, view);
-  else log.info(`Para ver el detalle campo por campo: ctf-migrate compare-models --content-type <id>`);
+  else log.info(`Para ver el detalle campo por campo: ${APP_NAME} compare-models --content-type <id>`);
 
   const picked = await askModelChanges(modelOptions(candidates), ctx.dst);
   const changes = modelChangesFrom(picked, srcCTs);

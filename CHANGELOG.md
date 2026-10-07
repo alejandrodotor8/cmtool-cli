@@ -2,6 +2,14 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.5.0 — 2026-10-07
+
+### Cambiado
+
+- **El comando ahora se llama `cfm`** (antes `ctf-migrate`), y el de desarrollo `cfm-dev`. Hay que volver a instalar los comandos (ver README → "La herramienta").
+- El nombre del comando se toma de `package.json` en todos los mensajes (ayuda, "Repetir", "Deshacer", reportes), así un próximo cambio de nombre se hace en un solo lugar.
+- Los respaldos siguen en `~/.ctf-migrate/backups/`, para no perder los que ya existen.
+
 ## 0.4.0 — 2026-10-07
 
 ### Agregado

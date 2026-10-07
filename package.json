@@ -1,17 +1,17 @@
 {
-  "name": "ctf-migrate",
-  "version": "0.4.0",
+  "name": "cfm",
+  "version": "0.5.0",
   "private": true,
   "description": "Migra entries de Contentful entre ambientes de forma interactiva, dejándolas en draft",
   "type": "module",
   "bin": {
-    "ctf-migrate": "./bin/ctf-migrate.mjs",
-    "ctf-migrate-dev": "./bin/ctf-migrate-dev.mjs"
+    "cfm": "./bin/cfm.mjs",
+    "cfm-dev": "./bin/cfm-dev.mjs"
   },
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
-    "start": "node bin/ctf-migrate.mjs",
-    "dev": "node bin/ctf-migrate-dev.mjs",
+    "start": "node bin/cfm.mjs",
+    "dev": "node bin/cfm-dev.mjs",
     "typecheck": "tsc",
     "lint": "biome check .",
     "format": "biome check --write .",

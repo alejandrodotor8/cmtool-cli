@@ -59,10 +59,19 @@ export async function pickDestination(envs: Environment[], src: string): Promise
  * así una celda vacía en lo que pegas no envía la respuesta antes de tiempo.
  */
 export async function askEntryIds(): Promise<string[]> {
+  const key = (k: string) => pc.bold(pc.cyan(k));
+  log.block(
+    [
+      pc.dim('Pega los entry IDs (o la URL de la entry, copiada del navegador):'),
+      pc.dim('uno por línea —puedes pegar una columna de Excel— o separados por coma.'),
+      `${key('Enter')} ${pc.dim('nueva línea')}   ${key('Tab')} ${pc.dim('ir a [ submit ]')}   ${key('Enter')} ${pc.dim('en [ submit ] para continuar')}`,
+    ].join('\n'),
+    1,
+  );
   const raw = answer(
     await p.multiline({
-      message: `Entry IDs de Contentful ${pc.dim('(o la URL de la entry, copiada del navegador)')}`,
-      placeholder: 'Uno por línea (pega una columna de Excel) o separados por coma. Tab + Enter para continuar.',
+      message: `Entry IDs de Contentful ${pc.dim('·')} ${pc.yellow('Tab + Enter para continuar')}`,
+      placeholder: 'Pega aquí…',
       showSubmit: true,
       validate: (value) => {
         const { ids, invalid } = parseEntryIds(value ?? '');

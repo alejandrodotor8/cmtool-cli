@@ -316,3 +316,23 @@ describe('updateCandidates', () => {
     assert.deepEqual([...defaultUpdates(updateCandidates(analysis))], ['banner']);
   });
 });
+
+describe('buildPlan: solo apariencia del editor', () => {
+  test('una entry sin cambios no se escribe, pero se puede copiar la apariencia de su modelo (help text)', () => {
+    const imagen = contentType('imagen', [field('title')]);
+    const analysis = analysisOf({
+      rootIds: ['img'],
+      entries: [entry('img', 'imagen', { title: { 'es-CO': 'Foto' } })],
+      dstEntries: [entry('img', 'imagen', { title: { 'es-CO': 'Foto' } })],
+      srcCTs: [imagen],
+      dstCTs: [imagen],
+    });
+    const actions = classifyTree(analysis.rootIds, analysis.tree, analysis.existsInDst, new Set());
+    const plan = buildPlan(
+      { ...analysis, actions },
+      { withAssets: false, picked: [{ ctId: 'imagen', editor: true }], editorDiffs: new Map([['imagen', ['title']]]) },
+    );
+    assert.deepEqual(plan.entries, []);
+    assert.deepEqual([...(plan.editorFields.get('imagen') ?? [])], ['title']);
+  });
+});

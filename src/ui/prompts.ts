@@ -223,7 +223,7 @@ export async function askModelChanges(options: ModelOption[], dst: string): Prom
   for (const { diff, onlyReused, editorFields } of options) {
     const note = diff.missingCT
       ? pc.yellow(`  · nuevo: no existe en ${dst}`)
-      : onlyReused
+      : onlyReused && diff.missing.length
         ? pc.dim('  · solo entries reutilizadas: se agrega el campo, su contenido no se copia')
         : '';
     const group = `${diff.name} ${pc.dim(`(${diff.id})`)}${note}`;

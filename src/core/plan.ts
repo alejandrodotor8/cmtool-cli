@@ -5,7 +5,13 @@ import type { Analysis } from '../analyze.ts';
 import type { Asset, Entry, EntryTree, Tag } from '../contentful/types.ts';
 import { contentTypeOf, isArchived as isArchivedEntry } from './entries.ts';
 import type { FieldComparison } from './entry-compare.ts';
-import { type ModelChanges, type ModelPick, modelChangesFrom, notAddedFields } from './model-changes.ts';
+import {
+  type EditorDiffs,
+  type ModelChanges,
+  type ModelPick,
+  modelChangesFrom,
+  notAddedFields,
+} from './model-changes.ts';
 
 export const ACTION = {
   CREATE: 'create', // no existe en destino → se crea
@@ -85,10 +91,14 @@ export const writtenContentTypes = (analysis: Pick<Analysis, 'tree' | 'actions'>
 /** Plan de escritura a partir del análisis y lo que eligió el usuario. */
 export function buildPlan(
   analysis: Analysis,
-  { withAssets, picked }: { withAssets: boolean; picked: ModelPick[] },
+  {
+    withAssets,
+    picked,
+    editorDiffs = new Map(),
+  }: { withAssets: boolean; picked: ModelPick[]; editorDiffs?: EditorDiffs },
 ): Plan {
   const { diffs, assets, tags, contentTypes, actions } = analysis;
-  const changes = modelChangesFrom(picked, contentTypes.src);
+  const changes = modelChangesFrom(picked, contentTypes.src, editorDiffs);
   const createCTs = new Set(changes.contentTypesToCreate.map((ct) => ct.sys.id));
 
   // Sin content type en destino, esas entries no se pueden crear.

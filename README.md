@@ -176,7 +176,7 @@ Sin comando, la herramienta muestra este menú. Los comandos que comparan pueden
    - Si una entry está **archivada** en destino, no se actualiza (y si es un hijo reutilizado, te avisa que el padre no se podrá publicar).
    - Si se van a escribir más de 20 entries, te pide confirmar que el árbol es lo que esperabas.
 4. **Imágenes**: si faltan imágenes en destino, te pregunta si migrar con imágenes. Si dices que sí, reutiliza las que ya existen y crea las que faltan.
-5. **Modelo**: compara el modelo de padres e hijos con el de destino y te muestra:
+5. **Modelo**: compara el modelo de padres e hijos con el de destino (también la **apariencia del editor**: help text y widget; si difiere, ofrece copiarla aunque las entries no tengan cambios) y te muestra:
    - campos que **faltan** en destino → eliges cuáles agregar (si no marcas nada, no se toca el modelo y esos campos no se migran);
    - campos que **sobran** en destino → no se tocan y conservan su valor;
    - campos con **otro tipo** → no se migran;

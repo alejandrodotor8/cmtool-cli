@@ -1,6 +1,6 @@
 {
   "name": "cfm",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "description": "Migra entries de Contentful entre ambientes de forma interactiva, dejándolas en draft",
   "type": "module",

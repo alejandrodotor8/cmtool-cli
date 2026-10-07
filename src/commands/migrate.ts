@@ -11,8 +11,9 @@ import { analyzeTree, changesSinceAnalysis, completeAnalysis, withActions } from
 import { APP_NAME } from '../app.ts';
 import { type CliArgs, repeatCommand } from '../cli-args.ts';
 import { LIMITS } from '../config.ts';
+import { editorDiffsFor } from '../core/editor.ts';
 import { contentTypeOf } from '../core/entries.ts';
-import { modelOptions } from '../core/model-changes.ts';
+import { hasModelChanges, modelOptions } from '../core/model-changes.ts';
 import {
   brokenHyperlinks,
   buildPlan,
@@ -31,9 +32,17 @@ import { askEntryUpdates, askModelChanges, askWithAssets, confirmLargeMigration 
 import { withStatus } from '../ui/status.ts';
 import { renderAssets } from '../ui/views/assets.ts';
 import { renderEntryTree } from '../ui/views/entries.ts';
-import { renderModelDiffs } from '../ui/views/model.ts';
+import { renderEditorDiffs, renderModelDiffs } from '../ui/views/model.ts';
 import { renderSummary } from '../ui/views/summary.ts';
-import { confirmWriting, finishDryRun, finishReading, finishWriting, openContext, startWriting } from './context.ts';
+import {
+  confirmWriting,
+  finishDryRun,
+  finishReading,
+  finishWriting,
+  loadEditors,
+  openContext,
+  startWriting,
+} from './context.ts';
 
 export async function migrate(args: CliArgs): Promise<number> {
   printTitle('Migrar entries', { dryRun: args.dryRun, note: 'entries e imágenes quedan en draft' });
@@ -68,7 +77,6 @@ export async function migrate(args: CliArgs): Promise<number> {
     if (changedChoice) renderEntryTree(withActions(tree, toUpdate), 'Entries con tu elección');
   }
   const writes = [...withActions(tree, toUpdate).actions.values()].filter(isWrite).length;
-  if (!writes) return finishReading(ctx, `No hay nada que crear ni actualizar en ${dst}.`);
   if (!args.dryRun && writes > LIMITS.confirmWritesAbove && !(await confirmLargeMigration(writes, dst))) {
     printCancelled();
     return 0;
@@ -100,12 +108,17 @@ export async function migrate(args: CliArgs): Promise<number> {
       .filter((e) => contentTypeOf(e) === ctId)
       .map((e) => analysis.titleOf(e) + (isWrite(analysis.actions.get(e.sys.id)) ? '' : ' (reutilizada)'));
   renderModelDiffs(analysis.diffs.values(), { src, dst, dstDefault: analysis.locales.dst.default }, usedBy);
-  const options = modelOptions(analysis.diffs.values(), writtenContentTypes(analysis));
+  const [srcEditors, dstEditors] = await loadEditors(ctx);
+  const editorDiffs = editorDiffsFor(analysis.diffs.values(), srcEditors, dstEditors);
+  if (editorDiffs.size) renderEditorDiffs(editorDiffs, [...analysis.diffs.values()], dst);
+  const options = modelOptions(analysis.diffs.values(), writtenContentTypes(analysis), editorDiffs);
   const picked = options.length ? await askModelChanges(options, dst) : [];
 
-  const plan = buildPlan(analysis, { withAssets, picked });
+  const plan = buildPlan(analysis, { withAssets, picked, editorDiffs });
+  if (!plan.entries.length && !hasModelChanges(plan) && !plan.tagsToCreate.length) {
+    return finishReading(ctx, `No hay nada que crear ni actualizar en ${dst}.`);
+  }
   renderSummary(analysis, plan, { gaps: requiredGaps(analysis, plan), hyperlinks: brokenHyperlinks(analysis) });
-  if (!plan.entries.length) throw new AbortError('No queda nada para migrar.');
   if (args.dryRun) return finishDryRun(ctx, ['Para migrar de verdad:', pc.cyan(repeat)]);
 
   // 4. Confirmar, respaldar y escribir

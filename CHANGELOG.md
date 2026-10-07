@@ -2,6 +2,13 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.8.1 — 2026-10-07
+
+### Corregido
+
+- `migrate` no revisaba la apariencia del editor (help text, widget): solo lo hacía `migrate-model`. Ahora la compara para los content types del árbol, la avisa y ofrece "Copiar apariencia del editor" en la pregunta del modelo.
+- Si las entries no tenían cambios, `migrate` terminaba antes de la pregunta del modelo, sin poder copiar un help text o agregar campos. Ahora sigue y solo termina si tampoco hay cambios de modelo marcados.
+
 ## 0.8.0 — 2026-10-07
 
 ### Agregado

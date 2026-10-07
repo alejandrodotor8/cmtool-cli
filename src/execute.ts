@@ -123,6 +123,7 @@ export async function executePlan(
   await applyModelChanges(plan, dstCTs, srcEditors, ctx);
   await applyAssets(plan.assetsToCreate, locales.dst, ctx);
 
+  if (!plan.entries.length) return runner.failures;
   runner.start('Entries', plan.entries.length);
   for (const { id, action, entry } of plan.entries) {
     const ctId = contentTypeOf(entry);

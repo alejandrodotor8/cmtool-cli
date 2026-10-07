@@ -14,7 +14,7 @@ import { parseSince } from '../core/query.ts';
 import { AbortError, CancelError } from '../errors.ts';
 import { log } from './log.ts';
 import { clip, pad } from './table.ts';
-import { BACKUP_KIND_LABEL } from './text.ts';
+import { BACKUP_KIND_LABEL, modelChangesQuestion } from './text.ts';
 
 /** La respuesta de un prompt, o CancelError si el usuario canceló. */
 function answer<T>(value: T): Exclude<T, symbol> {
@@ -201,13 +201,18 @@ export const askWithAssets = (missingCount: number): Promise<boolean> =>
 export async function askModelChanges(options: ModelOption[], dst: string): Promise<ModelPick[]> {
   const groups: Record<string, { value: ModelPick; label: string; hint?: string }[]> = {};
   for (const { diff, onlyReused } of options) {
-    const group = `${diff.name} ${pc.dim(`(${diff.id})`)}${onlyReused ? pc.dim('  · solo entries reutilizadas: se agrega el campo, su contenido no se copia') : ''}`;
+    const note = diff.missingCT
+      ? pc.yellow(`  · nuevo: no existe en ${dst}`)
+      : onlyReused
+        ? pc.dim('  · solo entries reutilizadas: se agrega el campo, su contenido no se copia')
+        : '';
+    const group = `${diff.name} ${pc.dim(`(${diff.id})`)}${note}`;
     if (diff.missingCT) {
       groups[group] = [
         {
           value: { ctId: diff.id },
-          label: 'Crear content type completo',
-          hint: `${diff.missing.length} campos`,
+          label: `Crear «${diff.name}» con sus ${diff.missing.length} campos`,
+          hint: clip(diff.missing.map((f) => f.name).join(', '), 60),
         },
       ];
       continue;
@@ -220,9 +225,10 @@ export async function askModelChanges(options: ModelOption[], dst: string): Prom
     }));
   }
 
+  const { question, note } = modelChangesQuestion(options, dst);
   return answer(
     await p.groupMultiselect({
-      message: `¿Qué agrego al modelo de ${pc.bold(dst)}? ${pc.dim('(sin marcar nada, el modelo no se toca)')}`,
+      message: `${question} ${pc.dim(`(${note})`)}`,
       options: groups,
       required: false,
       selectableGroups: true,

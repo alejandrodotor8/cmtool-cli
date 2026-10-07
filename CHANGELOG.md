@@ -2,6 +2,12 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.6.1 — 2026-10-07
+
+### Corregido
+
+- La pregunta del modelo decía "¿Qué agrego al modelo de master?" aunque el content type no existiera en destino. Ahora distingue: "Este content type no existe en master: ¿lo creo?", "¿Qué campos agrego…?" o "¿Qué creo o agrego…?". En la lista, los content types nuevos dicen "nuevo: no existe en …" y la opción "Crear «Nombre» con sus N campos".
+
 ## 0.6.0 — 2026-10-07
 
 ### Agregado

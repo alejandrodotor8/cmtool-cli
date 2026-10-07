@@ -71,3 +71,28 @@ export function contentTypeStatusParts(diff: ContentTypeDiff, dst: string): stri
     diff.changedRules.length && `${diff.changedRules.length} con reglas distintas`,
   ].filter((part): part is string => Boolean(part));
 }
+
+/**
+ * La pregunta de cambios de modelo según lo que haya: content types que no existen en
+ * destino (se crean), campos que faltan (se agregan) o ambos.
+ */
+export function modelChangesQuestion(options: { diff: { missingCT: boolean } }[], dst: string) {
+  const newCTs = options.filter((o) => o.diff.missingCT).length;
+  const withFields = options.length - newCTs;
+  if (newCTs && !withFields) {
+    return {
+      question:
+        newCTs === 1
+          ? `Este content type no existe en ${dst}: ¿lo creo?`
+          : `Estos ${newCTs} content types no existen en ${dst}: ¿cuáles creo?`,
+      note: 'sin marcar nada, no se crea ninguno',
+    };
+  }
+  if (newCTs) {
+    return {
+      question: `¿Qué creo o agrego en el modelo de ${dst}?`,
+      note: `${newCTs} content type(s) nuevo(s) y campos que faltan; sin marcar nada, el modelo no se toca`,
+    };
+  }
+  return { question: `¿Qué campos agrego al modelo de ${dst}?`, note: 'sin marcar nada, el modelo no se toca' };
+}

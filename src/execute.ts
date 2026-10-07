@@ -1,82 +1,100 @@
 /**
- * Paso final: aplica el plan con el writer y deja todo anotado en el respaldo.
- * Si algo falla, sigue con lo demás y devuelve la lista de fallos.
+ * Escritura por fases (tags, modelo, imágenes, entries). Cada fase se puede usar sola:
+ * "migrar modelo" usa applyModelChanges y "migrar imágenes" usa applyAssets.
+ * Todo queda anotado en el respaldo; si algo falla, se sigue con lo demás.
  */
 import pc from 'picocolors';
 import type { Analysis } from './analyze.ts';
 import type { Backup } from './backup.ts';
+import type { Asset, ContentType, Locales, Tag } from './contentful/types.ts';
 import type { Writer } from './contentful/write.ts';
 import { contentTypeOf } from './core/entries.ts';
 import { assetFieldsForDestination, fieldsForDestination, mergeWithExisting } from './core/fields.ts';
+import type { ModelChanges } from './core/model-changes.ts';
 import { ACTION, type Plan } from './core/plan.ts';
 import { writableFields } from './core/publish-check.ts';
-import { createRunner } from './ui/runner.ts';
+import type { createRunner } from './ui/runner.ts';
 
-export async function executePlan(
-  plan: Plan,
-  analysis: Analysis,
-  writer: Writer,
-  backup: Backup,
-  { animate }: { animate: boolean },
-): Promise<string[]> {
+/** Lo que necesita cualquier fase para escribir. */
+export interface WriteContext {
+  writer: Writer;
+  backup: Backup;
+  runner: ReturnType<typeof createRunner>;
+}
+
+async function applyTags(tags: Tag[], dstTagIds: Set<string>, { writer, backup, runner }: WriteContext) {
+  if (!tags.length) return;
+  runner.start('Tags', tags.length);
+  for (const tag of tags) {
+    await runner.run(`tag ${tag.sys.id}`, async () => {
+      await writer.createTag(tag);
+      dstTagIds.add(tag.sys.id);
+      backup.recordCreated('tags', tag.sys.id);
+    });
+  }
+  runner.end();
+}
+
+/** Crea content types y agrega campos. Actualiza `dstCTs` con las versiones nuevas. */
+export async function applyModelChanges(
+  { contentTypesToCreate, fieldsToAdd }: ModelChanges,
+  dstCTs: Map<string, ContentType>,
+  { writer, backup, runner }: WriteContext,
+) {
+  const total = contentTypesToCreate.length + fieldsToAdd.size;
+  if (!total) return;
+  runner.start('Modelo', total);
+  for (const ct of contentTypesToCreate) {
+    await runner.run(`content type ${ct.sys.id} creado`, async () => {
+      dstCTs.set(ct.sys.id, await writer.createContentType(ct));
+      backup.recordCreated('contentTypes', ct.sys.id);
+    });
+  }
+  for (const [ctId, fields] of fieldsToAdd) {
+    await runner.run(`${ctId}: +${fields.map((f) => f.id).join(', ')}`, async () => {
+      const current = dstCTs.get(ctId);
+      if (!current) throw new Error(`el content type "${ctId}" no existe en ${writer.environment}`);
+      dstCTs.set(ctId, await writer.addFields(current, fields));
+      backup.recordFields(
+        ctId,
+        fields.map((f) => f.id),
+      );
+    });
+  }
+  runner.end();
+}
+
+export async function applyAssets(assets: Asset[], dstLocales: Locales, { writer, backup, runner }: WriteContext) {
+  if (!assets.length) return;
+  runner.start('Imágenes', assets.length);
+  for (const asset of assets) {
+    await runner.run(`asset ${asset.sys.id} creado (draft)`, async () => {
+      await writer.createAsset(asset.sys.id, assetFieldsForDestination(asset, dstLocales));
+      backup.recordCreated('assets', asset.sys.id);
+    });
+  }
+  runner.end();
+}
+
+/** Migrar entries: todas las fases en orden. Devuelve los fallos. */
+export async function executePlan(plan: Plan, analysis: Analysis, ctx: WriteContext): Promise<string[]> {
   const { titleOf, locales, diffs } = analysis;
+  const { writer, backup, runner } = ctx;
   const dstCTs = new Map(analysis.contentTypes.dst); // se actualiza con los cambios de modelo
   const dstTagIds = new Set(analysis.tags.dstIds);
-  const { start, run, fail, end, failures } = createRunner({ animate });
 
-  if (plan.tagsToCreate.length) {
-    start('Tags', plan.tagsToCreate.length);
-    for (const tag of plan.tagsToCreate) {
-      await run(`tag ${tag.sys.id}`, async () => {
-        await writer.createTag(tag);
-        dstTagIds.add(tag.sys.id);
-        backup.recordCreated('tags', tag.sys.id);
-      });
-    }
-    end();
-  }
+  await applyTags(plan.tagsToCreate, dstTagIds, ctx);
+  await applyModelChanges(plan, dstCTs, ctx);
+  await applyAssets(plan.assetsToCreate, locales.dst, ctx);
 
-  if (plan.contentTypesToCreate.length || plan.fieldsToAdd.size) {
-    start('Modelo', plan.contentTypesToCreate.length + plan.fieldsToAdd.size);
-    for (const ct of plan.contentTypesToCreate) {
-      await run(`content type ${ct.sys.id} creado`, async () => {
-        dstCTs.set(ct.sys.id, await writer.createContentType(ct));
-        backup.recordCreated('contentTypes', ct.sys.id);
-      });
-    }
-    for (const [ctId, fields] of plan.fieldsToAdd) {
-      await run(`${ctId}: +${fields.map((f) => f.id).join(', ')}`, async () => {
-        const current = dstCTs.get(ctId);
-        if (!current) throw new Error(`el content type "${ctId}" no existe en ${writer.environment}`);
-        dstCTs.set(ctId, await writer.addFields(current, fields));
-        backup.recordFields(
-          ctId,
-          fields.map((f) => f.id),
-        );
-      });
-    }
-    end();
-  }
-
-  if (plan.assetsToCreate.length) {
-    start('Imágenes', plan.assetsToCreate.length);
-    for (const asset of plan.assetsToCreate) {
-      await run(`asset ${asset.sys.id} creado (draft)`, async () => {
-        await writer.createAsset(asset.sys.id, assetFieldsForDestination(asset, locales.dst));
-        backup.recordCreated('assets', asset.sys.id);
-      });
-    }
-    end();
-  }
-
-  start('Entries', plan.entries.length);
+  runner.start('Entries', plan.entries.length);
   for (const { id, action, entry } of plan.entries) {
     const ctId = contentTypeOf(entry);
     const title = titleOf(entry);
     const label = `${title} ${pc.dim(id)}`;
     const dstCT = dstCTs.get(ctId);
     if (!dstCT) {
-      fail(label, `el content type "${ctId}" no se pudo crear en ${writer.environment}`);
+      runner.fail(label, `el content type "${ctId}" no se pudo crear en ${writer.environment}`);
       continue;
     }
 
@@ -86,7 +104,7 @@ export async function executePlan(
     const tags = (entry.metadata?.tags ?? []).filter((t) => dstTagIds.has(t.sys.id));
 
     if (action === ACTION.UPDATE) {
-      await run(`${label} actualizada ${pc.dim('(queda Changed si estaba publicada)')}`, async () => {
+      await runner.run(`${label} actualizada ${pc.dim('(queda Changed si estaba publicada)')}`, async () => {
         await writer.updateEntry(
           id,
           (current) => mergeWithExisting(current, fields, writable, locales.src),
@@ -96,13 +114,12 @@ export async function executePlan(
         backup.confirmUpdate(id);
       });
     } else {
-      await run(`${label} creada (draft)`, async () => {
+      await runner.run(`${label} creada (draft)`, async () => {
         await writer.createEntry(id, ctId, fields, tags);
         backup.recordCreated('entries', id);
       });
     }
   }
-
-  end();
-  return failures;
+  runner.end();
+  return runner.failures;
 }

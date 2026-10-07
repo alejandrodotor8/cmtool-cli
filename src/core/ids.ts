@@ -1,30 +1,34 @@
 /** Formato de un ID de Contentful: letras, números, punto, guion y guion bajo (hasta 64). */
-const ENTRY_ID = /^[A-Za-z0-9._-]{1,64}$/;
+const CONTENTFUL_ID = /^[A-Za-z0-9._-]{1,64}$/;
 
-export interface ParsedEntryIds {
+export interface ParsedIds {
   /** IDs válidos, sin repetidos y en el orden en que llegaron. */
   ids: string[];
-  /** Lo que no es un entry ID ni la URL de una entry. */
+  /** Lo que no es un ID ni la URL del tipo pedido. */
   invalid: string[];
 }
 
 /**
- * Lee entry IDs o URLs de entries de Contentful (las de la barra del navegador, que
- * terminan en `/entries/<id>`). Acepta como separador coma, punto y coma, espacio,
+ * Lee IDs de Contentful o URLs copiadas del navegador (que terminan en `/entries/<id>` o
+ * `/assets/<id>`, según `kind`). Acepta como separador coma, punto y coma, espacio,
  * tabulación y salto de línea: sirve pegar una columna o una fila de Excel.
  */
-export function parseEntryIds(text: string): ParsedEntryIds {
+export function parseIds(text: string, kind: 'entries' | 'assets'): ParsedIds {
   const ids: string[] = [];
   const invalid: string[] = [];
+  const segment = `/${kind}/`;
   const tokens = text
     .split(/[\s,;]+/)
     .map((t) => t.replace(/^["']+|["']+$/g, ''))
     .filter(Boolean);
 
   for (const token of tokens) {
-    const id = token.includes('/entries/') ? (token.split('/entries/')[1]?.split(/[/?#]/)[0] ?? '') : token;
-    if (ENTRY_ID.test(id)) ids.push(id);
+    const id = token.includes(segment) ? (token.split(segment)[1]?.split(/[/?#]/)[0] ?? '') : token;
+    if (CONTENTFUL_ID.test(id)) ids.push(id);
     else invalid.push(token);
   }
   return { ids: [...new Set(ids)], invalid };
 }
+
+/** Entry IDs o URLs de entries. */
+export const parseEntryIds = (text: string): ParsedIds => parseIds(text, 'entries');

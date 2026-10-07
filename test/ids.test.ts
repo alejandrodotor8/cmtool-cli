@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { parseEntryIds } from '../src/core/ids.ts';
+import { parseEntryIds, parseIds } from '../src/core/ids.ts';
 
 const ids = (text: string) => parseEntryIds(text).ids;
 
@@ -52,5 +52,16 @@ describe('parseEntryIds', () => {
 
   test('un ID de más de 64 caracteres no es válido', () => {
     assert.deepEqual(parseEntryIds('a'.repeat(65)).invalid, ['a'.repeat(65)]);
+  });
+});
+
+describe('parseIds para assets', () => {
+  test('extrae el ID de la URL de un asset y rechaza URLs de entries', () => {
+    const result = parseIds(
+      'https://app.contentful.com/spaces/s1/environments/develop/assets/img1 https://app.contentful.com/spaces/s1/entries/e1 img2',
+      'assets',
+    );
+    assert.deepEqual(result.ids, ['img1', 'img2']);
+    assert.deepEqual(result.invalid, ['https://app.contentful.com/spaces/s1/entries/e1']);
   });
 });

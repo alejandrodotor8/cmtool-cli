@@ -121,40 +121,93 @@ Después sigue los pasos de instalación con su sistema y su gestor.
 ## Uso
 
 ```bash
-ctf-migrate
+ctf-migrate              # menú: elige qué hacer
+ctf-migrate <comando>    # directo a un comando
+ctf-migrate --help       # comandos y opciones
+ctf-migrate --version    # versión instalada
 ```
 
-1. Elige el **space**.
-2. Elige el ambiente **origen** y el **destino**.
-3. Pega uno o varios **entry IDs**. También acepta la **URL de la entry** tal como la copias del navegador (`https://app.contentful.com/spaces/…/entries/<entry id>`).
+### Qué puedes hacer
+
+| Comando | Qué hace | ¿Escribe? |
+| --- | --- | --- |
+| `migrate` | **Migrar entries** (padre + hijos) de un ambiente a otro | sí (draft) |
+| `migrate-model` | **Migrar modelo**: crear content types y agregar campos que faltan, sin contenido | sí |
+| `migrate-assets` | **Migrar imágenes y archivos** sueltos, sin entries | sí (draft) |
+| `compare-models` | **Comparar modelos** entre ambientes, campo por campo | no |
+| `compare-entry` | **Comparar entries** entre ambientes, valor por valor | no |
+| `status` | **Estado de los ambientes**: content types, idiomas y tags que difieren | no |
+| `history` | **Historial** de migraciones, a partir de los respaldos | no (ni llama a la API) |
+| `restore` | **Deshacer** una migración con su respaldo | sí |
+
+Sin comando, la herramienta muestra este menú. Los comandos que comparan pueden guardar un **reporte Markdown** para compartir (`--report archivo.md`, o te lo ofrece al final).
+
+### Migrar entries
+
+1. Elige el **space** y los ambientes **origen** y **destino**.
+2. Elige **cómo seleccionar las entries**. Cada opción indica cuánto consume de la API:
+
+   | Forma | Llamadas a la API | Flag |
+   | --- | --- | --- |
+   | Por **entry ID o URL** (pegar, también desde Excel) | ninguna extra · la más directa | `--ids a,b` |
+   | **Buscar por texto** | 1 por búsqueda | `--search "Ramon"` |
+   | Por **content type** (y un texto opcional) | 1 | `--content-type banner` |
+   | **Cambiadas recientemente** (opcional: solo las tuyas) | 1–2 | `--since 7d --mine` |
+   | Por **tag** | 2 | `--tag navidad` |
+   | Desde un **archivo** (txt o csv) | ninguna extra | `--ids-file lista.csv` |
+   | Las que **faltan en destino** (por content type) | 1 por cada 200 entries + verificación | `--missing --content-type banner` |
+
+   Las búsquedas muestran hasta 50 resultados (los más recientes) y eliges con checks; puedes escribir para filtrar.
+
+   Al pegar IDs:
+   - Acepta la **URL de la entry** tal como la copias del navegador (`https://app.contentful.com/spaces/…/entries/<entry id>`).
    - Uno por línea, o separados por coma, punto y coma, espacio o tabulación: puedes **pegar una columna o una fila de Excel**.
    - **Enter** agrega una línea. Para continuar, presiona **Tab** (va al botón `[ submit ]`) y luego **Enter**. Así, una celda vacía en lo que pegas no envía la respuesta antes de tiempo.
    - Si algo no tiene forma de entry ID (por ejemplo, la URL de un asset), te dice cuál y te deja pegar de nuevo. Si varios IDs no existen en origen, te los lista todos.
-4. Revisa el árbol: la entry que pegaste (**padre**) y las entries a las que apunta (**hijos**).
+3. Revisa el árbol: la entry que pegaste (**padre**) y las entries a las que apunta (**hijos**).
    - El padre se crea o, si ya existe en destino, se actualiza.
    - Un hijo que ya existe en destino **se reutiliza sin tocarlo**. Igual se muestra lo que tiene debajo y se revisa su modelo.
    - Un hijo que no existe en destino se crea, y se revisan sus propios hijos con la misma regla.
-   - Para actualizar un hijo que ya existe, pega también su ID.
+   - Para actualizar un hijo que ya existe, elígelo también.
    - Un **texto enlazado** dentro de un rich text (`↗`) no es un hijo: no se migra. Si apunta a una entry que no existe en destino, te avisa que el enlace quedará roto.
    - Si una entry está **archivada** en destino, no se actualiza (y si es un hijo reutilizado, te avisa que el padre no se podrá publicar).
    - Si se van a escribir más de 20 entries, te pide confirmar que el árbol es lo que esperabas.
-5. **Imágenes**: si faltan imágenes en destino, te pregunta si migrar con imágenes. Si dices que sí, reutiliza las que ya existen y crea las que faltan.
-6. **Modelo**: compara el modelo de padres e hijos con el de destino y te muestra:
+4. **Imágenes**: si faltan imágenes en destino, te pregunta si migrar con imágenes. Si dices que sí, reutiliza las que ya existen y crea las que faltan.
+5. **Modelo**: compara el modelo de padres e hijos con el de destino y te muestra:
    - campos que **faltan** en destino → eliges cuáles agregar (si no marcas nada, no se toca el modelo y esos campos no se migran);
    - campos que **sobran** en destino → no se tocan y conservan su valor;
    - campos con **otro tipo** → no se migran;
    - campos con el mismo tipo pero **reglas distintas** (`!`): obligatorio solo en destino, localizado en origen pero no en destino (solo se copia el locale por defecto) o validaciones distintas (tipos de entry permitidos, tamaño, formato…);
    - content types que **no existen** en destino → eliges si crearlos (si no, esas entries no se migran).
-7. Revisa el **resumen** y confirma. El resumen avisa qué entries quedarán con **campos obligatorios vacíos** en destino (no se podrán publicar hasta completarlos). Revisa el idioma por defecto y los idiomas que en destino no permiten campos vacíos. Si el destino parece producción (es `master` o tiene un alias), tienes que escribir el nombre del ambiente para confirmar.
-8. Al terminar te dice dónde quedó el **respaldo** de la migración.
+6. Revisa el **resumen** y confirma. El resumen avisa qué entries quedarán con **campos obligatorios vacíos** en destino (no se podrán publicar hasta completarlos). Revisa el idioma por defecto y los idiomas que en destino no permiten campos vacíos. Si el destino parece producción (es `master` o tiene un alias), tienes que escribir el nombre del ambiente para confirmar.
+7. Al terminar te dice dónde quedó el **respaldo** y el comando para **repetir** la migración.
 
-### Sin pasar por los menús
+### Migrar modelo, imágenes, comparar y estado
+
+- **`migrate-model`**: muestra los content types de origen a los que les falta algo en destino, y eliges con checks qué crear o agregar. Nunca borra ni modifica campos existentes. `--content-type a,b` para limitarlo.
+- **`migrate-assets`**: elige archivos por ID/URL (`/assets/<id>`) o buscando por nombre (`--search`). Los que ya existen en destino se reutilizan.
+- **`compare-models`**: una tabla con todos los content types y su estado, y el detalle campo por campo de los que difieren. `--content-type a,b` para ver solo esos.
+- **`compare-entry`**: elige entries igual que al migrar (ID, búsqueda, recientes, tag, archivo) y ve, campo por campo, qué valor tienen en cada ambiente.
+- **`status`**: resumen de content types iguales, con diferencias, que faltan o que sobran, más idiomas y tags que faltan.
+- **`history`**: las migraciones anteriores (fecha, tipo, ambientes, qué se actualizó y creó, y su respaldo). No llama a la API.
+
+### Atajos con flags
+
+Todo lo que se pregunta al principio se puede pasar por flags, para ir más rápido:
 
 ```bash
-ctf-migrate --space <space> --from develop --to qa --ids 5NIY0nRGNkKvvjO8yc8Pp1,otroId
+ctf-migrate migrate --space <space> --from develop --to qa --ids 5NIY0nRGNkKvvjO8yc8Pp1,otroId
+ctf-migrate migrate --from develop --to qa --since 7d --mine        # lo que editaste esta semana
+ctf-migrate migrate --from develop --to qa --missing --content-type banner
+ctf-migrate compare-models --from develop --to qa --report modelos.md
+ctf-migrate status --from develop --to qa
 ```
 
-`--space`, `--from`, `--to` e `--ids` reemplazan las primeras preguntas (`--from`/`--to` aceptan aliases como `master`). Las preguntas de imágenes y modelo, y la confirmación final, se hacen siempre. Al terminar, la herramienta imprime el comando equivalente (**"Para repetir: …"**) para que puedas copiarlo.
+- `--from`/`--to` aceptan aliases como `master`.
+- Con flags para elegir entries y sin comando, se asume `migrate`.
+- Las preguntas de imágenes y modelo, y la confirmación final, se hacen siempre.
+- Al terminar una migración, la herramienta imprime el comando equivalente (**"Repetir"**) para copiarlo.
+- `ctf-migrate --help` lista cada flag y a qué comandos sirve.
 
 ### Ver cada llamada a la API: `--verbose`
 
@@ -223,37 +276,48 @@ bin/
 dist/                    build generado (no se sube); tsconfig.build.json lo configura
 src/
   cli.ts                 arranque: corre main y traduce errores a mensajes y códigos de salida
-  main.ts                lee los argumentos y corre el comando
-  cli-args.ts            argumentos (--space/--from/--to/--ids, --dry-run, --verbose, restore)
-  commands/
-    migrate.ts           ctf-migrate: el flujo de migración, paso a paso
-    restore.ts           ctf-migrate restore: deshace una migración
+  main.ts                --version, --help, menú y despacho al comando
+  cli-args.ts            ÚNICA definición de comandos y flags (de ahí salen el menú, la ayuda y la validación)
+  version.ts             versión de package.json
+  commands/              un archivo por comando, se lee de arriba abajo
+    registry.ts          qué función corre cada comando
+    context.ts           lo común: sesión, space y ambientes, lecturas una sola vez, confirmar, respaldar, cerrar
+    migrate.ts, migrate-model.ts, migrate-assets.ts, compare-models.ts, compare-entry.ts,
+    status.ts, history.ts, restore.ts
+  selection/             cómo se eligen entries (ID, búsqueda, recientes, tag, archivo, faltantes) y assets
+  report/                reportes Markdown (markdown.ts) y cómo se guardan (save.ts)
   backup.ts              respaldos locales en ~/.ctf-migrate/backups/
-  config.ts              límites de seguridad (tamaño del árbol, confirmación)
+  config.ts              límites (tamaño del árbol, confirmación, resultados por búsqueda)
   session.ts             token y host (sesión del CLI o variable de entorno)
-  errors.ts              AbortError y formato de errores del CMA
-  analyze.ts             paso de análisis: arma todo lo que se muestra (solo lectura)
-  execute.ts             paso final: aplica el plan con el writer
+  errors.ts              AbortError, CancelError y formato de errores del CMA
+  analyze.ts             análisis de "migrar entries" (solo lectura)
+  execute.ts             escritura por fases reutilizables: tags, modelo, imágenes, entries
   contentful/
     types.ts             tipos de Contentful con nombres cortos
     client.ts            cliente del CMA; describe cada llamada para --verbose (sin headers)
-    read.ts              lecturas (árbol de entries, modelos, locales, assets, tags)
+    read.ts              lecturas (árbol, búsquedas, modelos, locales, assets, tags, usuario)
     write.ts             ÚNICO módulo que escribe en Contentful
   core/                  reglas puras: sin red, sin terminal
     plan.ts              qué se crea, actualiza, reutiliza; plan de escritura
-    model.ts             comparación de content types campo por campo (tipo y reglas)
+    model.ts             comparación de content types (uno o todos) campo por campo
+    model-changes.ts     qué se puede agregar al modelo y qué marcó el usuario
+    query.ts             filtros de búsqueda → parámetros de una sola llamada; --since
+    entry-compare.ts     comparación de una entry entre ambientes, valor por valor
+    status.ts            estado de dos ambientes (content types, idiomas, tags)
     publish-check.ts     campos que se escriben; obligatorios que quedarían vacíos
     fields.ts            valores de origen → formato de destino (locales, merge, assets)
     entries.ts           links, hijos, imágenes y título de una entry
-    ids.ts               parseo de IDs/URLs pegados
+    ids.ts               parseo de IDs/URLs pegados (entries y assets)
+    json.ts              JSON estable para comparar valores
     restore.ts           qué se restaura y qué cambió después
     environments.ts      ambiente por ID o alias
   ui/                    terminal: no decide ni escribe
-    views.ts             tablas de entries, imágenes, modelo y resumen
-    prompts.ts           preguntas al usuario
+    views/               tablas por tema: entries, assets, model, summary, entry-diff, status, history, restore
+    prompts.ts           preguntas genéricas (choose, chooseMany, search, askText…) y específicas
+    text.ts              textos sin color que comparten terminal y reportes
     table.ts             dibujo de tablas
     log.ts               mensajes de estado
-    header.ts            inicio y cierre de cada comando (avisa --dry-run y modo desarrollo)
+    header.ts            presentación, título, cierres
     runner.ts            ejecuta escrituras por fases, con barra de progreso y lista de ✔ / ✖
     status.ts            spinner para los pasos que llaman a la API
     api-calls.ts         cuenta las llamadas a la API (y las muestra con --verbose)
@@ -291,7 +355,8 @@ Los tests son **unitarios**: prueban las reglas y utilidades, no hacen migracion
 - **Seguridad**: el writer solo escribe en destino y solo publica content types (`write.test.ts`); el token solo va a hosts de Contentful (`session.test.ts`); los errores no muestran el token (`errors.test.ts`); los archivos solo se copian desde el CDN de Contentful (`fields.test.ts`).
 - **Lectura del árbol** (`read.test.ts`): por niveles, links rotos y ciclos.
 - **Respaldo y restore** (`backup.test.ts`, `restore.test.ts`, `write.test.ts`): el respaldo se guarda antes de actualizar y, si falla, no se actualiza; detecta cambios posteriores a la migración.
-- **Argumentos y flags** (`cli-args.test.ts`, `environments.test.ts`): incluido que el comando "Para repetir" se vuelve a leer igual.
+- **Argumentos y flags** (`cli-args.test.ts`, `environments.test.ts`, `version.test.ts`): comandos, a qué comandos sirve cada flag, `--since`, `--version`, la ayuda generada, y que el comando "Repetir" se vuelve a leer igual.
+- **Búsqueda, comparaciones y reportes** (`query.test.ts`, `entry-compare.test.ts`, `status.test.ts`, `model-changes.test.ts`, `report.test.ts`): filtros en una sola llamada, comparación de entries y ambientes, cambios de modelo y reportes Markdown.
 - **Código fuente** (`security.test.ts`): solo el writer escribe, nunca borra/archiva/despublica, y solo publica content types. `client.test.ts`: `--verbose` nunca muestra el token.
 - **Comportamiento** (`entries.test.ts`, `read.test.ts`, `plan.test.ts`, `errors.test.ts`): textos enlazados que no son hijos, límite del árbol, entries archivadas, cambios en destino durante la revisión y conflictos de versión.
 - **Reglas del modelo y publicación** (`model.test.ts`, `publish-check.test.ts`): obligatorio, localizado y validaciones; qué entries quedan con obligatorios vacíos; los campos que solo existen en destino no se tocan.
@@ -318,7 +383,9 @@ Las tablas (árbol, imágenes, modelo, resumen) son propias ([src/ui/table.ts](s
 
 ### Cómo extenderlo
 
+- **Nuevo comando**: agrégalo a `COMMANDS` (y sus flags a `FLAGS`) en [src/cli-args.ts](src/cli-args.ts), escribe su función en `src/commands/` usando [context.ts](src/commands/context.ts), y regístrala en [registry.ts](src/commands/registry.ts). El menú y la ayuda se actualizan solos; TypeScript avisa si falta registrarlo.
+- **Nueva forma de elegir entries**: un método en [src/selection/entries.ts](src/selection/entries.ts); si es una búsqueda, un filtro en [src/core/query.ts](src/core/query.ts).
 - **Cambiar qué se migra** (por ejemplo, que un hijo existente se actualice): `classifyTree` en [src/core/plan.ts](src/core/plan.ts).
-- **Nueva pregunta al usuario**: una función en [src/ui/prompts.ts](src/ui/prompts.ts), su respuesta va a `buildPlan`.
-- **Nuevo tipo de escritura** (por ejemplo, copiar locales): un método en [src/contentful/write.ts](src/contentful/write.ts) y su paso en [src/execute.ts](src/execute.ts).
-- **Nueva tabla o columna**: [src/ui/views.ts](src/ui/views.ts).
+- **Nuevo tipo de escritura**: un método en [src/contentful/write.ts](src/contentful/write.ts) y su fase en [src/execute.ts](src/execute.ts).
+- **Nueva tabla o columna**: [src/ui/views/](src/ui/views/); si también va al reporte, el texto en [src/ui/text.ts](src/ui/text.ts).
+- **Cada cambio**: entrada en [CHANGELOG.md](CHANGELOG.md) y versión nueva en `package.json`.

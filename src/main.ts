@@ -1,17 +1,25 @@
 /**
- * Entrada de ctf-migrate: lee los argumentos y corre el comando.
- * Devuelve el código de salida.
+ * Entrada de ctf-migrate: lee los argumentos, muestra el menú si no se dio un comando y
+ * corre el comando. Devuelve el código de salida.
  */
-import { parseCliArgs, USAGE } from './cli-args.ts';
-import { migrate } from './commands/migrate.ts';
-import { restore } from './commands/restore.ts';
-import type { RunMode } from './ui/header.ts';
+import { parseCliArgs, usage, validateFlags } from './cli-args.ts';
+import { RUNNERS } from './commands/registry.ts';
+import { printIntro, type RunMode } from './ui/header.ts';
+import { pickCommand } from './ui/prompts.ts';
+import { VERSION } from './version.ts';
 
 export async function main(argv: string[], mode: RunMode): Promise<number> {
   const args = parseCliArgs(argv);
-  if (args.help) {
-    console.log(USAGE);
+  if (args.version) {
+    console.log(VERSION);
     return 0;
   }
-  return args.command === 'restore' ? restore(args, mode) : migrate(args, mode);
+  if (args.help) {
+    console.log(usage());
+    return 0;
+  }
+  printIntro(mode);
+  const command = args.command ?? (await pickCommand());
+  validateFlags(command, args);
+  return RUNNERS[command]({ ...args, command });
 }

@@ -2,6 +2,26 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.4.0 — 2026-10-07
+
+### Agregado
+
+- **Menú inicial** ("¿Qué quieres hacer?") y **comandos** para cada acción: `migrate`, `migrate-model`, `migrate-assets`, `compare-models`, `compare-entry`, `status`, `history` y `restore`.
+- **Formas de elegir entries** (en `migrate` y `compare-entry`), cada una con su consumo de API a la vista: por ID/URL, buscar por texto, por content type, cambiadas recientemente (opcional: solo las tuyas), por tag, desde un archivo y las que faltan en destino. Las búsquedas son una sola llamada (hasta 50 resultados, los más recientes).
+- **`migrate-model`**: crear content types y agregar campos que faltan en destino, sin contenido.
+- **`migrate-assets`**: copiar imágenes y archivos sueltos, por ID/URL o buscando por nombre.
+- **`compare-models`**: todos (o algunos) content types comparados, con detalle campo por campo.
+- **`compare-entry`**: una o varias entries comparadas valor por valor entre ambientes.
+- **`status`**: resumen de content types, idiomas y tags que difieren entre dos ambientes.
+- **`history`**: migraciones anteriores a partir de los respaldos, sin llamadas a la API.
+- **Reportes Markdown** para comparar modelos, entries y estado (`--report archivo.md`, o se ofrece al final).
+- Flags nuevos: `--ids-file`, `--search`, `--content-type`, `--tag`, `--since` (`hoy`, `7d`, `AAAA-MM-DD`), `--mine`, `--missing`, `--report` y **`--version` / `-v`**. La ayuda (`--help`) se genera de la misma definición que el menú y la validación, y dice a qué comandos sirve cada flag.
+
+### Cambiado
+
+- El comando para repetir una migración ahora es `ctf-migrate migrate …`. Con flags para elegir entries y sin comando, se sigue asumiendo `migrate`.
+- Código reorganizado sin duplicar: una sola definición de comandos y flags, un contexto compartido por todos los comandos (sesión, ambientes, lecturas que se hacen una sola vez, confirmar, respaldar, cerrar), escritura por fases reutilizables y vistas separadas por tema.
+
 ## 0.3.0 — 2026-10-07
 
 ### Agregado

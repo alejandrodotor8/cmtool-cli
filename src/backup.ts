@@ -26,7 +26,8 @@ export interface SavedEntry {
 
 export interface BackupData {
   version: 1;
-  kind: 'migrate' | 'restore';
+  /** Qué comando lo creó: migrar entries, modelo o imágenes, o un restore. */
+  kind: 'migrate' | 'model' | 'assets' | 'restore';
   createdAt: string;
   spaceId: string;
   src: string;

@@ -11,7 +11,7 @@ export interface Status {
   fail(message: string): void;
 }
 
-export function startStatus(message: string, animate: boolean): Status {
+function startStatus(message: string, animate: boolean): Status {
   if (!animate) {
     log.step(message);
     return { update: (m) => log.info(m), done: (m) => log.ok(m), fail: (m) => log.err(m) };

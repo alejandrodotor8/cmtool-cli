@@ -37,11 +37,22 @@ export interface Analysis {
   titleOf: (entry: Entry) => string;
 }
 
+/** Lee modelo e idiomas de un ambiente. */
+export interface Loaders {
+  contentTypes: (env: string) => Promise<Map<string, ContentType>>;
+  locales: (env: string) => Promise<Locales>;
+}
+
 export async function analyze(
   cma: Cma,
   { src, dst, rootIds }: { src: string; dst: string; rootIds: string[] },
   /** Avisa en qué etapa va (para el spinner). */
   report: (stage: string) => void = () => {},
+  /** Lectores de modelo e idiomas; por defecto leen de la API (el contexto los reutiliza). */
+  load: Loaders = {
+    contentTypes: (env) => readContentTypes(cma, env),
+    locales: (env) => readLocales(cma, env),
+  },
 ): Promise<Analysis> {
   // Árbol de entries y qué pasa con cada una.
   report(`Leyendo las entries y sus hijos en ${src}…`);
@@ -57,7 +68,7 @@ export async function analyze(
 
   // Modelo: todos los content types del árbol, incluidos los de entries reutilizadas.
   report('Comparando modelos…');
-  const contentTypes = { src: await readContentTypes(cma, src), dst: await readContentTypes(cma, dst) };
+  const contentTypes = { src: await load.contentTypes(src), dst: await load.contentTypes(dst) };
   const diffs = new Map<string, ContentTypeDiff>();
   for (const id of new Set([...tree.entries.values()].map(contentTypeOf))) {
     const srcCT = contentTypes.src.get(id);
@@ -66,8 +77,8 @@ export async function analyze(
   }
 
   report('Revisando idiomas, imágenes y tags…');
-  const srcLocales = await readLocales(cma, src);
-  const dstLocales = await readLocales(cma, dst);
+  const srcLocales = await load.locales(src);
+  const dstLocales = await load.locales(dst);
   const locales = {
     src: srcLocales,
     dst: dstLocales,

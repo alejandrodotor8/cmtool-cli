@@ -1,4 +1,5 @@
 import type { ContentType, Field } from '../contentful/types.ts';
+import { stableJson } from './json.ts';
 
 /** Firma del tipo de un campo: si cambia entre ambientes, los valores no son compatibles. */
 const fieldSig = (f: Field): string => [f.type, f.linkType, f.items?.type, f.items?.linkType].join('|');
@@ -51,12 +52,6 @@ export interface ContentTypeDiff {
   /** Mismo tipo, reglas distintas. */
   changedRules: Field[];
 }
-
-/** JSON estable: los arrays de valores simples se ordenan, para que el orden no cuente como diferencia. */
-const stableJson = (value: unknown): string =>
-  JSON.stringify(value, (_, v) =>
-    Array.isArray(v) && v.every((x) => typeof x !== 'object') ? [...v].sort() : (v as unknown),
-  );
 
 /** Validaciones de un campo (y de sus items, si es un Array) por nombre. Ignora los mensajes. */
 function validationsOf(f: Field): Map<string, string> {
@@ -112,5 +107,35 @@ export function diffContentType(srcCT: ContentType, dstCT: ContentType | undefin
     extra: fieldsWith(FIELD.EXTRA),
     mismatched: fieldsWith(FIELD.MISMATCH),
     changedRules: fieldsWith(FIELD.RULES),
+  };
+}
+
+/** El content type tiene alguna diferencia con destino. */
+export const hasDifferences = (d: ContentTypeDiff): boolean =>
+  d.missingCT || d.missing.length + d.extra.length + d.mismatched.length + d.changedRules.length > 0;
+
+export interface ModelComparison {
+  /** Content types de origen comparados con destino, ordenados por nombre. */
+  diffs: ContentTypeDiff[];
+  /** Content types que solo existen en destino. */
+  onlyInDst: ContentType[];
+}
+
+const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
+
+/** Compara los modelos de dos ambientes: todos los content types, o solo los de `ids`. */
+export function compareModels(
+  srcCTs: Map<string, ContentType>,
+  dstCTs: Map<string, ContentType>,
+  ids?: string[],
+): ModelComparison {
+  const wanted = ids?.length ? new Set(ids) : undefined;
+  const include = (id: string) => !wanted || wanted.has(id);
+  return {
+    diffs: [...srcCTs.values()]
+      .filter((ct) => include(ct.sys.id))
+      .map((ct) => diffContentType(ct, dstCTs.get(ct.sys.id)))
+      .sort(byName),
+    onlyInDst: [...dstCTs.values()].filter((ct) => include(ct.sys.id) && !srcCTs.has(ct.sys.id)).sort(byName),
   };
 }

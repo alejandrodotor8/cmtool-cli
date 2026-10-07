@@ -1,0 +1,48 @@
+/**
+ * Elegir assets (imágenes y archivos) de origen: por ID/URL o buscando por texto.
+ */
+import type { CliArgs } from '../cli-args.ts';
+import type { Context } from '../commands/context.ts';
+import { LIMITS } from '../config.ts';
+import { searchAssets } from '../contentful/read.ts';
+import { log } from '../ui/log.ts';
+import { askIds, askText, choose, chooseMany } from '../ui/prompts.ts';
+import { withStatus } from '../ui/status.ts';
+import { clip } from '../ui/table.ts';
+
+export async function selectAssetIds(ctx: Context, args: Pick<CliArgs, 'ids' | 'search'>): Promise<string[]> {
+  if (args.ids) return args.ids;
+  const text =
+    args.search ??
+    ((await choose('¿Cómo eliges los archivos?', [
+      { value: 'ids', label: 'Por asset ID o URL', hint: 'sin llamadas extra' },
+      { value: 'search', label: 'Buscar por nombre', hint: '1 llamada por búsqueda' },
+    ])) === 'search'
+      ? await askText('Buscar', { validate: (v) => (v ? undefined : 'Escribe algo para buscar.') })
+      : undefined);
+  if (text === undefined) return askIds('assets');
+
+  const results = await withStatus(
+    `Buscando en ${ctx.src}…`,
+    ctx.animate,
+    () => searchAssets(ctx.cma, ctx.src, text, LIMITS.searchResults),
+    (found) => `${found.length} resultado(s)`,
+  );
+  if (!results.length) {
+    log.warn(`No hay archivos que coincidan con "${text}".`);
+    return [];
+  }
+  return chooseMany(
+    'Elige los archivos',
+    results.map((a) => {
+      const file = Object.values(a.fields.file ?? {})[0];
+      const title = Object.values(a.fields.title ?? {})[0];
+      return {
+        value: a.sys.id,
+        label: clip(title ?? file?.fileName ?? a.sys.id, 50),
+        hint: `${file?.contentType ?? ''} · ${a.sys.id}`,
+      };
+    }),
+    { initialValues: args.search ? results.map((a) => a.sys.id) : [] },
+  );
+}

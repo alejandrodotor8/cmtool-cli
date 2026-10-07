@@ -125,3 +125,47 @@ export async function readTags(cma: Cma, environmentId: string): Promise<Map<str
   const res = await cma.tag.getMany({ environmentId, query: { limit: 1000 } });
   return new Map(res.items.map((t) => [t.sys.id, t]));
 }
+
+/** Una sola llamada: las entries de origen que cumplen los filtros (ver core/query.ts). */
+export async function searchEntries(
+  cma: Cma,
+  environmentId: string,
+  query: Record<string, string | number | boolean>,
+): Promise<Entry[]> {
+  return (await cma.entry.getMany({ environmentId, query })).items;
+}
+
+/** Una sola llamada: assets cuyo título o archivo coinciden con el texto. */
+export async function searchAssets(cma: Cma, environmentId: string, text: string, limit: number): Promise<Asset[]> {
+  const query = { query: text, limit, order: '-sys.updatedAt', 'sys.archivedAt[exists]': false };
+  return (await cma.asset.getMany({ environmentId, query })).items;
+}
+
+/**
+ * Todas las entries que cumplen los filtros, página por página (`pageSize` por llamada).
+ * Si pasan de `max`, se detiene: con tantos resultados conviene filtrar más.
+ */
+export async function listEntries(
+  cma: Cma,
+  environmentId: string,
+  query: Record<string, string | number | boolean>,
+  { pageSize, max }: { pageSize: number; max: number },
+): Promise<Entry[]> {
+  const all: Entry[] = [];
+  for (let skip = 0; ; skip += pageSize) {
+    const res = await cma.entry.getMany({ environmentId, query: { ...query, limit: pageSize, skip } });
+    all.push(...res.items);
+    if (all.length > max) {
+      throw new AbortError(
+        `Hay más de ${max} entries con esos filtros.`,
+        'Filtra más (por ejemplo, con una fecha) para no recorrer todo el ambiente.',
+      );
+    }
+    if (res.items.length < pageSize || all.length >= res.total) return all;
+  }
+}
+
+/** ID del usuario de la sesión (para "solo las que editaste tú"). */
+export async function currentUserId(cma: Cma): Promise<string> {
+  return (await cma.user.getCurrent()).sys.id;
+}

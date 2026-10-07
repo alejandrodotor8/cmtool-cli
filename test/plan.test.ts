@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { Entry } from '../src/contentful/types.ts';
-import { ACTION, brokenHyperlinks, buildPlan, changedInDst, classifyTree, modelOptions } from '../src/core/plan.ts';
+import { modelOptions as modelOptionsFor } from '../src/core/model-changes.ts';
+import {
+  ACTION,
+  brokenHyperlinks,
+  buildPlan,
+  changedInDst,
+  classifyTree,
+  writtenContentTypes,
+} from '../src/core/plan.ts';
 import { analysisOf, asset, contentType, entry, field, link, tag, treeOf, writtenIds } from './fixtures.ts';
 
 describe('classifyTree', () => {
@@ -62,6 +70,8 @@ describe('classifyTree', () => {
 });
 
 describe('modelOptions', () => {
+  const modelOptions = (a: ReturnType<typeof analysisOf>) => modelOptionsFor(a.diffs.values(), writtenContentTypes(a));
+
   const banner = contentType('banner', [field('title')]);
   const storeSrc = contentType('store', [field('title'), field('codigo')]);
   const storeDst = contentType('store', [field('title')]);

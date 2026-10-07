@@ -9,8 +9,8 @@ import { APP_NAME } from '../app.ts';
 import { type BackupData, startBackup } from '../backup.ts';
 import type { CliArgs } from '../cli-args.ts';
 import { createCma } from '../contentful/client.ts';
-import { listEnvironments, listSpaces, readContentTypes, readLocales } from '../contentful/read.ts';
-import type { Cma, ContentType, Environment } from '../contentful/types.ts';
+import { currentUser, listEnvironments, listSpaces, readContentTypes, readLocales } from '../contentful/read.ts';
+import type { Account, Cma, ContentType, Environment } from '../contentful/types.ts';
 import { createWriter } from '../contentful/write.ts';
 import { resolveEnvironment } from '../core/environments.ts';
 import { AbortError } from '../errors.ts';
@@ -22,9 +22,34 @@ import { confirmWrite, pickDestination, pickSource, pickSpace } from '../ui/prom
 import { createRunner } from '../ui/runner.ts';
 import { withStatus } from '../ui/status.ts';
 
-/** Sesión, contador de llamadas a la API y si se muestran animaciones. */
+/**
+ * Sesión, contador de llamadas a la API, si se muestran animaciones, un cliente sin space
+ * y la cuenta con la que se trabaja (se consulta una sola vez, solo si hace falta).
+ */
 export function openSession(args: Pick<CliArgs, 'verbose'>) {
-  return { session: loadSession(), api: trackApiCalls(args.verbose), animate: shouldAnimate(args.verbose) };
+  const session = loadSession();
+  const api = trackApiCalls(args.verbose);
+  const animate = shouldAnimate(args.verbose);
+  const client = createCma(session, undefined, api.onRequest);
+  let account: Promise<Account> | undefined;
+  return {
+    session,
+    api,
+    animate,
+    client,
+    account: (): Promise<Account> => {
+      account ??= withStatus(
+        'Verificando tu cuenta…',
+        animate,
+        async () => {
+          const user = await currentUser(client);
+          return { userId: user.id, email: user.email, host: session.host };
+        },
+        (a) => `Cuenta: ${a.email ?? a.userId}`,
+      );
+      return account;
+    },
+  };
 }
 
 export type SessionContext = ReturnType<typeof openSession>;
@@ -61,7 +86,7 @@ export async function openContext(args: CliArgs): Promise<Context> {
   const spaces = await withStatus(
     'Conectando con Contentful…',
     animate,
-    () => listSpaces(createCma(session, undefined, api.onRequest)),
+    () => listSpaces(base.client),
     (found) => `Conectado · ${found.length} space(s)`,
   );
   if (!spaces.length) throw new AbortError('Tu usuario no tiene acceso a ningún space.');
@@ -125,11 +150,16 @@ export async function confirmWriting(ctx: Context, question: string): Promise<bo
   return false;
 }
 
-/** Respaldo, writer y runner para empezar a escribir en destino. */
-export function startWriting(ctx: Context, kind: BackupData['kind'], rootIds: string[] = []): WriteContext {
+/** Respaldo (en la carpeta de la cuenta), writer y runner para empezar a escribir en destino. */
+export async function startWriting(
+  ctx: Context,
+  kind: BackupData['kind'],
+  rootIds: string[] = [],
+): Promise<WriteContext> {
+  const account = await ctx.account();
   return {
     writer: createWriter(ctx.cma, { src: ctx.src, dst: ctx.dst }),
-    backup: startBackup({ kind, spaceId: ctx.spaceId, src: ctx.src, dst: ctx.dst, rootIds }),
+    backup: startBackup({ kind, account, spaceId: ctx.spaceId, src: ctx.src, dst: ctx.dst, rootIds }),
     runner: createRunner({ animate: ctx.animate }),
   };
 }

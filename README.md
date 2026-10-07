@@ -139,7 +139,7 @@ cfm --version    # versión instalada
 | `compare-models` | **Comparar modelos** entre ambientes, campo por campo | no |
 | `compare-entry` | **Comparar entries** entre ambientes, valor por valor | no |
 | `status` | **Estado de los ambientes**: content types, idiomas y tags que difieren | no |
-| `history` | **Historial** de migraciones, a partir de los respaldos | no (ni llama a la API) |
+| `history` | **Historial** de migraciones de tu cuenta, a partir de los respaldos | no (1 llamada: saber qué cuenta eres) |
 | `restore` | **Deshacer** una migración con su respaldo | sí |
 
 Sin comando, la herramienta muestra este menú. Los comandos que comparan pueden guardar un **reporte Markdown** para compartir (`--report archivo.md`, o te lo ofrece al final).
@@ -191,7 +191,7 @@ Sin comando, la herramienta muestra este menú. Los comandos que comparan pueden
 - **`compare-models`**: una tabla con todos los content types y su estado, y el detalle campo por campo de los que difieren. `--content-type a,b` para ver solo esos.
 - **`compare-entry`**: elige entries igual que al migrar (ID, búsqueda, recientes, tag, archivo) y ve, campo por campo, qué valor tienen en cada ambiente.
 - **`status`**: resumen de content types iguales, con diferencias, que faltan o que sobran, más idiomas y tags que faltan.
-- **`history`**: las migraciones anteriores (fecha, tipo, ambientes, qué se actualizó y creó, y su respaldo). No llama a la API.
+- **`history`**: las migraciones anteriores **de la cuenta con la que iniciaste sesión** (fecha, tipo, ambientes, qué se actualizó y creó, y su respaldo).
 
 ### Atajos con flags
 
@@ -237,11 +237,12 @@ cfm restore <respaldo.json> # o indica el archivo
 cfm restore --dry-run       # muestra qué restauraría, sin escribir
 ```
 
-Cada migración guarda un respaldo en `~/.ctf-migrate/backups/` (en Windows, `C:\Users\<usuario>\.ctf-migrate\backups\`). Antes de actualizar una entry que ya existía en destino, guarda cómo estaba; si no puede guardarlo, no la actualiza.
+Cada migración guarda un respaldo en `~/.ctf-migrate/backups/<cuenta>/` (en Windows, `C:\Users\<usuario>\.ctf-migrate\backups\<cuenta>\`): **una carpeta por cada cuenta de Contentful**, así si usas varias cuentas sus respaldos e historial no se mezclan. Antes de actualizar una entry que ya existía en destino, guarda cómo estaba; si no puede guardarlo, no la actualiza.
 
 `restore` devuelve esas entries a como estaban:
 
 - Si alguien editó o publicó la entry **después** de la migración, te avisa: restaurar también deshace esos cambios.
+- Solo restaura respaldos de **la cuenta con la que iniciaste sesión**. Si el respaldo es de otra cuenta, te dice cuál y que inicies sesión con ella.
 - Si la entry ya no existe en destino, la omite.
 - Si durante la migración la actualización de una entry falló, no hay nada que deshacer: la omite.
 - Lo que la migración **creó** (entries, imágenes, tags, content types, campos del modelo) **no se borra**, porque la herramienta nunca borra. Te lo lista para que decidas en Contentful.
@@ -255,6 +256,7 @@ Cada migración guarda un respaldo en `~/.ctf-migrate/backups/` (en Windows, `C:
 - Si una entry ya existe y está publicada, queda como **Changed**: lo publicado sigue en vivo.
 - Los tags que falten en destino se crean.
 - Antes de actualizar una entry existente, guarda cómo estaba (ver `restore`).
+- **Varias cuentas**: cada respaldo registra la cuenta (usuario, email y región) y se guarda en su carpeta. `history` y `restore` solo muestran los de la cuenta con la que iniciaste sesión; `restore` no deja restaurar el respaldo de otra cuenta. Los respaldos anteriores a la 0.6.0, que no registran cuenta, se muestran aparte.
 - Justo antes de escribir vuelve a mirar destino: si algo del árbol apareció, desapareció o se archivó mientras revisabas, se detiene sin escribir.
 - Si el árbol pasa de 300 entries, se detiene: seguramente un link está arrastrando una página entera. Los límites están en [src/config.ts](src/config.ts).
 
@@ -288,7 +290,7 @@ src/
     status.ts, history.ts, restore.ts
   selection/             cómo se eligen entries (ID, búsqueda, recientes, tag, archivo, faltantes) y assets
   report/                reportes Markdown (markdown.ts) y cómo se guardan (save.ts)
-  backup.ts              respaldos locales en ~/.ctf-migrate/backups/
+  backup.ts              respaldos locales en ~/.ctf-migrate/backups/<cuenta>/
   config.ts              límites (tamaño del árbol, confirmación, resultados por búsqueda)
   session.ts             token y host (sesión del CLI o variable de entorno)
   errors.ts              AbortError, CancelError y formato de errores del CMA

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { SavedEntry } from '../src/backup.ts';
 import type { Entry } from '../src/contentful/types.ts';
-import { RESTORE, restoreStatus, shouldRestore } from '../src/core/restore.ts';
+import { backupOwner, OWNER, RESTORE, restoreStatus, shouldRestore } from '../src/core/restore.ts';
 import { entry } from './fixtures.ts';
 
 const saved: SavedEntry = {
@@ -41,5 +41,22 @@ describe('restoreStatus', () => {
 
   test('solo se restauran las que nadie tocó o se editaron después', () => {
     assert.deepEqual(Object.values(RESTORE).filter(shouldRestore), [RESTORE.RESTORE, RESTORE.CHANGED]);
+  });
+});
+
+describe('backupOwner', () => {
+  const ale = { userId: 'u-ale', email: 'ale@dislicores.com', host: 'api.contentful.com' };
+
+  test('el respaldo es de la cuenta actual', () => {
+    assert.equal(backupOwner({ account: ale }, ale), OWNER.SAME);
+  });
+
+  test('es de otra cuenta, o de la misma cuenta en otra región', () => {
+    assert.equal(backupOwner({ account: { ...ale, userId: 'u-otra' } }, ale), OWNER.OTHER);
+    assert.equal(backupOwner({ account: { ...ale, host: 'api.eu.contentful.com' } }, ale), OWNER.OTHER);
+  });
+
+  test('un respaldo anterior no registra cuenta', () => {
+    assert.equal(backupOwner({}, ale), OWNER.LEGACY);
   });
 });

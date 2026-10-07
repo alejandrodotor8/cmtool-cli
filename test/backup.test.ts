@@ -3,13 +3,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { type BackupData, listBackups, readBackup, startBackup } from '../src/backup.ts';
-import type { Entry } from '../src/contentful/types.ts';
+import { accountBackupDir, type BackupData, listBackups, readBackup, startBackup } from '../src/backup.ts';
+import type { Account, Entry } from '../src/contentful/types.ts';
 import { AbortError } from '../src/errors.ts';
 import { entry } from './fixtures.ts';
 
-const meta: Pick<BackupData, 'kind' | 'spaceId' | 'src' | 'dst' | 'rootIds'> = {
+const alejandro: Account = { userId: 'u-ale', email: 'ale@dislicores.com', host: 'api.contentful.com' };
+const otra: Account = { userId: 'u-otra', email: 'otra@agencia.com', host: 'api.contentful.com' };
+
+const meta: Pick<BackupData, 'kind' | 'spaceId' | 'src' | 'dst' | 'rootIds'> & { account: Account } = {
   kind: 'migrate',
+  account: alejandro,
   spaceId: 's1',
   src: 'develop',
   dst: 'qa',
@@ -79,22 +83,50 @@ describe('backup', () => {
     assert.equal(fs.statSync(backup.file).mode & 0o777, 0o600);
   });
 
-  test('lista del más reciente al más antiguo e ignora archivos inválidos', () => {
-    const write = (name: string, createdAt: string) =>
-      fs.writeFileSync(path.join(dir, name), JSON.stringify({ version: 1, createdAt, updated: [] }));
-    write('viejo.json', '2026-01-01T00:00:00.000Z');
-    write('nuevo.json', '2026-06-01T00:00:00.000Z');
-    fs.writeFileSync(path.join(dir, 'roto.json'), '{no es json');
-    fs.writeFileSync(path.join(dir, 'otro.txt'), 'x');
+  test('guarda cada respaldo en la carpeta de su cuenta y registra la cuenta', () => {
+    const backup = startBackup(meta, dir);
+    assert.equal(path.dirname(backup.file), accountBackupDir(alejandro, dir));
+    assert.deepEqual(readBackup(backup.file).account, alejandro);
+  });
 
+  test('cada cuenta ve solo sus respaldos, del más reciente al más antiguo', () => {
+    const write = (account: Account, name: string, createdAt: string) => {
+      const folder = accountBackupDir(account, dir);
+      fs.mkdirSync(folder, { recursive: true });
+      fs.writeFileSync(path.join(folder, name), JSON.stringify({ version: 1, createdAt, account, updated: [] }));
+    };
+    write(alejandro, 'viejo.json', '2026-01-01T00:00:00.000Z');
+    write(alejandro, 'nuevo.json', '2026-06-01T00:00:00.000Z');
+    write(otra, 'de-otra.json', '2026-07-01T00:00:00.000Z');
+    fs.writeFileSync(path.join(accountBackupDir(alejandro, dir), 'roto.json'), '{no es json');
+
+    const names = (account: Account) => listBackups(account, dir).mine.map((b) => path.basename(b.file));
+    assert.deepEqual(names(alejandro), ['nuevo.json', 'viejo.json']);
+    assert.deepEqual(names(otra), ['de-otra.json']);
+  });
+
+  test('los respaldos anteriores (sin cuenta, en la carpeta raíz) se listan aparte', () => {
+    fs.writeFileSync(
+      path.join(dir, 'anterior.json'),
+      JSON.stringify({ version: 1, createdAt: '2026-10-05T00:00:00Z', updated: [] }),
+    );
+    fs.writeFileSync(path.join(dir, 'otro.txt'), 'x');
+    const { mine, legacy } = listBackups(alejandro, dir);
+    assert.deepEqual(mine, []);
     assert.deepEqual(
-      listBackups(dir).map((b) => path.basename(b.file)),
-      ['nuevo.json', 'viejo.json'],
+      legacy.map((b) => path.basename(b.file)),
+      ['anterior.json'],
     );
   });
 
+  test('el ID de la cuenta no puede salirse de la carpeta de respaldos', () => {
+    for (const userId of ['../../etc', '..', '.']) {
+      assert.equal(path.dirname(accountBackupDir({ userId }, dir)), dir, userId);
+    }
+  });
+
   test('si no hay carpeta de respaldos, la lista está vacía', () => {
-    assert.deepEqual(listBackups(path.join(dir, 'no-existe')), []);
+    assert.deepEqual(listBackups(alejandro, path.join(dir, 'no-existe')), { mine: [], legacy: [] });
   });
 
   test('un respaldo ilegible se detiene con un mensaje claro', () => {

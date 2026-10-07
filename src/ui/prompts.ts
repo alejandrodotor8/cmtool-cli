@@ -4,7 +4,7 @@
  */
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
-import { BACKUP_DIR, type BackupData } from '../backup.ts';
+import type { BackupFile } from '../backup.ts';
 import { COMMANDS, type Command } from '../cli-args.ts';
 import type { ContentType, Environment, Space } from '../contentful/types.ts';
 import { parseIds } from '../core/ids.ts';
@@ -247,14 +247,15 @@ export async function confirmWrite(dstEnv: Environment, question: string): Promi
 }
 
 /** Elige un respaldo de la lista (el más reciente primero). Devuelve la ruta del archivo. */
-export function pickBackup(backups: { file: string; data: BackupData }[]): Promise<string> {
-  if (!backups.length) throw new AbortError(`No hay respaldos en ${BACKUP_DIR}.`);
-  return choose(
-    'Respaldo',
-    backups.map(({ file, data }) => ({
-      value: file,
-      label: `${new Date(data.createdAt).toLocaleString('es-CO')}  ${BACKUP_KIND_LABEL[data.kind]} ${data.src} → ${data.dst}`,
-      hint: `${data.updated.length} actualizada(s), ${data.created.entries.length} creada(s)`,
-    })),
-  );
+export function pickBackup({ mine, legacy }: { mine: BackupFile[]; legacy: BackupFile[] }): Promise<string> {
+  if (!mine.length && !legacy.length) throw new AbortError('No hay respaldos de tu cuenta.');
+  const option = ({ file, data }: BackupFile, note = '') => ({
+    value: file,
+    label: `${new Date(data.createdAt).toLocaleString('es-CO')}  ${BACKUP_KIND_LABEL[data.kind]} ${data.src} → ${data.dst}`,
+    hint: `${data.updated.length} actualizada(s), ${data.created.entries.length} creada(s)${note}`,
+  });
+  return choose('Respaldo', [
+    ...mine.map((b) => option(b)),
+    ...legacy.map((b) => option(b, ' · anterior, sin cuenta registrada')),
+  ]);
 }

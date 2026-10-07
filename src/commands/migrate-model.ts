@@ -55,7 +55,7 @@ export async function migrateModel(args: CliArgs): Promise<number> {
   if (args.dryRun) return finishDryRun(ctx);
 
   if (!(await confirmWriting(ctx, `¿Aplicar estos cambios al modelo de ${pc.bold(ctx.dst)}?`))) return 0;
-  const write = startWriting(ctx, 'model');
+  const write = await startWriting(ctx, 'model');
   await applyModelChanges(changes, new Map(dstCTs), write);
   return finishWriting(ctx, write, {
     title: 'Modelo actualizado',

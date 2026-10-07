@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import type { CliArgs } from '../cli-args.ts';
 import type { Context } from '../commands/context.ts';
 import { LIMITS } from '../config.ts';
-import { currentUserId, fetchEntries, listEntries, readTags, searchEntries } from '../contentful/read.ts';
+import { fetchEntries, listEntries, readTags, searchEntries } from '../contentful/read.ts';
 import type { Entry } from '../contentful/types.ts';
 import { contentTypeOf, makeTitleOf } from '../core/entries.ts';
 import { parseEntryIds } from '../core/ids.ts';
@@ -113,13 +113,8 @@ function idsFromFile(file: string): string[] {
   return ids;
 }
 
-const myUserId = (ctx: Context) =>
-  withStatus(
-    'Buscando tu usuario…',
-    ctx.animate,
-    () => currentUserId(ctx.cma),
-    () => 'Usuario encontrado',
-  );
+/** "Solo las mías": la cuenta ya se consulta una sola vez por ejecución. */
+const myUserId = async (ctx: Context) => (await ctx.account()).userId;
 
 async function pickTag(ctx: Context): Promise<string> {
   const tags = await withStatus(

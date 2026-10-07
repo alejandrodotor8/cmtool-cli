@@ -18,6 +18,14 @@ export type Field = ContentFields;
 export type Tag = TagProps;
 export type TagLink = NonNullable<Entry['metadata']>['tags'][number];
 
+/** La cuenta de Contentful con la que se trabaja: separa respaldos e historial. */
+export interface Account {
+  userId: string;
+  email: string | undefined;
+  /** Host del CMA (región): api.contentful.com o api.eu.contentful.com. */
+  host: string;
+}
+
 export interface Environment {
   id: string;
   /** Aliases que apuntan a este ambiente (por ejemplo, `master`). */

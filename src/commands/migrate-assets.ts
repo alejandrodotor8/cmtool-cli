@@ -38,7 +38,7 @@ export async function migrateAssets(args: CliArgs): Promise<number> {
   if (args.dryRun) return finishDryRun(ctx);
   if (!(await confirmWriting(ctx, `¿Crear ${assets.missing.length} archivo(s) en ${pc.bold(ctx.dst)}?`))) return 0;
 
-  const write = startWriting(ctx, 'assets');
+  const write = await startWriting(ctx, 'assets');
   await applyAssets(
     assets.missing.flatMap((id) => srcAssets.get(id) ?? []),
     dstLocales,

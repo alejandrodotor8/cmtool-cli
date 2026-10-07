@@ -7,10 +7,10 @@ import { createdParts } from './restore.ts';
 import { formatDate, route } from './shared.ts';
 
 /** Una fila por ejecución guardada en los respaldos, la más reciente primero. */
-export function renderHistory(backups: { file: string; data: BackupData }[]): void {
+export function renderHistory(backups: { file: string; data: BackupData }[], title: string): void {
   table({
     spacing: 1,
-    title: `${pc.bold('Historial')}  ${pc.dim(`${backups.length} ejecución(es)`)}`,
+    title: `${pc.bold(title)}  ${pc.dim(`${backups.length} ejecución(es)`)}`,
     columns: [
       { header: 'Fecha' },
       { header: 'Tipo' },

@@ -117,7 +117,7 @@ export const FLAGS = {
     type: 'boolean',
     help: 'muestra cada llamada a la API',
     group: 'Salida',
-    commands: [...BETWEEN_ENVS, 'restore'],
+    commands: [...BETWEEN_ENVS, 'restore', 'history'],
   },
   version: { type: 'boolean', short: 'v', help: 'muestra la versión', group: 'General', commands: 'global' },
   help: { type: 'boolean', short: 'h', help: 'muestra esta ayuda', group: 'General', commands: 'global' },

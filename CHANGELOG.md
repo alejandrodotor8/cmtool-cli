@@ -2,6 +2,18 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.6.0 — 2026-10-07
+
+### Agregado
+
+- **Varias cuentas de Contentful en la misma máquina**: cada respaldo registra la cuenta (usuario, email y región) y se guarda en `~/.ctf-migrate/backups/<cuenta>/`. `history` y `restore` solo muestran los de la cuenta con la que iniciaste sesión, y `restore` no deja restaurar un respaldo de otra cuenta (te dice cuál es y que inicies sesión con ella).
+- Los respaldos anteriores, que no registran cuenta, se siguen viendo, aparte y con aviso.
+
+### Cambiado
+
+- `history` hace 1 llamada a la API (para saber qué cuenta eres) y acepta `--verbose`.
+- La cuenta se consulta una sola vez por ejecución; "solo las que editaste tú" la reutiliza.
+
 ## 0.5.0 — 2026-10-07
 
 ### Cambiado

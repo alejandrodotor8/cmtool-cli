@@ -1,12 +1,13 @@
 /**
  * Respaldos locales de cada ejecución, para poder deshacerla con `cfm restore`.
- * Se guardan en ~/.ctf-migrate/backups/, legibles solo por el usuario. La carpeta conserva el
- * nombre anterior de la herramienta para no perder los respaldos que ya existen.
+ * Se guardan en ~/.ctf-migrate/backups/<usuario>/, una carpeta por cuenta de Contentful para
+ * que no se mezclen, legibles solo por el usuario del sistema. La carpeta conserva el nombre
+ * anterior de la herramienta para no perder los respaldos que ya existen.
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { Entry, TagLink } from './contentful/types.ts';
+import type { Account, Entry, TagLink } from './contentful/types.ts';
 import { contentTypeOf } from './core/entries.ts';
 import { AbortError } from './errors.ts';
 
@@ -30,6 +31,8 @@ export interface BackupData {
   /** Qué comando lo creó: migrar entries, modelo o imágenes, o un restore. */
   kind: 'migrate' | 'model' | 'assets' | 'restore';
   createdAt: string;
+  /** Cuenta que hizo la ejecución. Falta en los respaldos anteriores a la versión 0.6.0. */
+  account?: Account;
   spaceId: string;
   src: string;
   dst: string;
@@ -48,7 +51,15 @@ export type Backup = ReturnType<typeof startBackup>;
  * Crea el archivo de respaldo y lo vuelve a guardar en cada cambio, para que quede
  * completo aunque el proceso se corte a la mitad.
  */
-export function startBackup(meta: Pick<BackupData, 'kind' | 'spaceId' | 'src' | 'dst' | 'rootIds'>, dir = BACKUP_DIR) {
+/** Carpeta de respaldos de una cuenta (el ID solo con letras, números, - y _: no puede salirse de la raíz). */
+export const accountBackupDir = (account: Pick<Account, 'userId'>, root = BACKUP_DIR) =>
+  path.join(root, account.userId.replace(/[^A-Za-z0-9_-]/g, '_'));
+
+export function startBackup(
+  meta: Pick<BackupData, 'kind' | 'spaceId' | 'src' | 'dst' | 'rootIds'> & { account: Account },
+  root = BACKUP_DIR,
+) {
+  const dir = accountBackupDir(meta.account, root);
   const createdAt = new Date().toISOString();
   const data: BackupData = {
     version: 1,
@@ -112,8 +123,10 @@ export function readBackup(file: string): BackupData {
   return data;
 }
 
-/** Respaldos guardados, del más reciente al más antiguo. Ignora archivos que no se puedan leer. */
-export function listBackups(dir = BACKUP_DIR): { file: string; data: BackupData }[] {
+export type BackupFile = { file: string; data: BackupData };
+
+/** Respaldos (`.json` válidos) de una carpeta, del más reciente al más antiguo. */
+function readDir(dir: string): BackupFile[] {
   if (!fs.existsSync(dir)) return [];
   return fs
     .readdirSync(dir)
@@ -124,4 +137,18 @@ export function listBackups(dir = BACKUP_DIR): { file: string; data: BackupData 
       return data ? [{ file, data }] : [];
     })
     .sort((a, b) => b.data.createdAt.localeCompare(a.data.createdAt));
+}
+
+/**
+ * Respaldos de una cuenta (`mine`) y los anteriores a 0.6.0, que no registran cuenta
+ * (`legacy`). Los de otras cuentas no aparecen.
+ */
+export function listBackups(
+  account: Pick<Account, 'userId'>,
+  root = BACKUP_DIR,
+): { mine: BackupFile[]; legacy: BackupFile[] } {
+  return {
+    mine: readDir(accountBackupDir(account, root)),
+    legacy: readDir(root).filter(({ data }) => !data.account),
+  };
 }

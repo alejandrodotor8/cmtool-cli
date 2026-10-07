@@ -98,7 +98,7 @@ export async function migrate(args: CliArgs): Promise<number> {
     );
   }
 
-  const write = startWriting(ctx, 'migrate', rootIds);
+  const write = await startWriting(ctx, 'migrate', rootIds);
   await executePlan(plan, analysis, write);
   return finishWriting(ctx, write, {
     title: 'Migración lista',

@@ -9,8 +9,10 @@ import { listBackups, readBackup } from '../backup.ts';
 import type { CliArgs } from '../cli-args.ts';
 import { createCma } from '../contentful/client.ts';
 import { fetchEntries, listEnvironments } from '../contentful/read.ts';
-import { restoreStatus, shouldRestore } from '../core/restore.ts';
+import { backupOwner, OWNER, restoreStatus, shouldRestore } from '../core/restore.ts';
+import { AbortError } from '../errors.ts';
 import { printTitle } from '../ui/header.ts';
+import { log } from '../ui/log.ts';
 import { pickBackup } from '../ui/prompts.ts';
 import { withStatus } from '../ui/status.ts';
 import { renderRestore } from '../ui/views/restore.ts';
@@ -27,7 +29,19 @@ import {
 export async function restore(args: CliArgs): Promise<number> {
   printTitle('Deshacer una migración', { dryRun: args.dryRun });
   const base = openSession(args);
-  const data = readBackup(args.file ? path.resolve(args.file) : await pickBackup(listBackups()));
+  const account = await base.account();
+  const data = readBackup(args.file ? path.resolve(args.file) : await pickBackup(listBackups(account)));
+
+  // Un respaldo solo lo restaura la cuenta que lo hizo.
+  const owner = backupOwner(data, account);
+  if (owner === OWNER.OTHER) {
+    throw new AbortError(
+      `Este respaldo lo hizo otra cuenta (${data.account?.email ?? data.account?.userId}, ${data.account?.host}).`,
+      'Para restaurarlo, inicia sesión con esa cuenta: contentful login',
+    );
+  }
+  if (owner === OWNER.LEGACY)
+    log.warn('Este respaldo es anterior y no registra qué cuenta lo hizo: revisa que sea tuyo.');
   const cma = createCma(base.session, data.spaceId, base.api.onRequest);
 
   const [current, envs] = await withStatus(
@@ -54,7 +68,7 @@ export async function restore(args: CliArgs): Promise<number> {
   if (!(await confirmWriting(ctx, `¿Restaurar ${toRestore.length} entry(s) en ${pc.bold(data.dst)}?`))) return 0;
 
   // El restore también se respalda, así que se puede deshacer.
-  const write = startWriting(ctx, 'restore');
+  const write = await startWriting(ctx, 'restore');
   write.runner.start('Restaurando', toRestore.length);
   for (const { saved } of toRestore) {
     await write.runner.run(`${saved.title} ${pc.dim(saved.id)}`, async () => {

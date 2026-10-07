@@ -165,7 +165,8 @@ export async function listEntries(
   }
 }
 
-/** ID del usuario de la sesión (para "solo las que editaste tú"). */
-export async function currentUserId(cma: Cma): Promise<string> {
-  return (await cma.user.getCurrent()).sys.id;
+/** Usuario de la sesión: separa respaldos por cuenta y sirve para "solo las que editaste tú". */
+export async function currentUser(cma: Cma): Promise<{ id: string; email: string | undefined }> {
+  const user = await cma.user.getCurrent();
+  return { id: user.sys.id, email: user.email };
 }

@@ -13,15 +13,14 @@ import { createWriter } from '../contentful/write.ts';
 import { restoreStatus, shouldRestore } from '../core/restore.ts';
 import { loadSession } from '../session.ts';
 import { trackApiCalls } from '../ui/api-calls.ts';
+import { printHeader, type RunMode } from '../ui/header.ts';
 import { log } from '../ui/log.ts';
 import { confirmWrite, pickBackup } from '../ui/prompts.ts';
 import { createRunner } from '../ui/runner.ts';
 import { renderRestore } from '../ui/views.ts';
 
-export async function restore({ dryRun, file, verbose }: CliArgs): Promise<number> {
-  console.log(
-    pc.bold('\nContentful · deshacer una migración') + pc.dim(dryRun ? '  (--dry-run: no se escribe nada)' : ''),
-  );
+export async function restore({ dryRun, file, verbose }: CliArgs, mode: RunMode): Promise<number> {
+  printHeader('Contentful · deshacer una migración', { dryRun, mode });
 
   const session = loadSession();
   const backupFile = file ? path.resolve(file) : await pickBackup(listBackups());

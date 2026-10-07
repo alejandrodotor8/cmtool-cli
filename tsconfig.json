@@ -6,7 +6,7 @@
     "moduleResolution": "nodenext",
     "types": ["node"],
 
-    // Node ejecuta los .ts quitando los tipos; tsc solo revisa, no compila.
+    // Node ejecuta los .ts quitando los tipos; este tsconfig solo revisa. El build usa tsconfig.build.json.
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true,
@@ -20,5 +20,5 @@
     "checkJs": true,
     "skipLibCheck": true
   },
-  "include": ["index.mjs", "src", "test"]
+  "include": ["bin", "src", "test"]
 }

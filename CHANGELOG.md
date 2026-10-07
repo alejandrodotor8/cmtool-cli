@@ -17,6 +17,8 @@
 
 ### Cambiado
 
+- **Dos comandos**: `ctf-migrate` corre el build (`dist/`, se genera con el script `build`) y `ctf-migrate-dev` corre el código fuente sin compilar. `dist/` no se sube al repo.
+
 - **Cualquier gestor de paquetes**: npm, pnpm o bun. No se suben lockfiles y no hay `packageManager`; las dependencias directas tienen versión exacta. El README muestra cómo instalar, correr y quitar el comando con cada uno.
 - README con instalación separada para **macOS** y **Windows** (PowerShell, permisos de scripts, terminal recomendada, token por sistema), cómo cambiar de gestor y cómo pasarle el proyecto a otra persona.
 - Un **texto enlazado** en un rich text ya no se considera hijo: no se migra.

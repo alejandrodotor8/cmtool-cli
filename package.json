@@ -5,10 +5,13 @@
   "description": "Migra entries de Contentful entre ambientes de forma interactiva, dejándolas en draft",
   "type": "module",
   "bin": {
-    "ctf-migrate": "./index.mjs"
+    "ctf-migrate": "./bin/ctf-migrate.mjs",
+    "ctf-migrate-dev": "./bin/ctf-migrate-dev.mjs"
   },
   "scripts": {
-    "start": "node index.mjs",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "start": "node bin/ctf-migrate.mjs",
+    "dev": "node bin/ctf-migrate-dev.mjs",
     "typecheck": "tsc",
     "lint": "biome check .",
     "format": "biome check --write .",

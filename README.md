@@ -50,14 +50,17 @@ Desde la carpeta del proyecto, con tu gestor:
 | | npm | pnpm | bun |
 | --- | --- | --- | --- |
 | **Instalar dependencias** | `npm install` | `pnpm install` | `bun install` |
-| **Instalar el comando `ctf-migrate`** | `npm link` | `pnpm add -g "link:$PWD"` | `bun link` |
-| **Quitar el comando** | `npm rm -g ctf-migrate` | `pnpm rm -g ctf-migrate` | `bun unlink` (desde la carpeta) |
-| **Correr sin instalar el comando** | `npm start -- --dry-run` | `pnpm start --dry-run` | `bun run start --dry-run` |
+| **Compilar (build)** | `npm run build` | `pnpm build` | `bun run build` |
+| **Instalar los comandos** | `npm link` | `pnpm add -g "link:$PWD"` | `bun link` |
+| **Quitar los comandos** | `npm rm -g ctf-migrate` | `pnpm rm -g ctf-migrate` | `bun unlink` (desde la carpeta) |
+| **Correr el build sin instalar** | `npm start -- --dry-run` | `pnpm start --dry-run` | `bun run start --dry-run` |
+| **Correr el código fuente sin instalar** | `npm run dev -- --dry-run` | `pnpm dev --dry-run` | `bun run dev --dry-run` |
 
 Los comandos son los mismos en macOS y Windows (en PowerShell, `$PWD` también es la carpeta actual).
 
-- **El comando es un enlace a esta carpeta, no una copia**: los cambios al código se aplican al instante. Por eso con pnpm se usa `link:` (en pnpm 10+ ya no existe `pnpm link --global`). Una copia no funcionaría: Node no ejecuta `.ts` dentro de `node_modules`.
-- **Instala el comando con un solo gestor.** Si tienes dos instalaciones, gana la que esté primero en el PATH y es fácil confundirse.
+- **Se instalan dos comandos** (ver [Build y desarrollo](#build-y-desarrollo)): `ctf-migrate`, que corre el build, y `ctf-migrate-dev`, que corre el código fuente.
+- **El comando es un enlace a esta carpeta, no una copia.** Por eso con pnpm se usa `link:` (en pnpm 10+ ya no existe `pnpm link --global`). `ctf-migrate-dev` además lo necesita: Node no ejecuta `.ts` dentro de `node_modules`.
+- **Instala los comandos con un solo gestor.** Si tienes dos instalaciones, gana la que esté primero en el PATH y es fácil confundirse.
 
 ### Cambiar de gestor de paquetes
 
@@ -84,6 +87,19 @@ Crea un token en Contentful (*Settings → CMA tokens*) y defínelo en la termin
 | --- | --- |
 | macOS | `export CONTENTFUL_MANAGEMENT_TOKEN=<token>` |
 | Windows (PowerShell) | `$env:CONTENTFUL_MANAGEMENT_TOKEN = "<token>"` |
+
+### Build y desarrollo
+
+| Comando | Qué corre | Cuándo cambia |
+| --- | --- | --- |
+| `ctf-migrate` | el **build**: JavaScript compilado en `dist/` | solo cuando vuelves a correr el script `build` |
+| `ctf-migrate-dev` | el **código fuente** de `src/`, sin compilar | al instante, con cada cambio que guardes |
+
+- Usa **`ctf-migrate`** para trabajar: no le afectan los cambios a medio hacer ni cambiar de rama en git.
+- Usa **`ctf-migrate-dev`** mientras programas: lo indica en la cabecera con *[desarrollo: código fuente]*.
+- **Después de actualizar el código** (cambiar de rama, fusionar, recibir una versión nueva), vuelve a correr el script `build` para que `ctf-migrate` use lo nuevo.
+- Si corres `ctf-migrate` sin haber compilado, te dice que corras el `build` (o que uses `ctf-migrate-dev`).
+- `dist/` no se sube al repo: cada quien lo genera con su gestor.
 
 ### Notas
 
@@ -195,8 +211,12 @@ Cada migración guarda un respaldo en `~/.ctf-migrate/backups/` (en Windows, `C:
 Cada comando se lee de arriba abajo en [src/commands/](src/commands/). El código está separado por responsabilidad: lo que lee, lo que decide, lo que muestra y lo que escribe.
 
 ```text
-index.mjs                entrada del comando (JS; Node carga los .ts de src/)
+bin/
+  ctf-migrate.mjs        comando del build: carga dist/cli.js
+  ctf-migrate-dev.mjs    comando de desarrollo: carga src/cli.ts sin compilar
+dist/                    build generado (no se sube); tsconfig.build.json lo configura
 src/
+  cli.ts                 arranque: corre main y traduce errores a mensajes y códigos de salida
   main.ts                lee los argumentos y corre el comando
   cli-args.ts            argumentos (--space/--from/--to/--ids, --dry-run, --verbose, restore)
   commands/
@@ -227,13 +247,14 @@ src/
     prompts.ts           preguntas al usuario
     table.ts             dibujo de tablas
     log.ts               mensajes de estado
+    header.ts            título de cada comando (avisa --dry-run y modo desarrollo)
     runner.ts            ejecuta escrituras una por una (✔ / ✖)
     api-calls.ts         cuenta las llamadas a la API (y las muestra con --verbose)
 ```
 
 ## Desarrollo
 
-El código es TypeScript. Node lo ejecuta quitando los tipos, así que **no hay paso de compilación**: editas un `.ts` y corres `ctf-migrate`.
+El código es TypeScript. `ctf-migrate-dev` lo ejecuta directo (Node quita los tipos al vuelo): editas un `.ts` y lo corres. `ctf-migrate` usa el build, que se regenera con el script `build`.
 
 Con tu gestor (`npm run …`, `pnpm …` o `bun run …`):
 
@@ -244,7 +265,9 @@ Con tu gestor (`npm run …`, `pnpm …` o `bun run …`):
 | `format` | aplica el formato y los arreglos automáticos de Biome |
 | `test` | tests (`node:test`, sin dependencias extra) |
 | `check` | typecheck + lint + tests; córrelo antes de hacer commit |
-| `start` | corre la herramienta desde la carpeta, sin el comando global |
+| `build` | compila `src/` a `dist/` (lo que corre `ctf-migrate`) |
+| `start` | corre el build desde la carpeta, sin el comando global |
+| `dev` | corre el código fuente desde la carpeta, sin el comando global |
 
 Por ejemplo: `npm run check`, `pnpm check` o `bun run check`. Los tests siempre corren con Node (`node --test`), también con bun.
 

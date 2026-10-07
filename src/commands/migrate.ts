@@ -21,6 +21,7 @@ import { AbortError } from '../errors.ts';
 import { executePlan } from '../execute.ts';
 import { loadSession } from '../session.ts';
 import { trackApiCalls } from '../ui/api-calls.ts';
+import { printHeader, type RunMode } from '../ui/header.ts';
 import { log } from '../ui/log.ts';
 import {
   askEntryIds,
@@ -34,12 +35,13 @@ import {
 } from '../ui/prompts.ts';
 import { renderAssets, renderEntryTree, renderModel, renderSummary } from '../ui/views.ts';
 
-export async function migrate(args: CliArgs): Promise<number> {
+export async function migrate(args: CliArgs, mode: RunMode): Promise<number> {
   const { dryRun } = args;
-  console.log(
-    pc.bold('\nContentful · migrar entries entre ambientes') +
-      pc.dim(dryRun ? '  (--dry-run: no se escribe nada)' : '  (entries e imágenes quedan en draft)'),
-  );
+  printHeader('Contentful · migrar entries entre ambientes', {
+    dryRun,
+    mode,
+    note: 'entries e imágenes quedan en draft',
+  });
 
   // 1. Qué migrar y hacia dónde
   const session = loadSession();

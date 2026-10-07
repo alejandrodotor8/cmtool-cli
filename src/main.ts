@@ -5,12 +5,13 @@
 import { parseCliArgs, USAGE } from './cli-args.ts';
 import { migrate } from './commands/migrate.ts';
 import { restore } from './commands/restore.ts';
+import type { RunMode } from './ui/header.ts';
 
-export async function main(argv: string[]): Promise<number> {
+export async function main(argv: string[], mode: RunMode): Promise<number> {
   const args = parseCliArgs(argv);
   if (args.help) {
     console.log(USAGE);
     return 0;
   }
-  return args.command === 'restore' ? restore(args) : migrate(args);
+  return args.command === 'restore' ? restore(args, mode) : migrate(args, mode);
 }

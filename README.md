@@ -99,6 +99,8 @@ Crea un token en Contentful (*Settings → CMA tokens*) y defínelo en la termin
 - Usa **`ctf-migrate-dev`** mientras programas: lo indica en la cabecera con *[desarrollo: código fuente]*.
 - **Después de actualizar el código** (cambiar de rama, fusionar, recibir una versión nueva), vuelve a correr el script `build` para que `ctf-migrate` use lo nuevo.
 - Si corres `ctf-migrate` sin haber compilado, te dice que corras el `build` (o que uses `ctf-migrate-dev`).
+- Si el código de `src/` es más nuevo que el build, `ctf-migrate` **avisa** antes de empezar (y sigue corriendo la versión anterior).
+- **No hace falta volver a instalar los comandos** después de un build: apuntan a esta carpeta y toman el `dist/` nuevo. Solo hay que repetir la instalación si mueves la carpeta, si cambian los comandos en `package.json` o, con npm, si cambias de versión de Node.
 - `dist/` no se sube al repo: cada quien lo genera con su gestor.
 
 ### Notas
@@ -215,7 +217,8 @@ Cada comando se lee de arriba abajo en [src/commands/](src/commands/). El códig
 
 ```text
 bin/
-  ctf-migrate.mjs        comando del build: carga dist/cli.js
+  ctf-migrate.mjs        comando del build: carga dist/cli.js (avisa si el build quedó viejo)
+  stale-build.mjs        compara las fechas de src/ y del build
   ctf-migrate-dev.mjs    comando de desarrollo: carga src/cli.ts sin compilar
 dist/                    build generado (no se sube); tsconfig.build.json lo configura
 src/

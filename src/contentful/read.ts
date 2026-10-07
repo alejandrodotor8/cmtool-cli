@@ -70,10 +70,16 @@ export async function readEntryTree(cma: Cma, environmentId: string, rootIds: st
   while (level.length) {
     const found = await fetchEntries(cma, environmentId, level);
     const next: string[] = [];
+    const missingRoots = level.filter((id) => !found.has(id) && rootIds.includes(id));
+    if (missingRoots.length) {
+      throw new AbortError(
+        `${missingRoots.length === 1 ? 'Esta entry no existe' : `Estas ${missingRoots.length} entries no existen`} en ${environmentId}: ${missingRoots.join(', ')}`,
+        'Revisa los IDs (o que estés en el space y ambiente correctos) y vuelve a correr.',
+      );
+    }
     for (const id of level) {
       const entry = found.get(id);
       if (!entry) {
-        if (rootIds.includes(id)) throw new AbortError(`La entry ${id} no existe en ${environmentId}.`);
         broken.add(id);
         continue;
       }

@@ -60,6 +60,7 @@ describe('parseCliArgs', () => {
     ['migrate', 'algo'],
     ['restore', '--from', 'develop'],
     ['--ids', ' , '],
+    ['--ids', 'abc,https://app.contentful.com/spaces/s1/assets/img1'],
     ['--space', ' '],
     ['--from'],
   ]) {

@@ -27,6 +27,15 @@ describe('readEntryTree', () => {
     await assert.rejects(readEntryTree(cma, 'develop', ['no-existe']), AbortError);
   });
 
+  test('si faltan varias de las que pegaste, las lista todas', async () => {
+    const { cma } = fakeCma([entry('banner', 'banner')]);
+    await assert.rejects(readEntryTree(cma, 'develop', ['banner', 'falta1', 'falta2']), (e: Error) => {
+      assert.ok(e instanceof AbortError);
+      assert.match(e.message, /Estas 2 entries no existen en develop: falta1, falta2/);
+      return true;
+    });
+  });
+
   test('los ciclos no se quedan en un loop', async () => {
     const { cma } = fakeCma([
       entry('a', 'x', { b: { 'es-CO': link('b') } }),

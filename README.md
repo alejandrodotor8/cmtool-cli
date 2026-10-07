@@ -124,7 +124,10 @@ ctf-migrate
 
 1. Elige el **space**.
 2. Elige el ambiente **origen** y el **destino**.
-3. Pega uno o varios **entry IDs** (también acepta URLs de Contentful).
+3. Pega uno o varios **entry IDs**. También acepta la **URL de la entry** tal como la copias del navegador (`https://app.contentful.com/spaces/…/entries/<entry id>`).
+   - Uno por línea, o separados por coma, punto y coma, espacio o tabulación: puedes **pegar una columna o una fila de Excel**.
+   - Presiona **Enter en una línea vacía** para terminar.
+   - Si algo no tiene forma de entry ID (por ejemplo, la URL de un asset), te dice cuál y te deja pegar de nuevo. Si varios IDs no existen en origen, te los lista todos.
 4. Revisa el árbol: la entry que pegaste (**padre**) y las entries a las que apunta (**hijos**).
    - El padre se crea o, si ya existe en destino, se actualiza.
    - Un hijo que ya existe en destino **se reutiliza sin tocarlo**. Igual se muestra lo que tiene debajo y se revisa su modelo.

@@ -1,6 +1,7 @@
 /**
  * Preguntas al usuario. Cada función devuelve la respuesta; no lee ni escribe en Contentful.
  */
+import { createInterface } from 'node:readline';
 import { checkbox, confirm, input, Separator, select } from '@inquirer/prompts';
 import pc from 'picocolors';
 import { BACKUP_DIR, type BackupData } from '../backup.ts';
@@ -32,12 +33,53 @@ export const pickSource = (envs: Environment[]): Promise<string> =>
 export const pickDestination = (envs: Environment[], src: string): Promise<string> =>
   select({ message: 'Ambiente DESTINO', choices: envChoices(envs).filter((c) => c.value !== src), pageSize: 15 });
 
-export async function askEntryIds(): Promise<string[]> {
-  const raw = await input({
-    message: 'Entry ID(s) o URL(s) (separados por coma o espacio)',
-    validate: (v) => parseEntryIds(v).length > 0 || 'Pega al menos un entry ID',
+/**
+ * Lee texto de varias líneas hasta una línea vacía. Así se puede pegar una columna de
+ * Excel, que llega como una línea por celda. Ctrl+C cancela igual que en los demás prompts.
+ */
+function readUntilEmptyLine(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: process.stdin.isTTY });
+    const lines: string[] = [];
+    rl.on('line', (line) => {
+      if (line.trim()) lines.push(line);
+      else if (lines.length) rl.close();
+    });
+    rl.on('SIGINT', () => {
+      const cancel = new Error('Cancelado');
+      cancel.name = 'ExitPromptError';
+      reject(cancel);
+      rl.close();
+    });
+    rl.on('close', () => resolve(lines.join('\n')));
   });
-  return parseEntryIds(raw);
+}
+
+/** Pide los entry IDs (o URLs de entries). Repite la pregunta si algo no tiene forma de entry ID. */
+export async function askEntryIds(): Promise<string[]> {
+  console.log(
+    `${pc.green('?')} ${pc.bold('Entry IDs de Contentful')} ${pc.dim('(o la URL de la entry, copiada del navegador)')}`,
+  );
+  console.log(
+    pc.dim(
+      '  Uno por línea (puedes pegar una columna de Excel) o separados por coma o espacio.\n' +
+        '  Presiona Enter en una línea vacía para terminar.',
+    ),
+  );
+  while (true) {
+    const { ids, invalid } = parseEntryIds(await readUntilEmptyLine());
+    if (invalid.length) {
+      log.err(`Esto no parece un entry ID ni la URL de una entry: ${clip(invalid.join(', '), 80)}`);
+      log.info('Vuelve a pegar los IDs.');
+      continue;
+    }
+    if (!ids.length) {
+      log.warn('Pega al menos un entry ID.');
+      continue;
+    }
+    log.ok(`${ids.length} entry ID(s): ${clip(ids.join(', '), 90)}`);
+    return ids;
+  }
 }
 
 /** Pide confirmación cuando se van a escribir muchas entries de una vez. */

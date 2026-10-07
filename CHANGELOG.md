@@ -17,6 +17,8 @@
 
 ### Cambiado
 
+- **Entry IDs**: la pregunta acepta varias líneas (se puede pegar una columna o fila de Excel; termina con una línea vacía), coma, punto y coma, espacio y tabulación; valida que cada valor sea un entry ID o la URL de una entry, y si faltan varias en origen las lista todas.
+
 - **Dos comandos**: `ctf-migrate` corre el build (`dist/`, se genera con el script `build`) y `ctf-migrate-dev` corre el código fuente sin compilar. `dist/` no se sube al repo.
 
 - **Cualquier gestor de paquetes**: npm, pnpm o bun. No se suben lockfiles y no hay `packageManager`; las dependencias directas tienen versión exacta. El README muestra cómo instalar, correr y quitar el comando con cada uno.

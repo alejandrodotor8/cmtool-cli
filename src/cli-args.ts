@@ -26,7 +26,7 @@ Para no elegir en los menús (migrate):
   --space <id>     space
   --from <env>     ambiente origen (acepta aliases)
   --to <env>       ambiente destino (acepta aliases)
-  --ids <a,b,c>    entry IDs o URLs, separados por coma
+  --ids <a,b,c>    entry IDs (o URLs de entries), separados por coma
 
 Opciones:
   --dry-run        muestra el análisis y el plan, sin escribir nada
@@ -79,7 +79,11 @@ export function parseCliArgs(argv: string[]): CliArgs {
     if (values[name] !== undefined && !values[name].trim()) throw new AbortError(`--${name} está vacío.`, HELP_HINT);
   }
 
-  const ids = values.ids === undefined ? undefined : parseEntryIds(values.ids);
+  const parsedIds = values.ids === undefined ? undefined : parseEntryIds(values.ids);
+  if (parsedIds?.invalid.length) {
+    throw new AbortError(`--ids tiene valores que no son entry IDs: ${parsedIds.invalid.join(', ')}`, HELP_HINT);
+  }
+  const ids = parsedIds?.ids;
   if (ids && !ids.length) throw new AbortError('--ids no tiene ningún entry ID.', HELP_HINT);
 
   return {

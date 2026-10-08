@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { readBackup, startBackup } from '../src/backup.ts';
 import type { ContentType, EditorControl, EditorInterface, Entry } from '../src/contentful/types.ts';
 import { createWriter } from '../src/contentful/write.ts';
+import { editorDifferences } from '../src/core/editor.ts';
 import { CHANGE, modelChangesFrom } from '../src/core/model-changes.ts';
 import { buildPlan } from '../src/core/plan.ts';
 import { applyModelChanges, executePlan, type WriteContext } from '../src/execute.ts';
@@ -130,6 +131,39 @@ describe('executePlan: actualizar una entry con cambios de modelo', () => {
       saved.updated.map((u) => [u.id, u.applied, u.fields]),
       [['b', true, dstEntry.fields]],
     );
+  });
+});
+
+describe('applyModelChanges: campo de referencia nuevo con su apariencia (caso real)', () => {
+  test('agrega el campo y lleva Entry cards sin "Create new entries", en el mismo orden que las herramientas oficiales', async () => {
+    const reference = field('referenciaPantalla', 'Array', { items: { type: 'Link', linkType: 'Entry' } });
+    const dstCT = contentType('banner', [field('title')]);
+    const fromDevelop: EditorControl = {
+      fieldId: 'referenciaPantalla',
+      widgetId: 'entryCardsEditor',
+      widgetNamespace: 'builtin',
+      settings: { helpText: '', bulkEditing: false, showCreateEntityAction: false, showLinkEntityAction: true },
+    };
+    // Así queda la apariencia en master al publicar: Contentful agrega el control por defecto del campo nuevo.
+    const afterPublish = editor([
+      control('title'),
+      { fieldId: 'referenciaPantalla', widgetId: 'entryLinksEditor', widgetNamespace: 'builtin' },
+    ]);
+    const { cma, calls } = fakeCma([], new Map([['banner', afterPublish]]));
+    const ctx = writeContext(cma, 'model');
+    const changes = modelChangesFrom([{ kind: CHANGE.ADD, ctId: 'banner', field: reference }], new Map());
+    const srcEditors = new Map([['banner', editor([control('title'), fromDevelop])]]);
+    await applyModelChanges(changes, new Map([['banner', dstCT]]), async () => srcEditors, ctx);
+
+    assert.deepEqual(ctx.runner.failures, []);
+    assert.deepEqual(
+      calls.map((c) => c.method),
+      ['contentType.update', 'contentType.publish', 'editorInterface.get', 'editorInterface.update'],
+    );
+    const saved = calls[3]?.data as EditorInterface;
+    assert.deepEqual(saved.controls, [control('title'), fromDevelop], 'título intacto; la referencia, como en develop');
+    assert.equal(editorDifferences(srcEditors.get('banner'), saved, [reference]).length, 0, 'ya no hay diferencias');
+    assert.deepEqual(readBackup(ctx.backup.file).editorUpdated, { banner: ['referenciaPantalla'] });
   });
 });
 

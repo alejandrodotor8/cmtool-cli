@@ -30,7 +30,10 @@ describe('reportes', () => {
 
   test('comparación de modelos: incluye qué difiere en la apariencia del editor', () => {
     const editorDiffs = new Map([
-      ['banner', [{ fieldId: 'title', parts: ['helpText' as const], helpText: { src: 'Ayuda' }, widget: {} }]],
+      [
+        'banner',
+        [{ fieldId: 'title', parts: ['helpText' as const], helpText: { src: 'Ayuda' }, widget: {}, settings: [] }],
+      ],
     ]);
     const md = modelComparisonReport(model, { ...envs, dstDefault: 'es-CO' }, editorDiffs, now);
     assert.match(md, /## Apariencia del editor distinta/);

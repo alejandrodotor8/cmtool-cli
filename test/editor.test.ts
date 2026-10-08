@@ -83,6 +83,36 @@ describe('editorDifferences', () => {
     );
   });
 
+  describe('campo de referencia (lo que muestra la pantalla de apariencia)', () => {
+    const ref = field('ref', 'Array', { items: { type: 'Link', linkType: 'Entry' } });
+    const control = (widgetId: string, settings?: EditorControl['settings']): EditorControl => ({
+      fieldId: 'ref',
+      widgetId,
+      widgetNamespace: 'builtin',
+      ...(settings && { settings }),
+    });
+    const defaults = { helpText: '', bulkEditing: false, showCreateEntityAction: true, showLinkEntityAction: true };
+
+    test('los ajustes por defecto guardados al confirmar son iguales a no tenerlos', () => {
+      const src = editor([control('entryLinksEditor', defaults)]);
+      assert.deepEqual(editorDifferences(src, editor([control('entryLinksEditor')]), [ref]), []);
+    });
+
+    test('Entry cards sin "Create new entries" frente a Entry links por defecto: widget y ajuste', () => {
+      const src = editor([control('entryCardsEditor', { ...defaults, showCreateEntityAction: false })]);
+      const [diff] = editorDifferences(src, editor([control('entryLinksEditor')]), [ref]);
+      assert.deepEqual(diff?.parts, ['widget', 'settings']);
+      assert.deepEqual(diff?.widget, { src: 'entryCardsEditor', dst: 'entryLinksEditor' });
+      assert.deepEqual(diff?.settings, [{ key: 'showCreateEntityAction', src: false, dst: true }]);
+    });
+
+    test('solo cambia "Create new entries"', () => {
+      const src = editor([control('entryLinksEditor', { showCreateEntityAction: false })]);
+      const [diff] = editorDifferences(src, editor([control('entryLinksEditor', defaults)]), [ref]);
+      assert.deepEqual(diff?.parts, ['settings']);
+    });
+  });
+
   test('de un widget de app en origen solo compara el help text', () => {
     const src = editor([{ fieldId: 'color', widgetId: 'app-1', widgetNamespace: 'app', settings: { paleta: 'x' } }]);
     assert.deepEqual(editorDifferences(src, editor([builtin('color')]), [field('color')]), []);

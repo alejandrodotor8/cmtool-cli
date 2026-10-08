@@ -72,7 +72,13 @@ describe('executePlan: actualizar una entry con cambios de modelo', () => {
     };
     const subtitle = srcCT.fields[1];
     assert.ok(subtitle);
-    const editorDiff = { fieldId: 'title', parts: ['helpText' as const], helpText: { src: 'Ayuda' }, widget: {} };
+    const editorDiff = {
+      fieldId: 'title',
+      parts: ['helpText' as const],
+      helpText: { src: 'Ayuda' },
+      widget: {},
+      settings: [],
+    };
     const plan = buildPlan(analysis, {
       withAssets: false,
       picked: [

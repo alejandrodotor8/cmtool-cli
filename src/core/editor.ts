@@ -28,9 +28,36 @@ const DEFAULT_WIDGET: Record<string, string> = {
   'Array<Asset>': 'assetLinksEditor',
 };
 
+/** Ajustes de los widgets de referencias (entries o archivos) cuando no se tocaron. */
+const REFERENCE_DEFAULTS = { showCreateEntityAction: true, showLinkEntityAction: true, bulkEditing: false };
+
+/**
+ * Lo que vale cada ajuste de un widget cuando no está guardado. Contentful guarda estos
+ * valores al confirmar la apariencia aunque no se cambien: guardados o no, se ven igual.
+ */
+const DEFAULT_SETTINGS: Record<string, Record<string, unknown>> = {
+  entryLinkEditor: REFERENCE_DEFAULTS,
+  entryLinksEditor: REFERENCE_DEFAULTS,
+  entryCardEditor: REFERENCE_DEFAULTS,
+  entryCardsEditor: REFERENCE_DEFAULTS,
+  assetLinkEditor: REFERENCE_DEFAULTS,
+  assetLinksEditor: REFERENCE_DEFAULTS,
+  assetGalleryEditor: REFERENCE_DEFAULTS,
+  boolean: { trueLabel: 'Yes', falseLabel: 'No' },
+  rating: { stars: 5 },
+  datePicker: { format: 'timeZ', ampm: '24' },
+};
+
 /** Qué parte de la apariencia de un campo difiere. */
 export const EDITOR_PART = { HELP_TEXT: 'helpText', WIDGET: 'widget', SETTINGS: 'settings' } as const;
 export type EditorPart = (typeof EDITOR_PART)[keyof typeof EDITOR_PART];
+
+/** Un ajuste del widget con otro valor en destino (ya con los valores por defecto aplicados). */
+export interface SettingChange {
+  key: string;
+  src: unknown;
+  dst: unknown;
+}
 
 /** Un campo con otra apariencia en destino: qué difiere y los valores de cada lado. */
 export interface EditorFieldDiff {
@@ -38,6 +65,7 @@ export interface EditorFieldDiff {
   parts: EditorPart[];
   helpText: { src?: string; dst?: string };
   widget: { src?: string; dst?: string };
+  settings: SettingChange[];
 }
 
 /**
@@ -70,13 +98,24 @@ const widgetOf = (c: EditorControl | undefined, field: Field): string | undefine
   return id && c && !isBuiltin(c) ? `${c.widgetNamespace}:${id}` : id;
 };
 
-/** Los ajustes del widget sin el help text ni los valores vacíos (`{}` es igual a no tener ajustes). */
-const otherSettings = (c: EditorControl | undefined): string => {
-  const entries = Object.entries(c?.settings ?? {}).filter(
+/**
+ * Los ajustes del widget como se ven en Contentful: los valores por defecto del widget,
+ * con los guardados encima. Sin el help text ni valores vacíos.
+ */
+function effectiveSettings(c: EditorControl | undefined, widget: string | undefined): Record<string, unknown> {
+  const own = Object.entries(c?.settings ?? {}).filter(
     ([key, value]) => key !== 'helpText' && value !== undefined && value !== null && value !== '',
   );
-  return stableJson(Object.fromEntries(entries));
-};
+  return { ...(widget ? DEFAULT_SETTINGS[widget] : {}), ...Object.fromEntries(own) };
+}
+
+/** Los ajustes que tienen otro valor en destino. */
+function settingChanges(src: Record<string, unknown>, dst: Record<string, unknown>): SettingChange[] {
+  const keys = [...new Set([...Object.keys(src), ...Object.keys(dst)])].sort();
+  return keys
+    .filter((key) => stableJson(src[key] ?? null) !== stableJson(dst[key] ?? null))
+    .map((key) => ({ key, src: src[key], dst: dst[key] }));
+}
 
 /**
  * Qué difiere entre la apariencia de un campo en origen y en destino, mirando solo lo que
@@ -86,14 +125,16 @@ function fieldEditorDiff(src: EditorControl, dst: EditorControl | undefined, fie
   const helpText = { src: helpTextOf(src), dst: helpTextOf(dst) };
   const widget = { src: widgetOf(src, field), dst: widgetOf(dst, field) };
   const parts: EditorPart[] = [];
+  let settings: SettingChange[] = [];
   if (helpText.src !== helpText.dst) parts.push(EDITOR_PART.HELP_TEXT);
   if (isBuiltin(src)) {
     // Sin widget conocido en un lado (tipo de campo sin widget por defecto conocido), no se compara.
     const widgetKnown = widget.src !== undefined && widget.dst !== undefined;
     if (widgetKnown && widget.src !== widget.dst) parts.push(EDITOR_PART.WIDGET);
-    else if (otherSettings(src) !== otherSettings(dst)) parts.push(EDITOR_PART.SETTINGS);
+    settings = settingChanges(effectiveSettings(src, widget.src), effectiveSettings(dst, widget.dst));
+    if (settings.length) parts.push(EDITOR_PART.SETTINGS);
   }
-  return { fieldId: field.id, parts, helpText, widget };
+  return { fieldId: field.id, parts, helpText, widget, settings };
 }
 
 /** De `fields`, los que tienen otra apariencia en destino. Sin control en origen no hay nada que copiar. */

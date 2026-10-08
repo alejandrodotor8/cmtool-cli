@@ -18,6 +18,7 @@ const helpTextDiff = (fieldId: string, dst?: string): EditorFieldDiff => ({
   parts: ['helpText'],
   helpText: { src: 'Usa una imagen de 1200×600', dst },
   widget: {},
+  settings: [],
 });
 
 describe('modelPicksSummary', () => {
@@ -65,10 +66,26 @@ describe('apariencia del editor en el estado del modelo', () => {
     assert.equal(editorDiffText(helpTextDiff('title', 'Otra ayuda'), 'qa'), 'help text distinto (en qa: «Otra ayuda»)');
     assert.equal(
       editorDiffText(
-        { fieldId: 'b', parts: ['widget'], helpText: {}, widget: { src: 'dropdown', dst: 'singleLine' } },
+        { fieldId: 'b', parts: ['widget'], helpText: {}, widget: { src: 'dropdown', dst: 'singleLine' }, settings: [] },
         'qa',
       ),
-      'widget dropdown (en qa: singleLine)',
+      'widget «Dropdown» (en qa: «Single line»)',
+    );
+  });
+
+  test('nombra el widget y cada ajuste como en la pantalla de Contentful', () => {
+    assert.equal(
+      editorDiffText(
+        {
+          fieldId: 'ref',
+          parts: ['widget', 'settings'],
+          helpText: {},
+          widget: { src: 'entryCardsEditor', dst: 'entryLinksEditor' },
+          settings: [{ key: 'showCreateEntityAction', src: false, dst: true }],
+        },
+        'master',
+      ),
+      'widget «Entry cards» (en master: «Entry links») · Show "Create new entries": no (en master: sí)',
     );
   });
 

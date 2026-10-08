@@ -376,7 +376,7 @@ describe('buildPlan: solo apariencia del editor', () => {
           {
             kind: 'editor',
             ctId: 'imagen',
-            editor: { fieldId: 'title', parts: ['helpText'], helpText: {}, widget: {} },
+            editor: { fieldId: 'title', parts: ['helpText'], helpText: {}, widget: {}, settings: [] },
           },
         ],
       },

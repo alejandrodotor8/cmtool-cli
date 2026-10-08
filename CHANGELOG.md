@@ -2,6 +2,14 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.12.1 — 2026-10-08
+
+### Corregido
+
+- **Apariencia del editor**: los ajustes por defecto de un widget que Contentful guarda al confirmar la apariencia (en una referencia: *Use bulk editing: No*, *Show "Create new entries": Yes*, *Show "Link existing entries": Yes*; también los de Boolean, Rating y Date picker) contaban como diferencia frente a un campo que nunca se tocó. Ahora cuentan como iguales.
+- Si cambian el widget y también un ajuste (por ejemplo, *Entry cards* sin *Create new entries*), ahora se ven los dos; antes solo se veía el widget.
+- La diferencia de ajustes dice cuál y con qué valor (*Show "Create new entries": no (en master: sí)*), y los widgets salen con el nombre que se ve en Contentful (*Entry cards*, no `entryCardsEditor`).
+
 ## 0.12.0 — 2026-10-08
 
 ### Cambiado

@@ -90,6 +90,50 @@ export function ruleUpdateText({ rules, field, dstField }: FieldRow): string {
 const clipText = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 const quoted = (text: string | undefined) => (text ? `«${clipText(text, 40)}»` : 'vacío');
 
+/** Nombres de los widgets de Contentful, como se ven en la pantalla de apariencia. */
+const WIDGET_LABEL: Record<string, string> = {
+  singleLine: 'Single line',
+  multipleLine: 'Multiple line',
+  markdown: 'Markdown',
+  richTextEditor: 'Rich text',
+  dropdown: 'Dropdown',
+  radio: 'Radio',
+  checkbox: 'Checkbox',
+  tagEditor: 'Tags',
+  listInput: 'List',
+  slugEditor: 'Slug',
+  urlEditor: 'URL',
+  numberEditor: 'Number',
+  rating: 'Rating',
+  datePicker: 'Date picker',
+  locationEditor: 'Location',
+  boolean: 'Boolean',
+  objectEditor: 'JSON editor',
+  entryLinkEditor: 'Entry link',
+  entryCardEditor: 'Entry card',
+  entryLinksEditor: 'Entry links',
+  entryCardsEditor: 'Entry cards',
+  assetLinkEditor: 'Asset link',
+  assetLinksEditor: 'Asset links',
+  assetGalleryEditor: 'Asset gallery',
+};
+
+/** Nombres de los ajustes más comunes, como se ven en la pantalla de apariencia. */
+const SETTING_LABEL: Record<string, string> = {
+  showCreateEntityAction: 'Show "Create new entries"',
+  showLinkEntityAction: 'Show "Link existing entries"',
+  bulkEditing: 'Use bulk editing',
+  trueLabel: 'texto de verdadero',
+  falseLabel: 'texto de falso',
+  stars: 'estrellas',
+  format: 'formato de fecha',
+  ampm: 'formato de hora',
+};
+
+const widgetName = (id: string | undefined) => (id ? `«${WIDGET_LABEL[id] ?? id}»` : '?');
+const settingValue = (value: unknown) =>
+  typeof value === 'boolean' ? yesNo(value) : value === undefined ? 'sin valor' : clipText(String(value), 20);
+
 /** Cómo se describe cada parte de la apariencia que difiere. */
 const EDITOR_PART_TEXT: Record<EditorPart, (diff: EditorFieldDiff, dst: string) => string> = {
   [EDITOR_PART.HELP_TEXT]: ({ helpText }, dst) =>
@@ -98,8 +142,14 @@ const EDITOR_PART_TEXT: Record<EditorPart, (diff: EditorFieldDiff, dst: string) 
       : helpText.src === undefined
         ? `help text solo en ${dst}`
         : `help text distinto (en ${dst}: ${quoted(helpText.dst)})`,
-  [EDITOR_PART.WIDGET]: ({ widget }, dst) => `widget ${widget.src ?? '?'} (en ${dst}: ${widget.dst ?? '?'})`,
-  [EDITOR_PART.SETTINGS]: () => 'ajustes del widget distintos',
+  [EDITOR_PART.WIDGET]: ({ widget }, dst) => `widget ${widgetName(widget.src)} (en ${dst}: ${widgetName(widget.dst)})`,
+  [EDITOR_PART.SETTINGS]: ({ settings }, dst) =>
+    settings
+      .map(
+        ({ key, src, dst: current }) =>
+          `${SETTING_LABEL[key] ?? key}: ${settingValue(src)} (en ${dst}: ${settingValue(current)})`,
+      )
+      .join(' · '),
 };
 
 /** Qué difiere en la apariencia de un campo: "help text falta en master", "widget dropdown (en master: singleLine)"… */

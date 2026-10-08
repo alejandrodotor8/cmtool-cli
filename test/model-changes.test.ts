@@ -22,6 +22,7 @@ const helpText = (fieldId: string): EditorFieldDiff => ({
   parts: ['helpText'],
   helpText: { src: 'Ayuda' },
   widget: {},
+  settings: [],
 });
 
 const subtitle = field('subtitle');

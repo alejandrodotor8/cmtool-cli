@@ -2,6 +2,14 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.8.2 — 2026-10-07
+
+### Corregido
+
+- El help text no se copiaba aunque la diferencia se mostraba: la opción "Copiar apariencia del editor" venía sin marcar y Enter sin marcar nada seguía sin avisar. Ahora viene marcada (espacio para desmarcarla) y, si no marcas nada, se avisa que el modelo no cambia.
+- La tabla del modelo decía "al día" en content types y campos con otro help text o widget en destino. Ahora lo dice ahí mismo ("1 con otro help text o widget", "help text o widget distinto"), en `migrate`, `migrate-model`, `compare-models` y el reporte, en vez de un aviso aparte.
+- El resumen decía "se publica el modelo" cuando solo se copiaba la apariencia del editor, que no publica nada.
+
 ## 0.8.1 — 2026-10-07
 
 ### Corregido

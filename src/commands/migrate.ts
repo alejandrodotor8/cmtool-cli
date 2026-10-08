@@ -32,7 +32,7 @@ import { askEntryUpdates, askModelChanges, askWithAssets, confirmLargeMigration 
 import { withStatus } from '../ui/status.ts';
 import { renderAssets } from '../ui/views/assets.ts';
 import { renderEntryTree } from '../ui/views/entries.ts';
-import { renderEditorDiffs, renderModelDiffs } from '../ui/views/model.ts';
+import { renderModelDiffs } from '../ui/views/model.ts';
 import { renderSummary } from '../ui/views/summary.ts';
 import {
   confirmWriting,
@@ -107,10 +107,13 @@ export async function migrate(args: CliArgs): Promise<number> {
     [...analysis.tree.entries.values()]
       .filter((e) => contentTypeOf(e) === ctId)
       .map((e) => analysis.titleOf(e) + (isWrite(analysis.actions.get(e.sys.id)) ? '' : ' (reutilizada)'));
-  renderModelDiffs(analysis.diffs.values(), { src, dst, dstDefault: analysis.locales.dst.default }, usedBy);
   const [srcEditors, dstEditors] = await loadEditors(ctx);
   const editorDiffs = editorDiffsFor(analysis.diffs.values(), srcEditors, dstEditors);
-  if (editorDiffs.size) renderEditorDiffs(editorDiffs, [...analysis.diffs.values()], dst);
+  renderModelDiffs(
+    analysis.diffs.values(),
+    { src, dst, dstDefault: analysis.locales.dst.default, editorDiffs },
+    usedBy,
+  );
   const options = modelOptions(analysis.diffs.values(), writtenContentTypes(analysis), editorDiffs);
   const picked = options.length ? await askModelChanges(options, dst) : [];
 

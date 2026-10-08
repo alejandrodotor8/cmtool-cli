@@ -5,6 +5,7 @@
 import { APP_NAME } from '../app.ts';
 import { type FieldComparison, summarizeValue, VALUE } from '../core/entry-compare.ts';
 import { type ContentTypeDiff, fieldType, hasDifferences, type ModelComparison } from '../core/model.ts';
+import type { EditorDiffs } from '../core/model-changes.ts';
 import type { EnvironmentStatus } from '../core/status.ts';
 import { contentTypeStatusParts, fieldStatusText } from '../ui/text.ts';
 
@@ -27,13 +28,18 @@ interface Envs {
 const header = (title: string, { src, dst }: Envs, now: Date) =>
   `# ${title}: ${src} → ${dst}\n\n_Generado por ${APP_NAME} el ${now.toLocaleString('es-CO')}._`;
 
-const ctStatus = (diff: ContentTypeDiff, dst: string) => contentTypeStatusParts(diff, dst).join(' · ') || 'al día';
+const ctStatus = (diff: ContentTypeDiff, dst: string, editorFields = 0) =>
+  contentTypeStatusParts(diff, dst, editorFields).join(' · ') || 'al día';
 
-function modelOverview({ diffs, onlyInDst }: ModelComparison, dst: string): string {
+function modelOverview(
+  { diffs, onlyInDst }: ModelComparison,
+  dst: string,
+  editorDiffs: EditorDiffs = new Map(),
+): string {
   return mdTable(
     ['Content type', 'ID', 'Campos', 'Estado'],
     [
-      ...diffs.map((d) => [d.name, d.id, d.rows.length, ctStatus(d, dst)]),
+      ...diffs.map((d) => [d.name, d.id, d.rows.length, ctStatus(d, dst, editorDiffs.get(d.id)?.length)]),
       ...onlyInDst.map((ct) => [ct.name, ct.sys.id, ct.fields.length, `solo existe en ${dst}`]),
     ],
   );
@@ -42,19 +48,19 @@ function modelOverview({ diffs, onlyInDst }: ModelComparison, dst: string): stri
 export function modelComparisonReport(
   comparison: ModelComparison,
   envs: Envs & { dstDefault: string | undefined },
-  editorDiffs: Map<string, string[]> = new Map(),
+  editorDiffs: EditorDiffs = new Map(),
   now = new Date(),
 ): string {
   const details = comparison.diffs.filter(hasDifferences).map((diff) =>
     [
-      `### ${diff.name} (\`${diff.id}\`) — ${ctStatus(diff, envs.dst)}`,
+      `### ${diff.name} (\`${diff.id}\`) — ${ctStatus(diff, envs.dst, editorDiffs.get(diff.id)?.length)}`,
       mdTable(
         ['Campo', 'ID', 'Tipo', 'Estado'],
         diff.rows.map((row) => [
           row.field.name,
           row.field.id,
           fieldType(row.field),
-          fieldStatusText(row, envs.dst, envs.dstDefault),
+          fieldStatusText(row, envs.dst, envs.dstDefault, editorDiffs.get(diff.id)?.includes(row.field.id)),
         ]),
       ),
     ].join('\n\n'),
@@ -68,7 +74,7 @@ export function modelComparisonReport(
   return [
     header('Comparación de modelos', envs, now),
     '## Resumen',
-    modelOverview(comparison, envs.dst),
+    modelOverview(comparison, envs.dst, editorDiffs),
     ...(details.length ? ['## Diferencias', ...details] : []),
     ...(editor.length
       ? ['## Apariencia del editor distinta (help text, widget)', mdTable(['Content type', 'ID', 'Campos'], editor)]

@@ -220,6 +220,8 @@ export const askWithAssets = (missingCount: number): Promise<boolean> =>
 /** Checks agrupados por content type con lo que falta en el modelo de destino. Devuelve lo marcado. */
 export async function askModelChanges(options: ModelOption[], dst: string): Promise<ModelPick[]> {
   const groups: Record<string, { value: ModelPick; label: string; hint?: string }[]> = {};
+  /** Copiar la apariencia viene marcado: solo cambia cómo se ve el editor, no el modelo ni el contenido. */
+  const editorPicks: ModelPick[] = [];
   for (const { diff, onlyReused, editorFields } of options) {
     const note = diff.missingCT
       ? pc.yellow(`  · nuevo: no existe en ${dst}`)
@@ -239,6 +241,8 @@ export async function askModelChanges(options: ModelOption[], dst: string): Prom
     }
     const nameWidth = Math.max(0, ...diff.missing.map((f) => clip(f.name, 28).length));
     const fieldName = new Map(diff.rows.map((r) => [r.field.id, r.field.name]));
+    const editorPick: ModelPick = { ctId: diff.id, editor: true };
+    if (editorFields.length) editorPicks.push(editorPick);
     groups[group] = [
       ...diff.missing.map((field) => ({
         value: { ctId: diff.id, field },
@@ -248,7 +252,7 @@ export async function askModelChanges(options: ModelOption[], dst: string): Prom
       ...(editorFields.length
         ? [
             {
-              value: { ctId: diff.id, editor: true },
+              value: editorPick,
               label: `Copiar apariencia del editor de ${editorFields.length} campo(s)`,
               hint: `help text y widget: ${clip(editorFields.map((id) => fieldName.get(id) ?? id).join(', '), 50)}`,
             },
@@ -258,14 +262,17 @@ export async function askModelChanges(options: ModelOption[], dst: string): Prom
   }
 
   const { question, note } = modelChangesQuestion(options, dst);
-  return answer(
+  const picked = answer(
     await p.groupMultiselect({
       message: `${question} ${pc.dim(`(${note})`)}`,
       options: groups,
+      initialValues: editorPicks,
       required: false,
       selectableGroups: true,
     }),
   );
+  if (!picked.length) log.info(`No marcaste nada: el modelo de ${dst} no cambia.`);
+  return picked;
 }
 
 /**

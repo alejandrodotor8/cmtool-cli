@@ -7,6 +7,7 @@ import {
   fieldType,
   type ModelComparison,
 } from '../../core/model.ts';
+import type { EditorDiffs } from '../../core/model-changes.ts';
 import { log } from '../log.ts';
 import { clip, legend, MARK, table } from '../table.ts';
 import { contentTypeStatusParts, fieldStatusText } from '../text.ts';
@@ -21,8 +22,11 @@ const FIELD_STYLE: Record<FieldStatus, { src: string; dst: string; color: (s: st
   [FIELD.EXTRA]: { src: MARK.no, dst: MARK.yes, color: pc.cyan },
 };
 
-function fieldRow(row: FieldRow, index: number, dst: string, dstDefault: string | undefined): string[] {
-  const style = FIELD_STYLE[row.status];
+/** Un campo al día en el modelo pero con otra apariencia del editor se marca como reglas distintas. */
+const EDITOR_STYLE = FIELD_STYLE[FIELD.RULES];
+
+function fieldRow(row: FieldRow, index: number, { dst, dstDefault }: ModelView, editorDiff: boolean): string[] {
+  const style = editorDiff && row.status === FIELD.OK ? EDITOR_STYLE : FIELD_STYLE[row.status];
   return [
     pc.dim(row.status === FIELD.EXTRA ? '·' : String(index + 1)),
     clip(row.field.name, 28),
@@ -30,13 +34,13 @@ function fieldRow(row: FieldRow, index: number, dst: string, dstDefault: string 
     fieldType(row.field),
     style.src,
     style.dst,
-    style.color(fieldStatusText(row, dst, dstDefault)),
+    style.color(fieldStatusText(row, dst, dstDefault, editorDiff)),
   ];
 }
 
-/** "2 falta(n) · 1 sobra(n)" con colores, o "al día". */
-function statusBadges(diff: ContentTypeDiff, dst: string): string {
-  const parts = contentTypeStatusParts(diff, dst);
+/** "2 falta(n) · 1 con otro help text o widget" con colores, o "al día". */
+function statusBadges(diff: ContentTypeDiff, dst: string, editorDiffs: EditorDiffs | undefined): string {
+  const parts = contentTypeStatusParts(diff, dst, editorDiffs?.get(diff.id)?.length);
   return parts.length ? pc.yellow(parts.join(pc.dim(' · '))) : pc.green('al día');
 }
 
@@ -45,6 +49,8 @@ export interface ModelView {
   dst: string;
   /** Locale por defecto de destino (para explicar qué se copia en campos no localizados). */
   dstDefault: string | undefined;
+  /** Campos con otra apariencia del editor en destino (help text, widget), por content type. */
+  editorDiffs?: EditorDiffs;
 }
 
 /**
@@ -53,15 +59,17 @@ export interface ModelView {
  */
 export function renderModelDiffs(
   diffs: Iterable<ContentTypeDiff>,
-  { src, dst, dstDefault }: ModelView,
+  view: ModelView,
   usedBy?: (ctId: string) => string[],
 ): void {
+  const { src, dst, editorDiffs } = view;
   log.step(`Modelo  ${pc.bold(src)} ${pc.dim('vs')} ${pc.bold(dst)}`);
   legend();
   for (const diff of diffs) {
+    const editorFields = new Set(editorDiffs?.get(diff.id));
     table({
       spacing: 1,
-      title: `${pc.bold(diff.name)} ${pc.dim(diff.id)}  ${statusBadges(diff, dst)}`,
+      title: `${pc.bold(diff.name)} ${pc.dim(diff.id)}  ${statusBadges(diff, dst, editorDiffs)}`,
       columns: [
         { header: '#' },
         { header: 'Campo' },
@@ -70,7 +78,7 @@ export function renderModelDiffs(
         ...envColumns(src, dst),
         { header: 'Estado' },
       ],
-      rows: diff.rows.map((row, i) => fieldRow(row, i, dst, dstDefault)),
+      rows: diff.rows.map((row, i) => fieldRow(row, i, view, editorFields.has(row.field.id))),
     });
     const users = usedBy?.(diff.id);
     if (users?.length) log.info(`usado por: ${clip(users.join(', '), 90)}`);
@@ -80,10 +88,15 @@ export function renderModelDiffs(
 /** Una fila por content type: cuántos campos tiene y en qué se diferencia de destino. */
 export function renderModelOverview(
   { diffs, onlyInDst }: ModelComparison,
-  { src, dst }: Pick<ModelView, 'src' | 'dst'>,
+  { src, dst, editorDiffs }: Pick<ModelView, 'src' | 'dst' | 'editorDiffs'>,
 ) {
   const rows = [
-    ...diffs.map((d) => [pc.bold(clip(d.name, 34)), pc.dim(d.id), String(d.rows.length), statusBadges(d, dst)]),
+    ...diffs.map((d) => [
+      pc.bold(clip(d.name, 34)),
+      pc.dim(d.id),
+      String(d.rows.length),
+      statusBadges(d, dst, editorDiffs),
+    ]),
     ...onlyInDst.map((ct) => [
       clip(ct.name, 34),
       pc.dim(ct.sys.id),
@@ -102,16 +115,4 @@ export function renderModelOverview(
     ],
     rows,
   });
-}
-
-/** Campos con otra apariencia del editor en destino (help text, widget), por content type. */
-export function renderEditorDiffs(editorDiffs: Map<string, string[]>, diffs: ContentTypeDiff[], dst: string): void {
-  const byId = new Map(diffs.map((d) => [d.id, d]));
-  const lines = [...editorDiffs].map(([ctId, ids]) => {
-    const diff = byId.get(ctId);
-    const names = new Map(diff?.rows.map((r) => [r.field.id, r.field.name]));
-    return `${pc.bold(diff?.name ?? ctId)} ${pc.dim(ctId)}: ${ids.map((id) => names.get(id) ?? id).join(', ')}`;
-  });
-  log.warn(`Apariencia del editor distinta en ${dst} (help text, widget):`);
-  log.block(lines.join('\n'));
 }

@@ -13,7 +13,7 @@ import { applyModelChanges } from '../execute.ts';
 import { printTitle } from '../ui/header.ts';
 import { log } from '../ui/log.ts';
 import { askModelChanges } from '../ui/prompts.ts';
-import { renderEditorDiffs, renderModelDiffs, renderModelOverview } from '../ui/views/model.ts';
+import { renderModelDiffs, renderModelOverview } from '../ui/views/model.ts';
 import { modelSummary } from '../ui/views/summary.ts';
 import {
   confirmWriting,
@@ -44,12 +44,10 @@ export async function migrateModel(args: CliArgs): Promise<number> {
     return finishReading(ctx, `El modelo de ${ctx.dst} ya tiene todo lo de ${ctx.src}, con la misma apariencia.`);
   }
 
-  const view = { src: ctx.src, dst: ctx.dst, dstDefault: (await ctx.locales(ctx.dst)).default };
+  const view = { src: ctx.src, dst: ctx.dst, dstDefault: (await ctx.locales(ctx.dst)).default, editorDiffs };
   renderModelOverview({ diffs: candidates, onlyInDst: [] }, view);
   if (candidates.length <= DETAIL_LIMIT) renderModelDiffs(candidates, view);
   else log.info(`Para ver el detalle campo por campo: ${APP_NAME} compare-models --content-type <id>`);
-
-  if (editorDiffs.size) renderEditorDiffs(editorDiffs, candidates, ctx.dst);
 
   const picked = await askModelChanges(modelOptions(candidates, undefined, editorDiffs), ctx.dst);
   const changes = modelChangesFrom(picked, srcCTs, editorDiffs);
@@ -66,6 +64,9 @@ export async function migrateModel(args: CliArgs): Promise<number> {
   await applyModelChanges(changes, new Map(dstCTs), async () => srcEditors, write);
   return finishWriting(ctx, write, {
     title: 'Modelo actualizado',
-    done: 'Listo. Los cambios del modelo quedaron publicados (Contentful lo exige para usarlos).',
+    done:
+      changes.contentTypesToCreate.length || changes.fieldsToAdd.size
+        ? 'Listo. Los cambios del modelo quedaron publicados (Contentful lo exige para usarlos).'
+        : 'Listo. La apariencia del editor quedó copiada.',
   });
 }

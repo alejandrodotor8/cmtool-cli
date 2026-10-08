@@ -176,7 +176,7 @@ Sin comando, la herramienta muestra este menú. Los comandos que comparan pueden
    - Si una entry está **archivada** en destino, no se actualiza (y si es un hijo reutilizado, te avisa que el padre no se podrá publicar).
    - Si se van a escribir más de 20 entries, te pide confirmar que el árbol es lo que esperabas.
 4. **Imágenes**: si faltan imágenes en destino, te pregunta si migrar con imágenes. Si dices que sí, reutiliza las que ya existen y crea las que faltan.
-5. **Modelo**: compara el modelo de padres e hijos con el de destino (también la **apariencia del editor**: help text y widget; si difiere, ofrece copiarla aunque las entries no tengan cambios) y te muestra:
+5. **Modelo**: compara el modelo de padres e hijos con el de destino (también la **apariencia del editor**: help text y widget; si difiere, la tabla lo marca y la opción de copiarla viene marcada, aunque las entries no tengan cambios) y te muestra:
    - campos que **faltan** en destino → eliges cuáles agregar (si no marcas nada, no se toca el modelo y esos campos no se migran);
    - campos que **sobran** en destino → no se tocan y conservan su valor;
    - campos con **otro tipo** → no se migran;
@@ -253,7 +253,7 @@ Cada migración guarda un respaldo en `~/.ctf-migrate/backups/<cuenta>/` (en Win
 
 - Nunca publica entries ni assets.
 - El modelo solo cambia si marcas campos o content types para agregar. Nunca borra campos ni cambia su tipo o validaciones. Lo que agregues sí se publica, porque Contentful lo exige para poder usar esos campos.
-- **Apariencia del editor** (help text, widget de cada campo): Contentful la guarda aparte del modelo. Se copia sola al crear un content type o agregar campos; la de campos que ya existen solo se actualiza si la marcas en `migrate-model`. De un widget de app o extensión (que podría no estar instalada en destino) solo se copia el help text. No se revierte con `restore`, pero queda registrada en el respaldo.
+- **Apariencia del editor** (help text, widget de cada campo): Contentful la guarda aparte del modelo. Se copia sola al crear un content type o agregar campos; la de campos que ya existen se ofrece en `migrate` y `migrate-model` ya marcada (la desmarcas con espacio si no la quieres). De un widget de app o extensión (que podría no estar instalada en destino) solo se copia el help text. No se revierte con `restore`, pero queda registrada en el respaldo.
 - Si una entry ya existe en destino, se actualizan solo los campos que existen en ambos modelos con el mismo tipo. Los campos que solo existen en destino conservan su valor.
 - Si una entry ya existe y está publicada, queda como **Changed**: lo publicado sigue en vivo.
 - Los tags que falten en destino se crean.

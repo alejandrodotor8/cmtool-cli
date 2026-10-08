@@ -32,6 +32,8 @@ describe('reportes', () => {
     const md = modelComparisonReport(model, { ...envs, dstDefault: 'es-CO' }, new Map([['banner', ['title']]]), now);
     assert.match(md, /## Apariencia del editor distinta/);
     assert.match(md, /\| banner \| banner \| title \|/);
+    assert.match(md, /\| banner \| banner \| 2 \| 1 falta\(n\) · 1 con otro help text o widget \|/);
+    assert.match(md, /\| title \| title \| Symbol \| help text o widget distinto \|/);
   });
 
   test('estado de los ambientes', () => {

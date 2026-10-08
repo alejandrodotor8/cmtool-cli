@@ -68,13 +68,17 @@ export function renderSummary(
   }
 }
 
-/** "+1 content type(s) · +2 campo(s) (se publica el modelo)" o "sin cambios". */
+/**
+ * "+1 content type(s) · +2 campo(s) (se publica el modelo)" o "sin cambios". Copiar la
+ * apariencia del editor no publica el modelo.
+ */
 export function modelSummary(changes: ModelChanges): string {
   if (!hasModelChanges(changes)) return pc.dim('sin cambios');
+  const structure = changes.contentTypesToCreate.length + changes.fieldsToAdd.size > 0;
   const parts = [
     changes.contentTypesToCreate.length && `+${changes.contentTypesToCreate.length} content type(s)`,
     countNewFields(changes) && `+${countNewFields(changes)} campo(s)`,
-    countEditorFields(changes) && `apariencia de ${countEditorFields(changes)} campo(s)`,
+    countEditorFields(changes) && `help text y widget de ${countEditorFields(changes)} campo(s)`,
   ].filter(Boolean);
-  return pc.yellow(parts.join(' · ')) + pc.dim(' (se publica el modelo)');
+  return pc.yellow(parts.join(' · ')) + (structure ? pc.dim(' (se publica el modelo)') : '');
 }

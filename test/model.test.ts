@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { compareRules, diffContentType, FIELD, fieldType } from '../src/core/model.ts';
+import { compareRules, diffContentType, FIELD, fieldType, withRulesOf } from '../src/core/model.ts';
 import { contentType, field } from './fixtures.ts';
 
 describe('diffContentType', () => {
@@ -61,14 +61,18 @@ describe('compareRules', () => {
     assert.equal(compareRules(field('a'), field('a')), undefined);
   });
 
-  test('obligatorio solo en destino', () => {
+  test('obligatorio en un solo ambiente, en cualquier dirección', () => {
     assert.equal(compareRules(field('a'), field('a', 'Symbol', { required: true }))?.requiredOnlyInDst, true);
-    assert.equal(compareRules(field('a', 'Symbol', { required: true }), field('a')), undefined, 'al revés no afecta');
+    assert.equal(compareRules(field('a', 'Symbol', { required: true }), field('a'))?.requiredOnlyInSrc, true);
   });
 
-  test('localizado en origen pero no en destino', () => {
+  test('localizado en un solo ambiente, en cualquier dirección', () => {
     assert.equal(compareRules(field('a', 'Symbol', { localized: true }), field('a'))?.localizationLost, true);
-    assert.equal(compareRules(field('a'), field('a', 'Symbol', { localized: true })), undefined, 'al revés no afecta');
+    assert.equal(compareRules(field('a'), field('a', 'Symbol', { localized: true }))?.localizedOnlyInDst, true);
+  });
+
+  test('otro nombre visible', () => {
+    assert.equal(compareRules(field('a', 'Symbol', { name: 'Título' }), field('a'))?.renamed, true);
   });
 
   test('validaciones distintas, incluidas las de los items de un Array', () => {
@@ -106,5 +110,25 @@ describe('diffContentType con reglas', () => {
       diff.changedRules.map((f) => f.id),
       ['title'],
     );
+  });
+});
+
+describe('withRulesOf', () => {
+  test('copia nombre, obligatorio, localizado y validaciones; conserva ID, tipo y lo demás de destino', () => {
+    const src = field('tags', 'Array', {
+      name: 'Etiquetas',
+      required: true,
+      items: { type: 'Symbol', validations: [{ in: ['a', 'b'] }] },
+      validations: [{ size: { max: 3 } }],
+    });
+    const dst = field('tags', 'Array', { items: { type: 'Symbol' }, disabled: true });
+    assert.deepEqual(withRulesOf(dst, src), {
+      ...dst,
+      name: 'Etiquetas',
+      required: true,
+      localized: false,
+      validations: [{ size: { max: 3 } }],
+      items: { type: 'Symbol', validations: [{ in: ['a', 'b'] }] },
+    });
   });
 });

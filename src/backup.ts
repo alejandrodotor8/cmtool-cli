@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { Account, Entry, TagLink } from './contentful/types.ts';
+import type { Account, Entry, Field, TagLink } from './contentful/types.ts';
 import { contentTypeOf } from './core/entries.ts';
 import { AbortError } from './errors.ts';
 
@@ -44,6 +44,8 @@ export interface BackupData {
   fieldsAdded: Record<string, string[]>;
   /** Campos cuya apariencia del editor se cambió, por content type (falta en respaldos anteriores). */
   editorUpdated?: Record<string, string[]>;
+  /** Cómo estaban los campos cuyas reglas se cambiaron, por content type (para revertirlo a mano). */
+  rulesUpdated?: Record<string, Field[]>;
 }
 
 export type CreatedKind = keyof BackupData['created'];
@@ -105,6 +107,11 @@ export function startBackup(
     },
     recordFields(ctId: string, fieldIds: string[]) {
       data.fieldsAdded[ctId] = [...(data.fieldsAdded[ctId] ?? []), ...fieldIds];
+      save();
+    },
+    /** Guarda cómo estaban los campos antes de cambiar sus reglas. */
+    recordRules(ctId: string, previous: Field[]) {
+      data.rulesUpdated = { ...data.rulesUpdated, [ctId]: [...(data.rulesUpdated?.[ctId] ?? []), ...previous] };
       save();
     },
     recordEditor(ctId: string, fieldIds: string[]) {

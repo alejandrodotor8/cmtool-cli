@@ -44,6 +44,23 @@ export function createWriter(cma: Cma, { src, dst }: { src: string; dst: string 
       return publishContentType(ct);
     },
 
+    /**
+     * Cambia las reglas de campos que ya existen (nombre, obligatorio, localizado,
+     * validaciones) con `withRules(campoDeDestino)`. No agrega, quita ni cambia el tipo de
+     * ningún campo. Devuelve la versión publicada.
+     */
+    async updateFieldRules(dstCT: ContentType, withRules: (field: Field) => Field): Promise<ContentType> {
+      const fields = dstCT.fields.map((field) => {
+        const updated = withRules(field);
+        if (updated.id !== field.id || updated.type !== field.type) {
+          throw new Error(`no se puede cambiar el ID ni el tipo del campo "${field.id}"`);
+        }
+        return updated;
+      });
+      const ct = await cma.contentType.update({ ...env, contentTypeId: dstCT.sys.id }, { ...dstCT, fields });
+      return publishContentType(ct);
+    },
+
     /** Lee la apariencia del editor actual en destino y la actualiza con `build(actual)`. */
     async updateEditorInterface(contentTypeId: string, build: (current: EditorInterface) => EditorInterface) {
       const current = await cma.editorInterface.get({ ...env, contentTypeId });

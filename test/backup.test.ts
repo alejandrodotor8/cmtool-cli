@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, test } from 'node:test';
 import { accountBackupDir, type BackupData, listBackups, readBackup, startBackup } from '../src/backup.ts';
 import type { Account, Entry } from '../src/contentful/types.ts';
 import { AbortError } from '../src/errors.ts';
-import { entry } from './fixtures.ts';
+import { entry, field } from './fixtures.ts';
 
 const alejandro: Account = { userId: 'u-ale', email: 'ale@dislicores.com', host: 'api.contentful.com' };
 const otra: Account = { userId: 'u-otra', email: 'otra@agencia.com', host: 'api.contentful.com' };
@@ -49,6 +49,7 @@ describe('backup', () => {
     backup.recordUpdate(current, 'Banner');
     backup.recordCreated('entries', 'slide');
     backup.recordFields('banner', ['subtitle']);
+    backup.recordRules('banner', [field('title')]);
 
     const data = readBackup(backup.file);
     assert.deepEqual(data.updated[0], {
@@ -62,6 +63,7 @@ describe('backup', () => {
     });
     assert.deepEqual(data.created.entries, ['slide']);
     assert.deepEqual(data.fieldsAdded, { banner: ['subtitle'] });
+    assert.deepEqual(data.rulesUpdated, { banner: [field('title')] });
   });
 
   test('marca como aplicada una entry solo cuando se confirma su actualización', () => {

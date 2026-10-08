@@ -2,6 +2,21 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.9.0 — 2026-10-07
+
+### Agregado
+
+- **"Todo" siempre es la primera opción**: en los cambios de modelo y en qué entries actualizar, eliges *todo* de una vez, *elegir cuáles* (lista para marcar) o *nada*. Ya no hay que marcar uno por uno para aplicarlo todo.
+- **Cambios de modelo uno por uno**: cada campo que falta, cada regla distinta y cada apariencia distinta es una opción aparte, agrupada por content type (marcar el content type marca todo lo suyo).
+- **Llevar las reglas de un campo** (nombre, obligatorio, localizado, validaciones) a destino, en `migrate` y `migrate-model`. La opción dice qué cambia ("obligatorio: no → sí") y avisa si puede afectar contenido existente. Cómo estaban queda en el respaldo.
+
+### Corregido
+
+- La apariencia del editor marcaba como distintos campos que se ven iguales en Contentful: help text vacío, ajustes vacíos (`{}`) o el widget por defecto escrito en un ambiente y omitido en el otro. Ahora solo cuenta lo que cambia de verdad.
+- La tabla del modelo dice exactamente qué difiere en la apariencia: "help text falta en master", "help text distinto (en master: «…»)", "widget dropdown (en master: singleLine)" o "ajustes del widget distintos".
+- Copiar el help text desde un widget de app ya no cambia el widget de destino por el de por defecto.
+- Las reglas se comparan en las dos direcciones (antes no se detectaba un campo obligatorio solo en origen ni localizado solo en destino) y también el nombre del campo.
+
 ## 0.8.2 — 2026-10-07
 
 ### Corregido

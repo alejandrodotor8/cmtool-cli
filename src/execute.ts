@@ -6,12 +6,13 @@
 import pc from 'picocolors';
 import type { Analysis } from './analyze.ts';
 import type { Backup } from './backup.ts';
-import type { Asset, ContentType, EditorInterface, Field, Locales, Tag } from './contentful/types.ts';
+import type { Asset, ContentType, EditorInterface, Locales, Tag } from './contentful/types.ts';
 import type { Writer } from './contentful/write.ts';
 import { mergeControls } from './core/editor.ts';
 import { contentTypeOf } from './core/entries.ts';
 import { assetFieldsForDestination, fieldsForDestination, mergeWithExisting } from './core/fields.ts';
-import type { ModelChanges } from './core/model-changes.ts';
+import { rulesFrom } from './core/model.ts';
+import { changesStructure, type ModelChanges } from './core/model-changes.ts';
 import { ACTION, type Plan } from './core/plan.ts';
 import { writableFields } from './core/publish-check.ts';
 import type { createRunner } from './ui/runner.ts';
@@ -42,14 +43,14 @@ async function applyTags(tags: Tag[], dstTagIds: Set<string>, { writer, backup, 
  * de origen (solo se llama si hay apariencias que copiar).
  */
 export async function applyModelChanges(
-  { contentTypesToCreate, fieldsToAdd, editorFields }: ModelChanges,
+  changes: ModelChanges,
   dstCTs: Map<string, ContentType>,
   srcEditors: () => Promise<Map<string, EditorInterface>>,
   ctx: WriteContext,
 ) {
   const { writer, backup, runner } = ctx;
-  const total = contentTypesToCreate.length + fieldsToAdd.size;
-  if (total) await applyStructure(contentTypesToCreate, fieldsToAdd, dstCTs, ctx);
+  const { editorFields } = changes;
+  if (changesStructure(changes)) await applyStructure(changes, dstCTs, ctx);
   if (!editorFields.size) return;
 
   const editors = await srcEditors();
@@ -69,12 +70,11 @@ export async function applyModelChanges(
 }
 
 async function applyStructure(
-  contentTypesToCreate: ContentType[],
-  fieldsToAdd: Map<string, Field[]>,
+  { contentTypesToCreate, fieldsToAdd, rulesToUpdate }: ModelChanges,
   dstCTs: Map<string, ContentType>,
   { writer, backup, runner }: WriteContext,
 ) {
-  runner.start('Modelo', contentTypesToCreate.length + fieldsToAdd.size);
+  runner.start('Modelo', contentTypesToCreate.length + fieldsToAdd.size + rulesToUpdate.size);
   for (const ct of contentTypesToCreate) {
     await runner.run(`content type ${ct.sys.id} creado`, async () => {
       dstCTs.set(ct.sys.id, await writer.createContentType(ct));
@@ -90,6 +90,18 @@ async function applyStructure(
         ctId,
         fields.map((f) => f.id),
       );
+    });
+  }
+  for (const [ctId, srcFields] of rulesToUpdate) {
+    await runner.run(`${ctId}: reglas de ${srcFields.map((f) => f.id).join(', ')}`, async () => {
+      const current = dstCTs.get(ctId);
+      if (!current) throw new Error(`el content type "${ctId}" no existe en ${writer.environment}`);
+      const ids = new Set(srcFields.map((f) => f.id));
+      backup.recordRules(
+        ctId,
+        current.fields.filter((f) => ids.has(f.id)),
+      );
+      dstCTs.set(ctId, await writer.updateFieldRules(current, rulesFrom(srcFields)));
     });
   }
   runner.end();

@@ -170,24 +170,24 @@ Sin comando, la herramienta muestra este menú. Los comandos que comparan pueden
    - El padre se crea si no existe en destino.
    - Un hijo que ya existe en destino **se reutiliza sin tocarlo**. Igual se muestra lo que tiene debajo y se revisa su modelo.
    - De lo que ya existe en destino, el árbol muestra **qué cambió en origen**: *"se actualiza · 2 campo(s): Título, CTA"*, *"ya existe · sin cambios"* o, en un hijo, *"ya existe · cambió en develop, no se migra"*. Solo cuenta lo que la migración cambiaría (campos del modelo de origen, en los idiomas de origen).
-   - Si algo que ya existe cambió, te pregunta **qué actualizar**, padre por padre e hijo por hijo: las entries que elegiste vienen marcadas y los hijos no. Lo que no marques (o no tenga cambios) no se toca. Un hijo marcado se trata como un padre: si apunta a entries que no existen en destino, también se crean.
+   - Si algo que ya existe cambió, te pregunta **qué actualizar**: la primera opción es **actualizar todas**; también puedes **elegir cuáles** (padre por padre e hijo por hijo; las que elegiste vienen marcadas y los hijos no) o no actualizar ninguna. Lo que no actualices (o no tenga cambios) no se toca. Un hijo marcado se trata como un padre: si apunta a entries que no existen en destino, también se crean.
    - Un hijo que no existe en destino se crea, y se revisan sus propios hijos con la misma regla.
    - Un **texto enlazado** dentro de un rich text (`↗`) no es un hijo: no se migra. Si apunta a una entry que no existe en destino, te avisa que el enlace quedará roto.
    - Si una entry está **archivada** en destino, no se actualiza (y si es un hijo reutilizado, te avisa que el padre no se podrá publicar).
    - Si se van a escribir más de 20 entries, te pide confirmar que el árbol es lo que esperabas.
 4. **Imágenes**: si faltan imágenes en destino, te pregunta si migrar con imágenes. Si dices que sí, reutiliza las que ya existen y crea las que faltan.
-5. **Modelo**: compara el modelo de padres e hijos con el de destino (también la **apariencia del editor**: help text y widget; si difiere, la tabla lo marca y la opción de copiarla viene marcada, aunque las entries no tengan cambios) y te muestra:
+5. **Modelo**: compara el modelo de padres e hijos con el de destino (también la **apariencia del editor**: help text, widget y sus ajustes; la tabla dice exactamente qué difiere en cada campo, aunque las entries no tengan cambios) y te muestra:
    - campos que **faltan** en destino → eliges cuáles agregar (si no marcas nada, no se toca el modelo y esos campos no se migran);
    - campos que **sobran** en destino → no se tocan y conservan su valor;
    - campos con **otro tipo** → no se migran;
-   - campos con el mismo tipo pero **reglas distintas** (`!`): obligatorio solo en destino, localizado en origen pero no en destino (solo se copia el locale por defecto) o validaciones distintas (tipos de entry permitidos, tamaño, formato…);
+   - campos con el mismo tipo pero **reglas distintas** (`!`): otro nombre, obligatorio o localizado en un solo ambiente (si no está localizado en destino, solo se copia el locale por defecto) o validaciones distintas (tipos de entry permitidos, tamaño, formato…);
    - content types que **no existen** en destino → eliges si crearlos (si no, esas entries no se migran).
 6. Revisa el **resumen** y confirma. El resumen avisa qué entries quedarán con **campos obligatorios vacíos** en destino (no se podrán publicar hasta completarlos). Revisa el idioma por defecto y los idiomas que en destino no permiten campos vacíos. Si el destino parece producción (es `master` o tiene un alias), tienes que escribir el nombre del ambiente para confirmar.
 7. Al terminar te dice dónde quedó el **respaldo** y el comando para **repetir** la migración.
 
 ### Migrar modelo, imágenes, comparar y estado
 
-- **`migrate-model`**: muestra los content types de origen a los que les falta algo en destino —content types, campos o la **apariencia del editor** (help text, widget)— y eliges con checks qué crear, agregar o actualizar. Nunca borra campos ni cambia su tipo o validaciones. `--content-type a,b` para limitarlo.
+- **`migrate-model`**: muestra los content types de origen que difieren en destino —content types y campos que faltan, **reglas** de campos o la **apariencia del editor** (help text, widget)— y eliges qué aplicar: todo de una vez, cambio por cambio o nada. Nunca borra campos ni cambia su ID o tipo. `--content-type a,b` para limitarlo.
 - **`migrate-assets`**: elige archivos por ID/URL (`/assets/<id>`) o buscando por nombre (`--search`). Los que ya existen en destino se reutilizan.
 - **`compare-models`**: una tabla con todos los content types y su estado, el detalle campo por campo de los que difieren y qué campos tienen otra **apariencia del editor**. `--content-type a,b` para ver solo esos.
 - **`compare-entry`**: elige entries igual que al migrar (ID, búsqueda, recientes, tag, archivo) y ve, campo por campo, qué valor tienen en cada ambiente.
@@ -252,8 +252,9 @@ Cada migración guarda un respaldo en `~/.ctf-migrate/backups/<cuenta>/` (en Win
 ## Garantías
 
 - Nunca publica entries ni assets.
-- El modelo solo cambia si marcas campos o content types para agregar. Nunca borra campos ni cambia su tipo o validaciones. Lo que agregues sí se publica, porque Contentful lo exige para poder usar esos campos.
-- **Apariencia del editor** (help text, widget de cada campo): Contentful la guarda aparte del modelo. Se copia sola al crear un content type o agregar campos; la de campos que ya existen se ofrece en `migrate` y `migrate-model` ya marcada (la desmarcas con espacio si no la quieres). De un widget de app o extensión (que podría no estar instalada en destino) solo se copia el help text. No se revierte con `restore`, pero queda registrada en el respaldo.
+- El modelo solo cambia con lo que elijas: **todo**, que siempre es la primera opción, o **cambio por cambio** (crear un content type, agregar un campo, llevar las reglas de un campo, copiar la apariencia de un campo). Nunca borra campos ni cambia su ID o tipo. Los cambios de estructura (content types, campos, reglas) se publican, porque Contentful lo exige; la apariencia sola no publica nada.
+- **Reglas de un campo** (nombre, obligatorio, localizado, validaciones): se llevan las de origen. La opción avisa cuando puede afectar el contenido que ya existe: si el campo pasa a ser obligatorio, las entries con ese campo vacío no se podrán publicar, y si deja de ser localizado, se pierden los valores de los otros idiomas. Cómo estaban queda en el respaldo; `restore` no las revierte.
+- **Apariencia del editor** (help text, widget de cada campo): Contentful la guarda aparte del modelo. Se copia sola al crear un content type o agregar campos; la de campos que ya existen se ofrece en `migrate` y `migrate-model`, campo por campo. Un help text vacío, unos ajustes vacíos o un widget por defecto escrito en un ambiente y omitido en el otro cuentan como iguales. De un widget de app o extensión (que podría no estar instalada en destino) solo se copia el help text. No se revierte con `restore`, pero queda registrada en el respaldo.
 - Si una entry ya existe en destino, se actualizan solo los campos que existen en ambos modelos con el mismo tipo. Los campos que solo existen en destino conservan su valor.
 - Si una entry ya existe y está publicada, queda como **Changed**: lo publicado sigue en vivo.
 - Los tags que falten en destino se crean.
@@ -366,7 +367,7 @@ Los tests son **unitarios**: prueban las reglas y utilidades, no hacen migracion
 - **Búsqueda, comparaciones y reportes** (`query.test.ts`, `entry-compare.test.ts`, `status.test.ts`, `model-changes.test.ts`, `report.test.ts`): filtros en una sola llamada, comparación de entries y ambientes, cambios de modelo y reportes Markdown.
 - **Código fuente** (`security.test.ts`): solo el writer escribe, nunca borra/archiva/despublica, y solo publica content types. `client.test.ts`: `--verbose` nunca muestra el token.
 - **Comportamiento** (`entries.test.ts`, `read.test.ts`, `plan.test.ts`, `errors.test.ts`): textos enlazados que no son hijos, límite del árbol, entries archivadas, cambios en destino durante la revisión y conflictos de versión.
-- **Reglas del modelo y publicación** (`model.test.ts`, `publish-check.test.ts`): obligatorio, localizado y validaciones; qué entries quedan con obligatorios vacíos; los campos que solo existen en destino no se tocan.
+- **Reglas del modelo y publicación** (`model.test.ts`, `publish-check.test.ts`): nombre, obligatorio, localizado y validaciones, y cómo quedan al llevarlas a destino; qué entries quedan con obligatorios vacíos; los campos que solo existen en destino no se tocan.
 
 Reglas para que Node pueda ejecutar los `.ts` sin compilar:
 

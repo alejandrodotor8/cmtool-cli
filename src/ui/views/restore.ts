@@ -48,6 +48,14 @@ export function renderRestore(data: BackupData, items: { saved: SavedEntry; curr
   if (added.length) log.info(`Campos agregados al modelo (no se quitan): ${clip(added.join(', '), 100)}`);
   const editor = Object.entries(data.editorUpdated ?? {}).map(([ctId, ids]) => `${ctId} (${ids.length})`);
   if (editor.length) log.info(`Apariencia del editor actualizada (no se revierte): ${clip(editor.join(', '), 100)}`);
+  const rules = Object.entries(data.rulesUpdated ?? {}).map(
+    ([ctId, fields]) => `${ctId}.${fields.map((f) => f.id).join(`, ${ctId}.`)}`,
+  );
+  if (rules.length) {
+    log.info(
+      `Reglas de campos cambiadas (no se revierten; cómo estaban queda en el respaldo): ${clip(rules.join(', '), 100)}`,
+    );
+  }
 }
 
 /** "2 entry(s), 1 imagen(es)…" con lo que se creó en una ejecución. */

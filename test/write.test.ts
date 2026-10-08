@@ -21,6 +21,7 @@ describe('createWriter', () => {
     await writer.createEntry('e2', 'banner', { title: { 'es-CO': 'Nuevo' } }, []);
     await writer.updateEntry('e1', (current) => ({ ...current, title: { 'es-CO': 'Nuevo' } }), []);
     await writer.updateEditorInterface('banner', (current) => current);
+    await writer.updateFieldRules(contentType('banner', [field('title')]), (f) => ({ ...f, required: true }));
 
     assert.ok(calls.length > 0);
     assert.ok(calls.some((c) => c.method === 'editorInterface.update'));
@@ -28,6 +29,26 @@ describe('createWriter', () => {
       assert.equal(call.params.environmentId, 'qa', `${call.method} no fue a qa`);
       assert.doesNotMatch(call.method, /delete|archive|unpublish/i);
     }
+  });
+
+  test('cambiar reglas de campos no agrega, quita ni cambia el tipo de ninguno, y publica', async () => {
+    const { cma, calls } = fakeCma();
+    const writer = createWriter(cma, { src: 'develop', dst: 'qa' });
+    const banner = contentType('banner', [field('title'), field('cta')]);
+
+    await writer.updateFieldRules(banner, (f) => (f.id === 'title' ? { ...f, name: 'Título', required: true } : f));
+    const update = calls.find((c) => c.method === 'contentType.update');
+    assert.ok(update);
+    assert.deepEqual((update.data as { fields: unknown }).fields, [
+      { ...field('title'), name: 'Título', required: true },
+      field('cta'),
+    ]);
+    assert.ok(calls.some((c) => c.method === 'contentType.publish'));
+
+    await assert.rejects(
+      writer.updateFieldRules(banner, (f) => ({ ...f, type: 'Text' })),
+      /tipo/,
+    );
   });
 
   test('al actualizar parte de la versión actual en destino y aplica los campos nuevos', async () => {

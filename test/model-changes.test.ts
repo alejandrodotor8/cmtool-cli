@@ -1,15 +1,27 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import type { EditorFieldDiff } from '../src/core/editor.ts';
 import { diffContentType } from '../src/core/model.ts';
 import {
+  allPicks,
+  CHANGE,
+  changesStructure,
   countEditorFields,
   countNewFields,
+  countRuleFields,
   hasModelChanges,
   modelChangesFrom,
   modelOptions,
   notAddedFields,
 } from '../src/core/model-changes.ts';
 import { contentType, field } from './fixtures.ts';
+
+const helpText = (fieldId: string): EditorFieldDiff => ({
+  fieldId,
+  parts: ['helpText'],
+  helpText: { src: 'Ayuda' },
+  widget: {},
+});
 
 const subtitle = field('subtitle');
 const cta = field('cta');
@@ -47,7 +59,10 @@ describe('modelOptions', () => {
 
 describe('modelChangesFrom y notAddedFields', () => {
   const changes = modelChangesFrom(
-    [{ ctId: 'banner', field: subtitle }, { ctId: 'promo' }],
+    [
+      { kind: 'add', ctId: 'banner', field: subtitle },
+      { kind: 'create', ctId: 'promo' },
+    ],
     new Map([['promo', promoCT]]),
   );
 
@@ -76,7 +91,10 @@ describe('modelChangesFrom y notAddedFields', () => {
 describe('apariencia del editor en los cambios de modelo', () => {
   test('al crear un content type o agregar campos, se copia su apariencia', () => {
     const changes = modelChangesFrom(
-      [{ ctId: 'banner', field: subtitle }, { ctId: 'promo' }],
+      [
+        { kind: 'add', ctId: 'banner', field: subtitle },
+        { kind: 'create', ctId: 'promo' },
+      ],
       new Map([['promo', promoCT]]),
     );
     assert.deepEqual(
@@ -88,19 +106,55 @@ describe('apariencia del editor en los cambios de modelo', () => {
     );
   });
 
-  test('"copiar apariencia" usa los campos que difieren y no crea el content type', () => {
-    const changes = modelChangesFrom([{ ctId: 'slide', editor: true }], new Map(), new Map([['slide', ['title']]]));
+  test('copiar la apariencia de un campo no crea el content type ni publica el modelo', () => {
+    const changes = modelChangesFrom([{ kind: CHANGE.EDITOR, ctId: 'slide', editor: helpText('title') }], new Map());
     assert.deepEqual(changes.contentTypesToCreate, []);
     assert.deepEqual([...(changes.editorFields.get('slide') ?? [])], ['title']);
     assert.equal(countEditorFields(changes), 1);
     assert.equal(hasModelChanges(changes), true);
+    assert.equal(changesStructure(changes), false);
+  });
+});
+
+describe('modelOptions: un cambio por cosa', () => {
+  const page = diffContentType(
+    contentType('page', [field('title', 'Symbol', { name: 'Título' }), field('slug'), field('body', 'Text')]),
+    contentType('page', [field('title'), field('slug')]),
+  );
+
+  test('cada campo que falta, cada regla distinta y cada apariencia distinta es una opción aparte', () => {
+    const [option] = modelOptions([page], undefined, new Map([['page', [helpText('slug')]]]));
+    assert.deepEqual(
+      option?.picks.map((p) => [p.kind, 'field' in p ? p.field.id : 'editor' in p ? p.editor.fieldId : p.ctId]),
+      [
+        [CHANGE.RULES, 'title'],
+        [CHANGE.EDITOR, 'slug'],
+        [CHANGE.ADD, 'body'],
+      ],
+    );
   });
 
   test('ofrece content types que solo difieren en apariencia', () => {
-    const options = modelOptions([slide], undefined, new Map([['slide', ['title']]]));
+    const options = modelOptions([slide], undefined, new Map([['slide', [helpText('title')]]]));
     assert.deepEqual(
-      options.map((o) => [o.diff.id, o.editorFields]),
-      [['slide', ['title']]],
+      options.map((o) => [o.diff.id, o.picks.map((p) => p.kind)]),
+      [['slide', [CHANGE.EDITOR]]],
     );
+  });
+
+  test('"todo" son todos los cambios de todas las opciones', () => {
+    const options = modelOptions([page, promo], undefined, new Map([['page', [helpText('slug')]]]));
+    assert.equal(allPicks(options).length, 4);
+  });
+
+  test('las reglas marcadas se agrupan por content type y publican el modelo', () => {
+    const [option] = modelOptions([page]);
+    const changes = modelChangesFrom(option?.picks.filter((p) => p.kind === CHANGE.RULES) ?? [], new Map());
+    assert.deepEqual(
+      changes.rulesToUpdate.get('page')?.map((f) => f.name),
+      ['Título'],
+    );
+    assert.equal(countRuleFields(changes), 1);
+    assert.equal(changesStructure(changes), true);
   });
 });

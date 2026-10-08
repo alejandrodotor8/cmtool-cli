@@ -117,7 +117,7 @@ export async function migrate(args: CliArgs): Promise<number> {
   const options = modelOptions(analysis.diffs.values(), writtenContentTypes(analysis), editorDiffs);
   const picked = options.length ? await askModelChanges(options, dst) : [];
 
-  const plan = buildPlan(analysis, { withAssets, picked, editorDiffs });
+  const plan = buildPlan(analysis, { withAssets, picked });
   if (!plan.entries.length && !hasModelChanges(plan) && !plan.tagsToCreate.length) {
     return finishReading(ctx, `No hay nada que crear ni actualizar en ${dst}.`);
   }

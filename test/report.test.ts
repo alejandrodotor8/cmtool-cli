@@ -28,12 +28,15 @@ describe('reportes', () => {
     assert.match(md, /\| cta \| cta \| Symbol \| falta en qa \|/);
   });
 
-  test('comparación de modelos: incluye la apariencia del editor distinta', () => {
-    const md = modelComparisonReport(model, { ...envs, dstDefault: 'es-CO' }, new Map([['banner', ['title']]]), now);
+  test('comparación de modelos: incluye qué difiere en la apariencia del editor', () => {
+    const editorDiffs = new Map([
+      ['banner', [{ fieldId: 'title', parts: ['helpText' as const], helpText: { src: 'Ayuda' }, widget: {} }]],
+    ]);
+    const md = modelComparisonReport(model, { ...envs, dstDefault: 'es-CO' }, editorDiffs, now);
     assert.match(md, /## Apariencia del editor distinta/);
-    assert.match(md, /\| banner \| banner \| title \|/);
-    assert.match(md, /\| banner \| banner \| 2 \| 1 falta\(n\) · 1 con otro help text o widget \|/);
-    assert.match(md, /\| title \| title \| Symbol \| help text o widget distinto \|/);
+    assert.match(md, /\| banner \| title \| help text falta en qa \|/);
+    assert.match(md, /\| banner \| banner \| 2 \| 1 falta\(n\) · 1 con otra apariencia \|/);
+    assert.match(md, /\| title \| title \| Symbol \| help text falta en qa \|/);
   });
 
   test('estado de los ambientes', () => {

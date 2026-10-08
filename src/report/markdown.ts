@@ -7,7 +7,7 @@ import { type FieldComparison, summarizeValue, VALUE } from '../core/entry-compa
 import { type ContentTypeDiff, fieldType, hasDifferences, type ModelComparison } from '../core/model.ts';
 import type { EditorDiffs } from '../core/model-changes.ts';
 import type { EnvironmentStatus } from '../core/status.ts';
-import { contentTypeStatusParts, fieldStatusText } from '../ui/text.ts';
+import { contentTypeStatusParts, editorDiffText, fieldStatusText } from '../ui/text.ts';
 
 const cell = (value: string | number) => String(value).replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
@@ -60,16 +60,21 @@ export function modelComparisonReport(
           row.field.name,
           row.field.id,
           fieldType(row.field),
-          fieldStatusText(row, envs.dst, envs.dstDefault, editorDiffs.get(diff.id)?.includes(row.field.id)),
+          fieldStatusText(
+            row,
+            envs.dst,
+            envs.dstDefault,
+            editorDiffs.get(diff.id)?.find((e) => e.fieldId === row.field.id),
+          ),
         ]),
       ),
     ].join('\n\n'),
   );
   const names = new Map(comparison.diffs.map((d) => [d.id, d]));
-  const editor = [...editorDiffs].map(([ctId, ids]) => {
+  const editor = [...editorDiffs].flatMap(([ctId, fields]) => {
     const diff = names.get(ctId);
     const fieldName = new Map(diff?.rows.map((r) => [r.field.id, r.field.name]));
-    return [diff?.name ?? ctId, ctId, ids.map((id) => fieldName.get(id) ?? id).join(', ')];
+    return fields.map((e) => [diff?.name ?? ctId, fieldName.get(e.fieldId) ?? e.fieldId, editorDiffText(e, envs.dst)]);
   });
   return [
     header('Comparación de modelos', envs, now),
@@ -77,7 +82,10 @@ export function modelComparisonReport(
     modelOverview(comparison, envs.dst, editorDiffs),
     ...(details.length ? ['## Diferencias', ...details] : []),
     ...(editor.length
-      ? ['## Apariencia del editor distinta (help text, widget)', mdTable(['Content type', 'ID', 'Campos'], editor)]
+      ? [
+          '## Apariencia del editor distinta (help text, widget)',
+          mdTable(['Content type', 'Campo', 'Qué difiere'], editor),
+        ]
       : []),
   ].join('\n\n');
 }

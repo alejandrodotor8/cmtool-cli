@@ -6,7 +6,7 @@ import type { Analysis } from '../analyze.ts';
 import type { ContentType, Entry, Field } from '../contentful/types.ts';
 import { contentTypeOf } from './entries.ts';
 import { fieldsForDestination, mergeWithExisting } from './fields.ts';
-import type { ContentTypeDiff } from './model.ts';
+import { type ContentTypeDiff, rulesFrom } from './model.ts';
 import { ACTION, type Plan } from './plan.ts';
 
 /**
@@ -22,8 +22,9 @@ export function writableFields(dstCT: ContentType, diff: ContentTypeDiff | undef
 export function projectedContentType(ctId: string, analysis: Analysis, plan: Plan): ContentType | undefined {
   if (plan.contentTypesToCreate.some((ct) => ct.sys.id === ctId)) return analysis.contentTypes.src.get(ctId);
   const dstCT = analysis.contentTypes.dst.get(ctId);
-  const added = plan.fieldsToAdd.get(ctId) ?? [];
-  return dstCT && added.length ? { ...dstCT, fields: [...dstCT.fields, ...added] } : dstCT;
+  if (!dstCT) return undefined;
+  const withRules = rulesFrom(plan.rulesToUpdate.get(ctId) ?? []);
+  return { ...dstCT, fields: [...dstCT.fields.map(withRules), ...(plan.fieldsToAdd.get(ctId) ?? [])] };
 }
 
 const isBlank = (value: unknown): boolean =>

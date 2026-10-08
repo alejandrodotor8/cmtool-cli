@@ -140,7 +140,7 @@ describe('buildPlan', () => {
   });
 
   test('si marcas crear el content type, la entry se migra', () => {
-    const plan = buildPlan(analysis, { withAssets: false, picked: [{ ctId: 'promo' }] });
+    const plan = buildPlan(analysis, { withAssets: false, picked: [{ kind: 'create', ctId: 'promo' }] });
     assert.deepEqual(
       plan.contentTypesToCreate.map((ct) => ct.sys.id),
       ['promo'],
@@ -152,7 +152,7 @@ describe('buildPlan', () => {
   test('agrupa los campos marcados por content type y reporta los que no se marcaron', () => {
     const subtitle = bannerSrc.fields[1];
     assert.ok(subtitle);
-    const plan = buildPlan(analysis, { withAssets: false, picked: [{ ctId: 'banner', field: subtitle }] });
+    const plan = buildPlan(analysis, { withAssets: false, picked: [{ kind: 'add', ctId: 'banner', field: subtitle }] });
     assert.deepEqual(
       plan.fieldsToAdd.get('banner')?.map((f) => f.id),
       ['subtitle'],
@@ -330,7 +330,16 @@ describe('buildPlan: solo apariencia del editor', () => {
     const actions = classifyTree(analysis.rootIds, analysis.tree, analysis.existsInDst, new Set());
     const plan = buildPlan(
       { ...analysis, actions },
-      { withAssets: false, picked: [{ ctId: 'imagen', editor: true }], editorDiffs: new Map([['imagen', ['title']]]) },
+      {
+        withAssets: false,
+        picked: [
+          {
+            kind: 'editor',
+            ctId: 'imagen',
+            editor: { fieldId: 'title', parts: ['helpText'], helpText: {}, widget: {} },
+          },
+        ],
+      },
     );
     assert.deepEqual(plan.entries, []);
     assert.deepEqual([...(plan.editorFields.get('imagen') ?? [])], ['title']);

@@ -1,4 +1,5 @@
 import pc from 'picocolors';
+import type { EditorFieldDiff } from '../../core/editor.ts';
 import {
   type ContentTypeDiff,
   FIELD,
@@ -25,7 +26,12 @@ const FIELD_STYLE: Record<FieldStatus, { src: string; dst: string; color: (s: st
 /** Un campo al día en el modelo pero con otra apariencia del editor se marca como reglas distintas. */
 const EDITOR_STYLE = FIELD_STYLE[FIELD.RULES];
 
-function fieldRow(row: FieldRow, index: number, { dst, dstDefault }: ModelView, editorDiff: boolean): string[] {
+function fieldRow(
+  row: FieldRow,
+  index: number,
+  { dst, dstDefault }: ModelView,
+  editorDiff: EditorFieldDiff | undefined,
+): string[] {
   const style = editorDiff && row.status === FIELD.OK ? EDITOR_STYLE : FIELD_STYLE[row.status];
   return [
     pc.dim(row.status === FIELD.EXTRA ? '·' : String(index + 1)),
@@ -38,7 +44,7 @@ function fieldRow(row: FieldRow, index: number, { dst, dstDefault }: ModelView, 
   ];
 }
 
-/** "2 falta(n) · 1 con otro help text o widget" con colores, o "al día". */
+/** "2 falta(n) · 1 con otra apariencia" con colores, o "al día". */
 function statusBadges(diff: ContentTypeDiff, dst: string, editorDiffs: EditorDiffs | undefined): string {
   const parts = contentTypeStatusParts(diff, dst, editorDiffs?.get(diff.id)?.length);
   return parts.length ? pc.yellow(parts.join(pc.dim(' · '))) : pc.green('al día');
@@ -66,7 +72,7 @@ export function renderModelDiffs(
   log.step(`Modelo  ${pc.bold(src)} ${pc.dim('vs')} ${pc.bold(dst)}`);
   legend();
   for (const diff of diffs) {
-    const editorFields = new Set(editorDiffs?.get(diff.id));
+    const editorByField = new Map(editorDiffs?.get(diff.id)?.map((e) => [e.fieldId, e]));
     table({
       spacing: 1,
       title: `${pc.bold(diff.name)} ${pc.dim(diff.id)}  ${statusBadges(diff, dst, editorDiffs)}`,
@@ -78,7 +84,7 @@ export function renderModelDiffs(
         ...envColumns(src, dst),
         { header: 'Estado' },
       ],
-      rows: diff.rows.map((row, i) => fieldRow(row, i, view, editorFields.has(row.field.id))),
+      rows: diff.rows.map((row, i) => fieldRow(row, i, view, editorByField.get(row.field.id))),
     });
     const users = usedBy?.(diff.id);
     if (users?.length) log.info(`usado por: ${clip(users.join(', '), 90)}`);

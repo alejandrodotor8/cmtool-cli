@@ -8,14 +8,13 @@ import type { BackupFile } from '../backup.ts';
 import { COMMANDS, type Command } from '../cli-args.ts';
 import type { ContentType, Environment, Space } from '../contentful/types.ts';
 import { parseIds } from '../core/ids.ts';
-import { fieldType } from '../core/model.ts';
-import type { ModelOption, ModelPick } from '../core/model-changes.ts';
+import { allPicks, type ModelOption, type ModelPick } from '../core/model-changes.ts';
 import type { UpdateCandidate } from '../core/plan.ts';
 import { parseSince } from '../core/query.ts';
 import { AbortError, CancelError } from '../errors.ts';
 import { log } from './log.ts';
-import { clip, pad } from './table.ts';
-import { BACKUP_KIND_LABEL, modelChangesQuestion } from './text.ts';
+import { clip } from './table.ts';
+import { BACKUP_KIND_LABEL, modelPicksSummary, modelPickText } from './text.ts';
 
 /** La respuesta de un prompt, o CancelError si el usuario canceló. */
 function answer<T>(value: T): Exclude<T, symbol> {
@@ -74,6 +73,29 @@ export async function askText(
 ): Promise<string> {
   const value = answer(await p.text({ message, placeholder, validate: (v) => validate?.((v ?? '').trim()) }));
   return value.trim();
+}
+
+/**
+ * Aplicar todo, nada, o elegir: la primera opción siempre es todo, para no tener que
+ * marcar uno por uno. "Elegir cuáles" solo aparece si hay más de una cosa.
+ */
+async function allOrSome<T>(
+  message: string,
+  items: T[],
+  {
+    all,
+    none,
+    pickSome,
+  }: { all: Omit<Choice<string>, 'value'>; none: Omit<Choice<string>, 'value'>; pickSome: () => Promise<T[]> },
+): Promise<T[]> {
+  const mode = await choose(message, [
+    { value: 'all', ...all },
+    ...(items.length > 1 ? [{ value: 'some', label: 'Elegir cuáles', hint: 'marcas uno por uno' }] : []),
+    { value: 'none', ...none },
+  ]);
+  if (mode === 'all') return items;
+  if (mode === 'none') return [];
+  return pickSome();
 }
 
 /** Sí / No. */
@@ -193,14 +215,27 @@ export function askEntryUpdates(
   candidates: UpdateCandidate[],
   { titleOf, src, dst }: { titleOf: (id: string) => string; src: string; dst: string },
 ): Promise<string[]> {
-  return chooseMany(
-    `Estas entries ya existen en ${pc.bold(dst)} y cambiaron en ${pc.bold(src)}: ¿cuáles actualizo? ${pc.dim('(sin marcar, no se tocan)')}`,
-    candidates.map((c) => ({
-      value: c.id,
-      label: `${clip(titleOf(c.id), 40)} ${pc.dim(c.isRoot ? '· la elegiste' : '· hijo')}`,
-      hint: `${c.fields.length} campo(s): ${clip(c.fields.map((f) => f.name).join(', '), 50)}`,
-    })),
-    { initialValues: candidates.filter((c) => c.isRoot).map((c) => c.id), required: false },
+  const option = (c: UpdateCandidate) => ({
+    value: c.id,
+    label: `${clip(titleOf(c.id), 40)} ${pc.dim(c.isRoot ? '· la elegiste' : '· hijo')}`,
+    hint: `${c.fields.length} campo(s): ${clip(c.fields.map((f) => f.name).join(', '), 50)}`,
+  });
+  const [only] = candidates;
+  return allOrSome(
+    `${candidates.length} entry(s) ya existen en ${pc.bold(dst)} y cambiaron en ${pc.bold(src)}: ¿actualizo?`,
+    candidates.map((c) => c.id),
+    {
+      all:
+        candidates.length === 1 && only
+          ? { label: `Actualizar «${clip(titleOf(only.id), 40)}»`, hint: option(only).hint }
+          : { label: `Actualizar todas (${candidates.length})`, hint: 'padres e hijos' },
+      none: { label: 'No actualizar ninguna', hint: 'se quedan como están' },
+      pickSome: () =>
+        chooseMany(`¿Cuáles actualizo? ${pc.dim('(sin marcar, no se tocan)')}`, candidates.map(option), {
+          initialValues: candidates.filter((c) => c.isRoot).map((c) => c.id),
+          required: false,
+        }),
+    },
   );
 }
 
@@ -217,62 +252,46 @@ export const askWithAssets = (missingCount: number): Promise<boolean> =>
     true,
   );
 
-/** Checks agrupados por content type con lo que falta en el modelo de destino. Devuelve lo marcado. */
+/**
+ * Cambios de modelo para destino: todos de una vez, ninguno, o elegidos uno por uno en una
+ * lista agrupada por content type (marcar el content type marca todos sus cambios).
+ */
 export async function askModelChanges(options: ModelOption[], dst: string): Promise<ModelPick[]> {
-  const groups: Record<string, { value: ModelPick; label: string; hint?: string }[]> = {};
-  /** Copiar la apariencia viene marcado: solo cambia cómo se ve el editor, no el modelo ni el contenido. */
-  const editorPicks: ModelPick[] = [];
-  for (const { diff, onlyReused, editorFields } of options) {
+  const picks = allPicks(options);
+  const [only] = options;
+  const single = picks.length === 1 && only?.picks[0] ? modelPickText(only.picks[0], only.diff, dst) : undefined;
+
+  const groups: Record<string, Choice<ModelPick>[]> = {};
+  for (const { diff, onlyReused, picks: ctPicks } of options) {
     const note = diff.missingCT
       ? pc.yellow(`  · nuevo: no existe en ${dst}`)
       : onlyReused && diff.missing.length
         ? pc.dim('  · solo entries reutilizadas: se agrega el campo, su contenido no se copia')
         : '';
-    const group = `${diff.name} ${pc.dim(`(${diff.id})`)}${note}`;
-    if (diff.missingCT) {
-      groups[group] = [
-        {
-          value: { ctId: diff.id },
-          label: `Crear «${diff.name}» con sus ${diff.missing.length} campos`,
-          hint: clip(diff.missing.map((f) => f.name).join(', '), 60),
-        },
-      ];
-      continue;
-    }
-    const nameWidth = Math.max(0, ...diff.missing.map((f) => clip(f.name, 28).length));
-    const fieldName = new Map(diff.rows.map((r) => [r.field.id, r.field.name]));
-    const editorPick: ModelPick = { ctId: diff.id, editor: true };
-    if (editorFields.length) editorPicks.push(editorPick);
-    groups[group] = [
-      ...diff.missing.map((field) => ({
-        value: { ctId: diff.id, field },
-        label: `${pad(clip(field.name, 28), nameWidth)}  ${pc.dim(field.id)}`,
-        hint: fieldType(field),
-      })),
-      ...(editorFields.length
-        ? [
-            {
-              value: editorPick,
-              label: `Copiar apariencia del editor de ${editorFields.length} campo(s)`,
-              hint: `help text y widget: ${clip(editorFields.map((id) => fieldName.get(id) ?? id).join(', '), 50)}`,
-            },
-          ]
-        : []),
-    ];
+    groups[`${diff.name} ${pc.dim(`(${diff.id})`)}${note}`] = ctPicks.map((pick) => {
+      const { label, hint } = modelPickText(pick, diff, dst);
+      return { value: pick, label, hint: clip(hint, 70) };
+    });
   }
 
-  const { question, note } = modelChangesQuestion(options, dst);
-  const picked = answer(
-    await p.groupMultiselect({
-      message: `${question} ${pc.dim(`(${note})`)}`,
-      options: groups,
-      initialValues: editorPicks,
-      required: false,
-      selectableGroups: true,
-    }),
-  );
-  if (!picked.length) log.info(`No marcaste nada: el modelo de ${dst} no cambia.`);
-  return picked;
+  return allOrSome(`Cambios en el modelo de ${pc.bold(dst)}: ${modelPicksSummary(picks)}`, picks, {
+    all: single
+      ? { label: `Aplicar: ${single.label}`, hint: clip(single.hint, 70) }
+      : { label: `Aplicar todo (${picks.length})`, hint: modelPicksSummary(picks) },
+    none: { label: 'No tocar el modelo', hint: `el modelo de ${dst} queda como está` },
+    pickSome: async () => {
+      const picked = answer(
+        await p.groupMultiselect({
+          message: `¿Qué aplico? ${pc.dim('(espacio marca · marcar el content type marca todo lo suyo)')}`,
+          options: groups as Record<string, p.Option<ModelPick>[]>,
+          required: false,
+          selectableGroups: true,
+        }),
+      );
+      if (!picked.length) log.info(`No marcaste nada: el modelo de ${dst} no cambia.`);
+      return picked;
+    },
+  });
 }
 
 /**

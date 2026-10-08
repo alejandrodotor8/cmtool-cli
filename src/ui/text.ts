@@ -2,7 +2,9 @@
  * Textos (sin color) que comparten la terminal y los reportes en Markdown.
  */
 import type { BackupData } from '../backup.ts';
-import { type ContentTypeDiff, FIELD, type FieldRow, fieldType, type RuleChanges } from '../core/model.ts';
+import { EDITOR_PART, type EditorFieldDiff, type EditorPart } from '../core/editor.ts';
+import { type ContentTypeDiff, FIELD, type FieldRow, fieldType } from '../core/model.ts';
+import { CHANGE, type ModelPick } from '../core/model-changes.ts';
 
 export const BACKUP_KIND_LABEL: Record<BackupData['kind'], string> = {
   migrate: 'migración',
@@ -34,41 +36,84 @@ const validationLabel = (name: string) => {
   return VALIDATION_LABEL[base] ?? base;
 };
 
-/** Las reglas que cambian en destino. */
-function rulesText(rules: RuleChanges, dst: string, dstDefault: string | undefined): string {
+const validationsText = (names: string[]) => `validaciones: ${[...new Set(names.map(validationLabel))].join(', ')}`;
+
+/** Cómo están las reglas de un campo en destino comparadas con origen. */
+function rulesText({ rules, dstField }: FieldRow, dst: string, dstDefault: string | undefined): string {
+  if (!rules) return 'reglas distintas';
   return [
+    rules.renamed && dstField && `en ${dst} se llama «${dstField.name}»`,
     rules.requiredOnlyInDst && `obligatorio en ${dst}`,
+    rules.requiredOnlyInSrc && `opcional en ${dst}`,
     rules.localizationLost && `no localizado en ${dst}: solo se copia ${dstDefault ?? 'el locale por defecto'}`,
-    rules.validations.length && `validaciones: ${[...new Set(rules.validations.map(validationLabel))].join(', ')}`,
+    rules.localizedOnlyInDst && `localizado solo en ${dst}`,
+    rules.validations.length && validationsText(rules.validations),
   ]
     .filter(Boolean)
     .join(' · ');
 }
 
-/** Lo que se muestra cuando un campo tiene otra apariencia del editor en destino. */
-export const EDITOR_DIFF_TEXT = 'help text o widget distinto';
+const yesNo = (value: boolean | undefined) => (value ? 'sí' : 'no');
 
 /**
- * Estado de un campo comparado con destino. `editorDiff`: el campo tiene otra apariencia
- * del editor en destino (no es parte del modelo, pero tampoco está al día).
+ * Qué cambia en destino al llevar las reglas de origen ("obligatorio: no → sí"…), con un
+ * aviso cuando puede afectar el contenido que ya existe.
+ */
+export function ruleUpdateText({ rules, field, dstField }: FieldRow): string {
+  if (!rules || !dstField) return 'reglas de origen';
+  return [
+    rules.renamed && `nombre: «${dstField.name}» → «${field.name}»`,
+    (rules.requiredOnlyInDst || rules.requiredOnlyInSrc) &&
+      `obligatorio: ${yesNo(dstField.required)} → ${yesNo(field.required)}`,
+    (rules.localizationLost || rules.localizedOnlyInDst) &&
+      `localizado: ${yesNo(dstField.localized)} → ${yesNo(field.localized)}`,
+    rules.validations.length && validationsText(rules.validations),
+    rules.requiredOnlyInSrc && '⚠ las entries con este campo vacío no se podrán publicar',
+    rules.localizedOnlyInDst && '⚠ se pierden los valores de los otros idiomas',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+const clipText = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+const quoted = (text: string | undefined) => (text ? `«${clipText(text, 40)}»` : 'vacío');
+
+/** Cómo se describe cada parte de la apariencia que difiere. */
+const EDITOR_PART_TEXT: Record<EditorPart, (diff: EditorFieldDiff, dst: string) => string> = {
+  [EDITOR_PART.HELP_TEXT]: ({ helpText }, dst) =>
+    helpText.dst === undefined
+      ? `help text falta en ${dst}`
+      : helpText.src === undefined
+        ? `help text solo en ${dst}`
+        : `help text distinto (en ${dst}: ${quoted(helpText.dst)})`,
+  [EDITOR_PART.WIDGET]: ({ widget }, dst) => `widget ${widget.src ?? '?'} (en ${dst}: ${widget.dst ?? '?'})`,
+  [EDITOR_PART.SETTINGS]: () => 'ajustes del widget distintos',
+};
+
+/** Qué difiere en la apariencia de un campo: "help text falta en master", "widget dropdown (en master: singleLine)"… */
+export const editorDiffText = (diff: EditorFieldDiff, dst: string): string =>
+  diff.parts.map((part) => EDITOR_PART_TEXT[part](diff, dst)).join(' · ');
+
+/**
+ * Estado de un campo comparado con destino. `editor`: lo que difiere en su apariencia del
+ * editor (no es parte del modelo, pero tampoco está al día).
  */
 export function fieldStatusText(
-  { status, dstField, rules }: FieldRow,
+  row: FieldRow,
   dst: string,
   dstDefault: string | undefined,
-  editorDiff = false,
-) {
-  switch (status) {
+  editor?: EditorFieldDiff,
+): string {
+  const editorText = editor ? editorDiffText(editor, dst) : '';
+  switch (row.status) {
     case FIELD.OK:
-      return editorDiff ? EDITOR_DIFF_TEXT : 'al día';
+      return editorText || 'al día';
     case FIELD.RULES:
-      return [rules ? rulesText(rules, dst, dstDefault) : 'reglas distintas', editorDiff && EDITOR_DIFF_TEXT]
-        .filter(Boolean)
-        .join(' · ');
+      return [rulesText(row, dst, dstDefault), editorText].filter(Boolean).join(' · ');
     case FIELD.MISSING:
       return `falta en ${dst}`;
     case FIELD.MISMATCH:
-      return `en ${dst} es ${dstField ? fieldType(dstField) : '?'} → no se migra`;
+      return `en ${dst} es ${row.dstField ? fieldType(row.dstField) : '?'} → no se migra`;
     case FIELD.EXTRA:
       return `sobra en ${dst} → se conserva`;
   }
@@ -85,44 +130,43 @@ export function contentTypeStatusParts(diff: ContentTypeDiff, dst: string, edito
     diff.extra.length && `${diff.extra.length} sobra(n)`,
     diff.mismatched.length && `${diff.mismatched.length} otro tipo`,
     diff.changedRules.length && `${diff.changedRules.length} con reglas distintas`,
-    editorFields && `${editorFields} con otro help text o widget`,
+    editorFields && `${editorFields} con otra apariencia`,
   ].filter((part): part is string => Boolean(part));
 }
 
-/**
- * La pregunta de cambios de modelo según lo que haya: content types que no existen en
- * destino (se crean), campos que faltan (se agregan) y campos con otra apariencia del
- * editor (se actualizan; vienen marcados).
- */
-export function modelChangesQuestion(
-  options: { diff: { missingCT: boolean; missing: unknown[] }; editorFields: string[] }[],
-  dst: string,
-) {
-  const newCTs = options.filter((o) => o.diff.missingCT).length;
-  const add = options.some((o) => !o.diff.missingCT && o.diff.missing.length > 0);
-  const update = options.some((o) => o.editorFields.length > 0);
-  const verb = add && update ? 'agrego o actualizo' : update ? 'actualizo' : 'agrego';
-  const howTo = update
-    ? 'la apariencia viene marcada: espacio para desmarcar'
-    : 'sin marcar nada, el modelo no se toca';
+/** "1 content type nuevo · 2 campo(s) nuevo(s) · reglas de 1 campo(s) · apariencia de 1 campo(s)". */
+export function modelPicksSummary(picks: Pick<ModelPick, 'kind'>[]): string {
+  const count = (kind: ModelPick['kind']) => picks.filter((p) => p.kind === kind).length;
+  return [
+    count(CHANGE.CREATE) && `${count(CHANGE.CREATE)} content type(s) nuevo(s)`,
+    count(CHANGE.ADD) && `${count(CHANGE.ADD)} campo(s) nuevo(s)`,
+    count(CHANGE.RULES) && `reglas de ${count(CHANGE.RULES)} campo(s)`,
+    count(CHANGE.EDITOR) && `apariencia de ${count(CHANGE.EDITOR)} campo(s)`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
 
-  if (newCTs && !add && !update) {
-    return {
-      question:
-        newCTs === 1
-          ? `Este content type no existe en ${dst}: ¿lo creo?`
-          : `Estos ${newCTs} content types no existen en ${dst}: ¿cuáles creo?`,
-      note: 'sin marcar nada, no se crea ninguno',
-    };
+/** Etiqueta y detalle de un cambio de modelo en la lista para marcar. */
+export function modelPickText(pick: ModelPick, diff: ContentTypeDiff, dst: string): { label: string; hint: string } {
+  const row = (fieldId: string) => diff.rows.find((r) => r.field.id === fieldId);
+  const name = (fieldId: string) => row(fieldId)?.field.name ?? fieldId;
+  switch (pick.kind) {
+    case CHANGE.CREATE:
+      return {
+        label: `Crear «${diff.name}» con sus ${diff.missing.length} campos`,
+        hint: diff.missing.map((f) => f.name).join(', '),
+      };
+    case CHANGE.ADD:
+      return { label: `Agregar el campo «${pick.field.name}»`, hint: `${fieldType(pick.field)} · falta en ${dst}` };
+    case CHANGE.RULES: {
+      const fieldRow = row(pick.field.id);
+      return {
+        label: `Reglas de «${pick.field.name}»`,
+        hint: fieldRow ? ruleUpdateText(fieldRow) : 'reglas de origen',
+      };
+    }
+    case CHANGE.EDITOR:
+      return { label: `Apariencia de «${name(pick.editor.fieldId)}»`, hint: editorDiffText(pick.editor, dst) };
   }
-  if (newCTs) {
-    return {
-      question: `¿Qué creo o ${verb} en el modelo de ${dst}?`,
-      note: `${newCTs} content type(s) nuevo(s); ${howTo}`,
-    };
-  }
-  return {
-    question: add && !update ? `¿Qué campos agrego al modelo de ${dst}?` : `¿Qué ${verb} en el modelo de ${dst}?`,
-    note: howTo,
-  };
 }

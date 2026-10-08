@@ -12,6 +12,7 @@ const builtin = (fieldId: string, helpText?: string, widgetId = 'singleLine'): E
   widgetNamespace: 'builtin',
   ...(helpText !== undefined && { settings: { helpText } }),
 });
+const ids = (diffs: { fieldId: string }[]) => diffs.map((d) => d.fieldId);
 
 describe('portableControl', () => {
   test('un widget de Contentful se copia con sus ajustes (incluido el help text)', () => {
@@ -39,12 +40,57 @@ describe('editorDifferences', () => {
       builtin('d', 'Nuevo'),
     ]);
     const dst = editor([builtin('a'), builtin('b'), builtin('c', 'Igual')]);
-    assert.deepEqual(editorDifferences(src, dst, ['a', 'b', 'c', 'd']), ['a', 'b', 'd']);
+    const diffs = editorDifferences(
+      src,
+      dst,
+      ['a', 'b', 'c', 'd'].map((id) => field(id)),
+    );
+    assert.deepEqual(
+      diffs.map((d) => [d.fieldId, d.parts]),
+      [
+        ['a', ['helpText']],
+        ['b', ['widget']],
+        ['d', ['helpText']],
+      ],
+    );
+    assert.deepEqual(diffs[0]?.helpText, { src: 'Ayuda', dst: undefined });
+    assert.deepEqual(diffs[1]?.widget, { src: 'markdown', dst: 'singleLine' });
+  });
+
+  test('solo cambió el help text de un campo: los demás no cuentan como distintos', () => {
+    // Lo que se ve igual en Contentful: ajustes vacíos, help text vacío y el widget por
+    // defecto escrito en un ambiente y omitido en el otro.
+    const src = editor([
+      { fieldId: 'nombre', widgetId: 'singleLine', widgetNamespace: 'builtin', settings: {} },
+      builtin('imagen', 'Usa una imagen de 1200×600', 'assetLinkEditor'),
+      { fieldId: 'descripcion', widgetId: 'richTextEditor', widgetNamespace: 'builtin', settings: { helpText: '' } },
+    ]);
+    const dst = editor([
+      { fieldId: 'nombre', widgetId: 'singleLine', widgetNamespace: 'builtin' },
+      { fieldId: 'imagen', widgetId: 'assetLinkEditor', widgetNamespace: 'builtin' },
+      { fieldId: 'descripcion' },
+    ]);
+    const fields = [field('nombre'), field('imagen', 'Link', { linkType: 'Asset' }), field('descripcion', 'RichText')];
+    assert.deepEqual(ids(editorDifferences(src, dst, fields)), ['imagen']);
+  });
+
+  test('ajustes del widget distintos, sin contar el help text', () => {
+    const src = editor([{ ...builtin('activo', undefined, 'boolean'), settings: { trueLabel: 'Sí' } }]);
+    const dst = editor([builtin('activo', undefined, 'boolean')]);
+    assert.deepEqual(
+      editorDifferences(src, dst, [field('activo', 'Boolean')]).map((d) => d.parts),
+      [['settings']],
+    );
+  });
+
+  test('de un widget de app en origen solo compara el help text', () => {
+    const src = editor([{ fieldId: 'color', widgetId: 'app-1', widgetNamespace: 'app', settings: { paleta: 'x' } }]);
+    assert.deepEqual(editorDifferences(src, editor([builtin('color')]), [field('color')]), []);
   });
 
   test('solo revisa los campos pedidos', () => {
     const src = editor([builtin('a', 'Ayuda')]);
-    assert.deepEqual(editorDifferences(src, editor([]), ['otro']), []);
+    assert.deepEqual(editorDifferences(src, editor([]), [field('otro')]), []);
   });
 });
 
@@ -62,6 +108,18 @@ describe('mergeControls', () => {
   test('agrega el control si destino no lo tiene (campo recién agregado)', () => {
     assert.deepEqual(mergeControls([], [builtin('nuevo', 'Ayuda')], new Set(['nuevo'])), [builtin('nuevo', 'Ayuda')]);
   });
+
+  test('de un widget de app en origen copia el help text y conserva el widget de destino', () => {
+    const src: EditorControl[] = [
+      { fieldId: 'color', widgetId: 'app-1', widgetNamespace: 'app', settings: { helpText: 'Ayuda' } },
+    ];
+    const dst: EditorControl[] = [
+      { fieldId: 'color', widgetId: 'app-9', widgetNamespace: 'app', settings: { paleta: 'x' } },
+    ];
+    assert.deepEqual(mergeControls(dst, src, new Set(['color'])), [
+      { fieldId: 'color', widgetId: 'app-9', widgetNamespace: 'app', settings: { paleta: 'x', helpText: 'Ayuda' } },
+    ]);
+  });
 });
 
 describe('editorDiffsFor', () => {
@@ -74,11 +132,21 @@ describe('editorDiffsFor', () => {
     const result = editorDiffsFor(
       [imagen, nuevo],
       new Map([
-        ['imagen', editor([builtin('alt', 'Describe la imagen'), builtin('archivo'), builtin('soloOrigen', 'x')])],
+        [
+          'imagen',
+          editor([
+            builtin('alt', 'Describe la imagen'),
+            builtin('archivo', undefined, 'assetLinkEditor'),
+            builtin('soloOrigen', 'x'),
+          ]),
+        ],
         ['nuevo', editor([builtin('title', 'y')])],
       ]),
-      new Map([['imagen', editor([builtin('alt'), builtin('archivo')])]]),
+      new Map([['imagen', editor([builtin('alt'), builtin('archivo', undefined, 'assetLinkEditor')])]]),
     );
-    assert.deepEqual([...result], [['imagen', ['alt']]]);
+    assert.deepEqual(
+      [...result].map(([ct, diffs]) => [ct, ids(diffs)]),
+      [['imagen', ['alt']]],
+    );
   });
 });

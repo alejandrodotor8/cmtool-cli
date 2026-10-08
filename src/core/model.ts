@@ -13,7 +13,7 @@ export const fieldType = (f: Field): string =>
 
 export const FIELD = {
   OK: 'ok', // existe en ambos, igual
-  RULES: 'rules', // mismo tipo, pero cambian reglas (obligatorio, localizado, validaciones)
+  RULES: 'rules', // mismo tipo, pero cambian reglas (nombre, obligatorio, localizado, validaciones)
   MISSING: 'missing', // falta en destino
   MISMATCH: 'mismatch', // existe en ambos con distinto tipo
   EXTRA: 'extra', // solo existe en destino
@@ -23,10 +23,16 @@ export type FieldStatus = (typeof FIELD)[keyof typeof FIELD];
 
 /** Diferencias de reglas entre un campo de origen y el mismo campo en destino. */
 export interface RuleChanges {
+  /** El campo tiene otro nombre visible en destino. */
+  renamed: boolean;
   /** Obligatorio en destino pero no en origen: si queda vacío, la entry no se podrá publicar. */
   requiredOnlyInDst: boolean;
+  /** Obligatorio en origen pero no en destino. */
+  requiredOnlyInSrc: boolean;
   /** Localizado en origen pero no en destino: solo se copia el locale por defecto. */
   localizationLost: boolean;
+  /** Localizado en destino pero no en origen. */
+  localizedOnlyInDst: boolean;
   /** Validaciones que cambian, por nombre (`size`, `linkContentType`, `items.linkContentType`…). */
   validations: string[];
 }
@@ -74,11 +80,39 @@ export function compareRules(src: Field, dst: Field): RuleChanges | undefined {
   const dstValidations = validationsOf(dst);
   const names = new Set([...srcValidations.keys(), ...dstValidations.keys()]);
   const rules: RuleChanges = {
-    requiredOnlyInDst: dst.required && !src.required,
-    localizationLost: src.localized && !dst.localized,
+    renamed: src.name !== dst.name,
+    requiredOnlyInDst: Boolean(dst.required && !src.required),
+    requiredOnlyInSrc: Boolean(src.required && !dst.required),
+    localizationLost: Boolean(src.localized && !dst.localized),
+    localizedOnlyInDst: Boolean(dst.localized && !src.localized),
     validations: [...names].filter((name) => srcValidations.get(name) !== dstValidations.get(name)),
   };
-  return rules.requiredOnlyInDst || rules.localizationLost || rules.validations.length ? rules : undefined;
+  const changed = Object.values(rules).some((value) => (Array.isArray(value) ? value.length > 0 : value));
+  return changed ? rules : undefined;
+}
+
+/**
+ * El campo de destino con las reglas de origen: nombre, obligatorio, localizado y
+ * validaciones (también las de los items de un Array). El ID y el tipo no cambian.
+ */
+export function withRulesOf(dst: Field, src: Field): Field {
+  return {
+    ...dst,
+    name: src.name,
+    required: src.required,
+    localized: src.localized,
+    validations: src.validations ?? [],
+    ...(dst.items && { items: { ...dst.items, validations: src.items?.validations ?? [] } }),
+  };
+}
+
+/** Aplica a un campo de destino las reglas de `srcFields` con su mismo ID; los demás quedan igual. */
+export function rulesFrom(srcFields: Field[]): (field: Field) => Field {
+  const byId = new Map(srcFields.map((f) => [f.id, f]));
+  return (field) => {
+    const src = byId.get(field.id);
+    return src ? withRulesOf(field, src) : field;
+  };
 }
 
 /** Compara un content type de origen con el de destino (`undefined` si no existe allá). */

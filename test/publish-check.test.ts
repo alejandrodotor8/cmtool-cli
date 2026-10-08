@@ -40,7 +40,7 @@ describe('requiredGaps', () => {
       srcCTs: [contentType('banner', [field('title'), subtitle])],
       dstCTs: [contentType('banner', [field('title')])],
     });
-    const plan = buildPlan(analysis, { withAssets: false, picked: [{ ctId: 'banner', field: subtitle }] });
+    const plan = buildPlan(analysis, { withAssets: false, picked: [{ kind: 'add', ctId: 'banner', field: subtitle }] });
     assert.deepEqual(gapIds(requiredGaps(analysis, plan)), { banner: ['subtitle'] });
   });
 
@@ -121,13 +121,13 @@ describe('projectedContentType', () => {
   });
 
   test('un content type que se crea queda como en origen', () => {
-    const plan = buildPlan(analysis, { withAssets: false, picked: [{ ctId: 'promo' }] });
+    const plan = buildPlan(analysis, { withAssets: false, picked: [{ kind: 'create', ctId: 'promo' }] });
     assert.equal(projectedContentType('promo', analysis, plan)?.sys.id, 'promo');
   });
 
   test('suma los campos que se agregan', () => {
     const cta = field('cta');
-    const plan = buildPlan(analysis, { withAssets: false, picked: [{ ctId: 'banner', field: cta }] });
+    const plan = buildPlan(analysis, { withAssets: false, picked: [{ kind: 'add', ctId: 'banner', field: cta }] });
     assert.deepEqual(
       projectedContentType('banner', analysis, plan)?.fields.map((f) => f.id),
       ['title', 'cta'],

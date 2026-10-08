@@ -7,7 +7,7 @@ import { type FieldComparison, summarizeValue, VALUE } from '../core/entry-compa
 import { type ContentTypeDiff, fieldType, hasDifferences, type ModelComparison } from '../core/model.ts';
 import type { EditorDiffs } from '../core/model-changes.ts';
 import type { EnvironmentStatus } from '../core/status.ts';
-import { contentTypeStatusParts, editorDiffText, fieldStatusText } from '../ui/text.ts';
+import { contentTypeStatusParts, ctInfoText, editorDiffText, fieldStatusText } from '../ui/text.ts';
 
 const cell = (value: string | number) => String(value).replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
@@ -54,6 +54,7 @@ export function modelComparisonReport(
   const details = comparison.diffs.filter(hasDifferences).map((diff) =>
     [
       `### ${diff.name} (\`${diff.id}\`) — ${ctStatus(diff, envs.dst, editorDiffs.get(diff.id)?.length)}`,
+      ...(diff.info.length ? [ctInfoText(diff, envs.dst)] : []),
       mdTable(
         ['Campo', 'ID', 'Tipo', 'Estado'],
         diff.rows.map((row) => [

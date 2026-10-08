@@ -61,6 +61,21 @@ export function createWriter(cma: Cma, { src, dst }: { src: string; dst: string 
       return publishContentType(ct);
     },
 
+    /**
+     * Cambia el nombre, la descripción y el campo de título del content type, sin tocar sus
+     * campos. Devuelve la versión publicada.
+     */
+    async updateContentTypeInfo(
+      dstCT: ContentType,
+      { name, description, displayField }: Pick<ContentType, 'name' | 'description' | 'displayField'>,
+    ): Promise<ContentType> {
+      const ct = await cma.contentType.update(
+        { ...env, contentTypeId: dstCT.sys.id },
+        { ...dstCT, name, description, displayField },
+      );
+      return publishContentType(ct);
+    },
+
     /** Lee la apariencia del editor actual en destino y la actualiza con `build(actual)`. */
     async updateEditorInterface(contentTypeId: string, build: (current: EditorInterface) => EditorInterface) {
       const current = await cma.editorInterface.get({ ...env, contentTypeId });
@@ -76,22 +91,19 @@ export function createWriter(cma: Cma, { src, dst }: { src: string; dst: string 
       cma.entry.createWithId({ ...env, entryId: id, contentTypeId }, { fields, metadata: { tags } }),
 
     /**
-     * Lee la versión actual en destino y la actualiza con `buildFields(camposActuales)`.
-     * `beforeUpdate` recibe la versión actual antes de escribir (para respaldarla); si falla,
-     * la entry no se actualiza.
+     * Lee la versión actual en destino y la actualiza con los campos y tags que devuelve
+     * `build(actual)`. `beforeUpdate` recibe la versión actual antes de escribir (para
+     * respaldarla); si falla, la entry no se actualiza.
      */
     async updateEntry(
       id: string,
-      buildFields: (current: Entry['fields']) => Entry['fields'],
-      tags: TagLink[],
+      build: (current: Entry) => { fields: Entry['fields']; tags: TagLink[] },
       beforeUpdate?: (current: Entry) => void,
     ) {
       const current = await cma.entry.get({ ...env, entryId: id });
       beforeUpdate?.(current);
-      return cma.entry.update(
-        { ...env, entryId: id },
-        { ...current, fields: buildFields(current.fields ?? {}), metadata: { ...current.metadata, tags } },
-      );
+      const { fields, tags } = build(current);
+      return cma.entry.update({ ...env, entryId: id }, { ...current, fields, metadata: { ...current.metadata, tags } });
     },
   };
 }

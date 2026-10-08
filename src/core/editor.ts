@@ -88,7 +88,9 @@ function fieldEditorDiff(src: EditorControl, dst: EditorControl | undefined, fie
   const parts: EditorPart[] = [];
   if (helpText.src !== helpText.dst) parts.push(EDITOR_PART.HELP_TEXT);
   if (isBuiltin(src)) {
-    if (widget.src !== widget.dst) parts.push(EDITOR_PART.WIDGET);
+    // Sin widget conocido en un lado (tipo de campo sin widget por defecto conocido), no se compara.
+    const widgetKnown = widget.src !== undefined && widget.dst !== undefined;
+    if (widgetKnown && widget.src !== widget.dst) parts.push(EDITOR_PART.WIDGET);
     else if (otherSettings(src) !== otherSettings(dst)) parts.push(EDITOR_PART.SETTINGS);
   }
   return { fieldId: field.id, parts, helpText, widget };

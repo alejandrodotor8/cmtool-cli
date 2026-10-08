@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { compareRules, diffContentType, FIELD, fieldType, withRulesOf } from '../src/core/model.ts';
+import type { ContentType } from '../src/contentful/types.ts';
+import {
+  compareRules,
+  diffContentType,
+  FIELD,
+  fieldType,
+  hasDifferences,
+  withInfoOf,
+  withRulesOf,
+} from '../src/core/model.ts';
 import { contentType, field } from './fixtures.ts';
 
 describe('diffContentType', () => {
@@ -114,21 +123,66 @@ describe('diffContentType con reglas', () => {
 });
 
 describe('withRulesOf', () => {
-  test('copia nombre, obligatorio, localizado y validaciones; conserva ID, tipo y lo demás de destino', () => {
+  test('copia nombre, obligatorio, localizado, validaciones, edición, API y valor por defecto; conserva ID y tipo', () => {
     const src = field('tags', 'Array', {
       name: 'Etiquetas',
       required: true,
       items: { type: 'Symbol', validations: [{ in: ['a', 'b'] }] },
       validations: [{ size: { max: 3 } }],
+      omitted: true,
+      defaultValue: { 'es-CO': ['a'] },
     });
     const dst = field('tags', 'Array', { items: { type: 'Symbol' }, disabled: true });
     assert.deepEqual(withRulesOf(dst, src), {
-      ...dst,
+      id: 'tags',
+      type: 'Array',
       name: 'Etiquetas',
       required: true,
       localized: false,
       validations: [{ size: { max: 3 } }],
+      disabled: false,
+      omitted: true,
+      defaultValue: { 'es-CO': ['a'] },
       items: { type: 'Symbol', validations: [{ in: ['a', 'b'] }] },
     });
+  });
+
+  test('si origen no tiene valor por defecto, se quita el de destino', () => {
+    const dst = field('a', 'Symbol', { defaultValue: { 'es-CO': 'x' } });
+    assert.equal('defaultValue' in withRulesOf(dst, field('a')), false);
+  });
+});
+
+describe('reglas: edición, API y valor por defecto', () => {
+  test('detecta disabled, omitted y defaultValue distintos (undefined es igual a false)', () => {
+    assert.equal(compareRules(field('a', 'Symbol', { disabled: false }), field('a')), undefined);
+    assert.equal(compareRules(field('a', 'Symbol', { disabled: true }), field('a'))?.editingDiffers, true);
+    assert.equal(compareRules(field('a'), field('a', 'Symbol', { omitted: true }))?.apiDiffers, true);
+    assert.equal(
+      compareRules(field('a', 'Symbol', { defaultValue: { 'es-CO': 'x' } }), field('a'))?.defaultValueDiffers,
+      true,
+    );
+  });
+});
+
+describe('datos del content type', () => {
+  const ct = (extra: Partial<ContentType>) => ({ ...contentType('banner', [field('title'), field('slug')]), ...extra });
+
+  test('detecta nombre, descripción y campo de título distintos; vacío es igual a no tener', () => {
+    const diff = diffContentType(
+      ct({ name: 'Banner', description: '', displayField: 'slug' }),
+      ct({ name: 'Banner viejo', description: undefined, displayField: 'title' }),
+    );
+    assert.deepEqual(diff.info, [
+      { part: 'name', src: 'Banner', dst: 'Banner viejo' },
+      { part: 'displayField', src: 'slug', dst: 'title' },
+    ]);
+    assert.equal(hasDifferences(diff), true);
+  });
+
+  test('withInfoOf solo cambia nombre, descripción y campo de título', () => {
+    const dst = ct({ name: 'Viejo', displayField: 'title' });
+    const result = withInfoOf(dst, ct({ name: 'Nuevo', description: 'Hero', displayField: 'slug' }));
+    assert.deepEqual(result, { ...dst, name: 'Nuevo', description: 'Hero', displayField: 'slug' });
   });
 });

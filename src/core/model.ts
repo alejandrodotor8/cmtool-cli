@@ -35,6 +35,12 @@ export interface RuleChanges {
   localizedOnlyInDst: boolean;
   /** Validaciones que cambian, por nombre (`size`, `linkContentType`, `items.linkContentType`…). */
   validations: string[];
+  /** Se puede editar en un ambiente y en el otro no (`disabled`). */
+  editingDiffers: boolean;
+  /** Sale en la API en un ambiente y en el otro no (`omitted`). */
+  apiDiffers: boolean;
+  /** Valor por defecto distinto. */
+  defaultValueDiffers: boolean;
 }
 
 export interface FieldRow {
@@ -45,11 +51,24 @@ export interface FieldRow {
   rules?: RuleChanges;
 }
 
+/** Datos del content type (no de sus campos) que se comparan entre ambientes. */
+export const CT_INFO = { NAME: 'name', DESCRIPTION: 'description', DISPLAY_FIELD: 'displayField' } as const;
+export type CtInfoPart = (typeof CT_INFO)[keyof typeof CT_INFO];
+
+/** Un dato del content type distinto en destino, con el valor de cada lado. */
+export interface CtInfoChange {
+  part: CtInfoPart;
+  src: string | undefined;
+  dst: string | undefined;
+}
+
 export interface ContentTypeDiff {
   id: string;
   name: string;
   /** El content type no existe en destino. */
   missingCT: boolean;
+  /** Nombre, descripción o campo de título distintos en destino (vacío si no existe allá). */
+  info: CtInfoChange[];
   /** Campos en el orden del modelo de origen; los que sobran en destino van al final. */
   rows: FieldRow[];
   missing: Field[];
@@ -86,22 +105,30 @@ export function compareRules(src: Field, dst: Field): RuleChanges | undefined {
     localizationLost: Boolean(src.localized && !dst.localized),
     localizedOnlyInDst: Boolean(dst.localized && !src.localized),
     validations: [...names].filter((name) => srcValidations.get(name) !== dstValidations.get(name)),
+    editingDiffers: Boolean(src.disabled) !== Boolean(dst.disabled),
+    apiDiffers: Boolean(src.omitted) !== Boolean(dst.omitted),
+    defaultValueDiffers: stableJson(src.defaultValue ?? null) !== stableJson(dst.defaultValue ?? null),
   };
   const changed = Object.values(rules).some((value) => (Array.isArray(value) ? value.length > 0 : value));
   return changed ? rules : undefined;
 }
 
 /**
- * El campo de destino con las reglas de origen: nombre, obligatorio, localizado y
- * validaciones (también las de los items de un Array). El ID y el tipo no cambian.
+ * El campo de destino con las reglas de origen: nombre, obligatorio, localizado,
+ * validaciones (también las de los items de un Array), si se puede editar, si sale en la
+ * API y su valor por defecto. El ID y el tipo no cambian.
  */
 export function withRulesOf(dst: Field, src: Field): Field {
+  const { defaultValue: _, ...rest } = dst;
   return {
-    ...dst,
+    ...rest,
     name: src.name,
     required: src.required,
     localized: src.localized,
     validations: src.validations ?? [],
+    disabled: Boolean(src.disabled),
+    omitted: Boolean(src.omitted),
+    ...(src.defaultValue !== undefined && { defaultValue: src.defaultValue }),
     ...(dst.items && { items: { ...dst.items, validations: src.items?.validations ?? [] } }),
   };
 }
@@ -113,6 +140,21 @@ export function rulesFrom(srcFields: Field[]): (field: Field) => Field {
     const src = byId.get(field.id);
     return src ? withRulesOf(field, src) : field;
   };
+}
+
+/** Nombre, descripción y campo de título que difieren (un texto vacío cuenta como no tener). */
+function infoChanges(srcCT: ContentType, dstCT: ContentType | undefined): CtInfoChange[] {
+  if (!dstCT) return [];
+  const value = (ct: ContentType, part: CtInfoPart) => ct[part] || undefined;
+  return Object.values(CT_INFO).flatMap((part) => {
+    const change = { part, src: value(srcCT, part), dst: value(dstCT, part) };
+    return change.src === change.dst ? [] : [change];
+  });
+}
+
+/** El content type de destino con el nombre, la descripción y el campo de título de origen. */
+export function withInfoOf(dstCT: ContentType, srcCT: ContentType): ContentType {
+  return { ...dstCT, name: srcCT.name, description: srcCT.description ?? '', displayField: srcCT.displayField };
 }
 
 /** Compara un content type de origen con el de destino (`undefined` si no existe allá). */
@@ -136,6 +178,7 @@ export function diffContentType(srcCT: ContentType, dstCT: ContentType | undefin
     id: srcCT.sys.id,
     name: srcCT.name,
     missingCT: !dstCT,
+    info: infoChanges(srcCT, dstCT),
     rows,
     missing: fieldsWith(FIELD.MISSING),
     extra: fieldsWith(FIELD.EXTRA),
@@ -146,7 +189,7 @@ export function diffContentType(srcCT: ContentType, dstCT: ContentType | undefin
 
 /** El content type tiene alguna diferencia con destino. */
 export const hasDifferences = (d: ContentTypeDiff): boolean =>
-  d.missingCT || d.missing.length + d.extra.length + d.mismatched.length + d.changedRules.length > 0;
+  d.missingCT || d.info.length + d.missing.length + d.extra.length + d.mismatched.length + d.changedRules.length > 0;
 
 export interface ModelComparison {
   /** Content types de origen comparados con destino, ordenados por nombre. */

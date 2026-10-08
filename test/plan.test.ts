@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import type { Entry } from '../src/contentful/types.ts';
+import type { Entry, Field } from '../src/contentful/types.ts';
 import { modelOptions as modelOptionsFor } from '../src/core/model-changes.ts';
 import {
   ACTION,
@@ -250,6 +250,46 @@ describe('changedInDst', () => {
   test('si nada cambió, no hay diferencias', () => {
     const state = new Map([['a', entry('a', 'x')]]);
     assert.deepEqual(changedInDst(['a', 'b'], state, new Map(state)), []);
+  });
+
+  test('una entry que se va a actualizar y alguien editó en destino cuenta como cambio', () => {
+    const withVersion = (version: number) => {
+      const e = entry('a', 'x');
+      (e.sys as { version: number }).version = version;
+      return e;
+    };
+    const before = new Map([['a', withVersion(3)]]);
+    const after = new Map([['a', withVersion(4)]]);
+    assert.deepEqual(changedInDst(['a'], before, after, new Set(['a'])), ['a']);
+    assert.deepEqual(changedInDst(['a'], before, after), [], 'si no se actualiza, editarla no importa');
+  });
+});
+
+describe('buildPlan: actualizaciones que no escribirían nada', () => {
+  const srcCT = contentType('banner', [field('title'), field('subtitle')]);
+  const dstCT = contentType('banner', [field('title')]);
+  const analysis = analysisOf({
+    rootIds: ['b'],
+    entries: [entry('b', 'banner', { title: { 'es-CO': 'Hola' }, subtitle: { 'es-CO': 'Nuevo' } })],
+    dstEntries: [entry('b', 'banner', { title: { 'es-CO': 'Hola' } })],
+    srcCTs: [srcCT],
+    dstCTs: [dstCT],
+  });
+  const subtitle = srcCT.fields[1] as Field;
+
+  test('si solo cambia un campo nuevo y no se agrega al modelo, la entry no se actualiza', () => {
+    const plan = buildPlan(analysis, { withAssets: false, picked: [] });
+    assert.deepEqual(plan.entries, []);
+    assert.deepEqual(plan.unchanged, ['b']);
+  });
+
+  test('si se agrega el campo, la entry se actualiza', () => {
+    const plan = buildPlan(analysis, { withAssets: false, picked: [{ kind: 'add', ctId: 'banner', field: subtitle }] });
+    assert.deepEqual(
+      plan.entries.map((e) => [e.id, e.action]),
+      [['b', 'update']],
+    );
+    assert.deepEqual(plan.unchanged, []);
   });
 });
 

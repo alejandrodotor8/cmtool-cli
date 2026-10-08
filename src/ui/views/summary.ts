@@ -35,6 +35,12 @@ export function renderSummary(
     rows.push(['', pc.red(`${plan.skipped.length} no se migran (content type no existe en ${dst})`)]);
   }
   if (plan.archived.length) rows.push(['', pc.red(`${plan.archived.length} no se tocan (archivadas en ${dst})`)]);
+  if (plan.unchanged.length) {
+    rows.push([
+      '',
+      pc.dim(`${plan.unchanged.length} no se actualizan: solo cambian en campos que no agregaste al modelo`),
+    ]);
+  }
   rows.push(['Modelo', modelSummary(plan)]);
   if (plan.notAdded.length) rows.push(['', pc.dim(`no se migran: ${clip(plan.notAdded.join(', '), 70)}`)]);
   if (assets.ids.length) {
@@ -83,6 +89,7 @@ export function modelSummary(changes: ModelChanges): string {
   if (!hasModelChanges(changes)) return pc.dim('sin cambios');
   const parts = [
     changes.contentTypesToCreate.length && `+${changes.contentTypesToCreate.length} content type(s)`,
+    changes.infoToUpdate.size && `datos de ${changes.infoToUpdate.size} content type(s)`,
     countNewFields(changes) && `+${countNewFields(changes)} campo(s)`,
     countRuleFields(changes) && `reglas de ${countRuleFields(changes)} campo(s)`,
     countEditorFields(changes) && `apariencia de ${countEditorFields(changes)} campo(s)`,

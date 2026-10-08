@@ -34,6 +34,11 @@ export interface Plan extends ModelChanges {
   skipped: string[];
   /** Entries que pegaste y están archivadas en destino: no se pueden actualizar. */
   archived: string[];
+  /**
+   * Entries que se iban a actualizar, pero solo cambian en campos que faltan en destino y
+   * no se agregaron al modelo: actualizarlas no escribiría nada.
+   */
+  unchanged: string[];
   /** Campos que faltan en destino y no se marcaron (`contentType.campo`). */
   notAdded: string[];
 }
@@ -100,15 +105,22 @@ export function buildPlan(
   }));
   const isSkipped = (w: PlannedEntry) => skippedCTs.has(contentTypeOf(w.entry));
   const isArchived = (w: PlannedEntry) => w.action === ACTION.UPDATE && analysis.archivedInDst.has(w.id);
+  const isUnchanged = (w: PlannedEntry) => {
+    const fields = analysis.changes.get(w.id);
+    if (w.action !== ACTION.UPDATE || !fields) return false;
+    const added = new Set((changes.fieldsToAdd.get(contentTypeOf(w.entry)) ?? []).map((f) => f.id));
+    return !fields.some((f) => !f.newField || added.has(f.id));
+  };
 
   return {
     ...changes,
     withAssets,
     tagsToCreate: tags.missing,
     assetsToCreate: withAssets ? assets.missing.flatMap((id) => assets.src.get(id) ?? []) : [],
-    entries: writes.filter((w) => !isSkipped(w) && !isArchived(w)),
+    entries: writes.filter((w) => !isSkipped(w) && !isArchived(w) && !isUnchanged(w)),
     skipped: writes.filter(isSkipped).map((w) => w.id),
     archived: writes.filter(isArchived).map((w) => w.id),
+    unchanged: writes.filter((w) => !isArchived(w) && isUnchanged(w)).map((w) => w.id),
     notAdded: notAddedFields(diffs.values(), changes.fieldsToAdd),
   };
 }
@@ -132,13 +144,20 @@ export function brokenHyperlinks(analysis: Pick<Analysis, 'tree' | 'actions' | '
 
 /**
  * Entries del árbol cuyo estado en destino cambió entre dos lecturas: aparecieron,
- * desaparecieron o se archivaron/desarchivaron.
+ * desaparecieron o se archivaron/desarchivaron. De las que se van a actualizar (`updated`),
+ * también si alguien las editó: lo que se mostró ya no sería lo que se escribe.
  */
-export function changedInDst(ids: Iterable<string>, before: Map<string, Entry>, after: Map<string, Entry>): string[] {
+export function changedInDst(
+  ids: Iterable<string>,
+  before: Map<string, Entry>,
+  after: Map<string, Entry>,
+  updated: Set<string> = new Set(),
+): string[] {
   return [...ids].filter((id) => {
     const a = before.get(id);
     const b = after.get(id);
-    return Boolean(a) !== Boolean(b) || (a && b && isArchivedEntry(a) !== isArchivedEntry(b));
+    if (!a || !b) return Boolean(a) !== Boolean(b);
+    return isArchivedEntry(a) !== isArchivedEntry(b) || (updated.has(id) && a.sys.version !== b.sys.version);
   });
 }
 

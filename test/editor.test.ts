@@ -88,6 +88,12 @@ describe('editorDifferences', () => {
     assert.deepEqual(editorDifferences(src, editor([builtin('color')]), [field('color')]), []);
   });
 
+  test('sin widget por defecto conocido para el tipo, omitir el widget no cuenta como distinto', () => {
+    const src = editor([{ fieldId: 'r', widgetId: 'resourceLinkEditor', widgetNamespace: 'builtin' }]);
+    const dst = editor([{ fieldId: 'r' }]);
+    assert.deepEqual(editorDifferences(src, dst, [field('r', 'ResourceLink')]), []);
+  });
+
   test('solo revisa los campos pedidos', () => {
     const src = editor([builtin('a', 'Ayuda')]);
     assert.deepEqual(editorDifferences(src, editor([]), [field('otro')]), []);

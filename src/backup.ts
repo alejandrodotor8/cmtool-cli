@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { Account, Entry, Field, TagLink } from './contentful/types.ts';
+import type { Account, ContentType, Entry, Field, TagLink } from './contentful/types.ts';
 import { contentTypeOf } from './core/entries.ts';
 import { AbortError } from './errors.ts';
 
@@ -46,9 +46,12 @@ export interface BackupData {
   editorUpdated?: Record<string, string[]>;
   /** Cómo estaban los campos cuyas reglas se cambiaron, por content type (para revertirlo a mano). */
   rulesUpdated?: Record<string, Field[]>;
+  /** Cómo estaban el nombre, la descripción y el campo de título de los content types que se cambiaron. */
+  infoUpdated?: Record<string, ContentTypeInfo>;
 }
 
 export type CreatedKind = keyof BackupData['created'];
+export type ContentTypeInfo = Pick<ContentType, 'name' | 'description' | 'displayField'>;
 export type Backup = ReturnType<typeof startBackup>;
 
 /**
@@ -107,6 +110,11 @@ export function startBackup(
     },
     recordFields(ctId: string, fieldIds: string[]) {
       data.fieldsAdded[ctId] = [...(data.fieldsAdded[ctId] ?? []), ...fieldIds];
+      save();
+    },
+    /** Guarda cómo estaban el nombre, la descripción y el campo de título antes de cambiarlos. */
+    recordInfo(ctId: string, { name, description, displayField }: ContentTypeInfo) {
+      data.infoUpdated = { ...data.infoUpdated, [ctId]: { name, description, displayField } };
       save();
     },
     /** Guarda cómo estaban los campos antes de cambiar sus reglas. */

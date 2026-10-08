@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { Field } from '../src/contentful/types.ts';
-import { assetFieldsForDestination, fieldsForDestination, mergeWithExisting } from '../src/core/fields.ts';
-import { asset, entry, field, locales } from './fixtures.ts';
+import { assetFieldsForDestination, fieldsForDestination, mergeTags, mergeWithExisting } from '../src/core/fields.ts';
+import { asset, contentType, entry, field, locales } from './fixtures.ts';
 
 const writableOf = (...fields: Field[]) => new Map(fields.map((f) => [f.id, f]));
 
@@ -44,7 +44,7 @@ describe('mergeWithExisting', () => {
     current,
     { title: { 'es-CO': 'Nuevo' } },
     writableOf(field('title'), field('cleared')),
-    locales(['es-CO', 'en-US']),
+    { locales: locales(['es-CO', 'en-US']) },
   );
 
   test('en los campos que se migran manda el origen', () => {
@@ -65,6 +65,48 @@ describe('mergeWithExisting', () => {
 
   test('no modifica el objeto original', () => {
     assert.equal(current.title['es-CO'], 'Viejo');
+  });
+
+  test('conserva las traducciones de destino de un campo que en origen no está localizado', () => {
+    const result = mergeWithExisting(
+      { title: { 'es-CO': 'Viejo', 'en-US': 'Old' } },
+      { title: { 'es-CO': 'Nuevo' } },
+      writableOf(field('title', 'Symbol', { localized: true })),
+      { locales: locales(['es-CO', 'en-US']), ct: contentType('banner', [field('title')]) },
+    );
+    assert.deepEqual(result.title, { 'es-CO': 'Nuevo', 'en-US': 'Old' });
+  });
+});
+
+describe('fieldsForDestination con idiomas por defecto distintos', () => {
+  test('el único valor de un campo no localizado pasa al idioma por defecto de destino', () => {
+    const source = entry('e1', 'banner', { code: { 'en-US': 'X1' } });
+    const result = fieldsForDestination(source, writableOf(field('code')), locales(['es-CO']), {
+      locales: locales(['en-US']),
+      ct: contentType('banner', [field('code')]),
+    });
+    assert.deepEqual(result, { code: { 'es-CO': 'X1' } });
+  });
+
+  test('de un campo localizado en origen no se toma otro idioma', () => {
+    const source = entry('e1', 'banner', { code: { 'en-US': 'Hi' } });
+    const result = fieldsForDestination(source, writableOf(field('code')), locales(['es-CO']), {
+      locales: locales(['en-US', 'es-CO'], 'en-US'),
+      ct: contentType('banner', [field('code', 'Symbol', { localized: true })]),
+    });
+    assert.deepEqual(result, {});
+  });
+});
+
+describe('mergeTags', () => {
+  test('agrega los tags de origen y nunca quita los de destino', () => {
+    const tagLink = (id: string) => ({ sys: { type: 'Link', linkType: 'Tag', id } }) as const;
+    assert.deepEqual(
+      mergeTags([tagLink('solo-master'), tagLink('navidad')], [tagLink('navidad'), tagLink('promo')]).map(
+        (t) => t.sys.id,
+      ),
+      ['solo-master', 'navidad', 'promo'],
+    );
   });
 });
 

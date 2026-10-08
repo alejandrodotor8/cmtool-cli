@@ -5,11 +5,13 @@
  */
 import type { ContentType, Field } from '../contentful/types.ts';
 import type { EditorFieldDiff } from './editor.ts';
-import { type ContentTypeDiff, FIELD } from './model.ts';
+import { type ContentTypeDiff, type CtInfoChange, FIELD } from './model.ts';
 
 export const CHANGE = {
   /** Crear el content type completo. */
   CREATE: 'create',
+  /** Llevar a destino el nombre, la descripción y el campo de título del content type. */
+  INFO: 'info',
   /** Agregar un campo que falta. */
   ADD: 'add',
   /** Llevar a destino las reglas del campo (nombre, obligatorio, localizado, validaciones). */
@@ -21,6 +23,7 @@ export const CHANGE = {
 /** Un cambio que se puede marcar. */
 export type ModelPick =
   | { kind: typeof CHANGE.CREATE; ctId: string }
+  | { kind: typeof CHANGE.INFO; ctId: string; info: CtInfoChange[] }
   | { kind: typeof CHANGE.ADD; ctId: string; field: Field }
   | { kind: typeof CHANGE.RULES; ctId: string; field: Field }
   | { kind: typeof CHANGE.EDITOR; ctId: string; editor: EditorFieldDiff };
@@ -35,6 +38,8 @@ export interface ModelOption {
 
 export interface ModelChanges {
   contentTypesToCreate: ContentType[];
+  /** Content types (de origen) cuyo nombre, descripción y campo de título se llevan a destino. */
+  infoToUpdate: Map<string, ContentType>;
   fieldsToAdd: Map<string, Field[]>;
   /** Campos (de origen) cuyas reglas se llevan a destino, por content type. */
   rulesToUpdate: Map<string, Field[]>;
@@ -51,7 +56,8 @@ export type EditorDiffs = Map<string, EditorFieldDiff[]>;
 /** Los cambios posibles de un content type que existe en destino, en el orden de sus campos. */
 function picksFor(diff: ContentTypeDiff, editorDiffs: EditorDiffs): ModelPick[] {
   const editorByField = new Map((editorDiffs.get(diff.id) ?? []).map((e) => [e.fieldId, e]));
-  return diff.rows.flatMap((row): ModelPick[] => {
+  const info: ModelPick[] = diff.info.length ? [{ kind: CHANGE.INFO, ctId: diff.id, info: diff.info }] : [];
+  const fields = diff.rows.flatMap((row): ModelPick[] => {
     const ctId = diff.id;
     const editor = editorByField.get(row.field.id);
     return [
@@ -60,6 +66,7 @@ function picksFor(diff: ContentTypeDiff, editorDiffs: EditorDiffs): ModelPick[] 
       ...(editor ? [{ kind: CHANGE.EDITOR, ctId, editor } as const] : []),
     ];
   });
+  return [...info, ...fields];
 }
 
 /**
@@ -89,6 +96,7 @@ export const allPicks = (options: ModelOption[]): ModelPick[] => options.flatMap
 /** Convierte lo que marcó el usuario en cambios concretos. */
 export function modelChangesFrom(picked: ModelPick[], srcCTs: Map<string, ContentType>): ModelChanges {
   const contentTypesToCreate: ContentType[] = [];
+  const infoToUpdate = new Map<string, ContentType>();
   const fieldsToAdd = new Map<string, Field[]>();
   const rulesToUpdate = new Map<string, Field[]>();
   const editorFields = new Map<string, Set<string>>();
@@ -110,6 +118,11 @@ export function modelChangesFrom(picked: ModelPick[], srcCTs: Map<string, Conten
         );
         break;
       }
+      case CHANGE.INFO: {
+        const ct = srcCTs.get(pick.ctId);
+        if (ct) infoToUpdate.set(pick.ctId, ct);
+        break;
+      }
       case CHANGE.ADD:
         push(fieldsToAdd, pick.ctId, pick.field);
         copyEditor(pick.ctId, [pick.field.id]);
@@ -122,7 +135,7 @@ export function modelChangesFrom(picked: ModelPick[], srcCTs: Map<string, Conten
         break;
     }
   }
-  return { contentTypesToCreate, fieldsToAdd, rulesToUpdate, editorFields };
+  return { contentTypesToCreate, infoToUpdate, fieldsToAdd, rulesToUpdate, editorFields };
 }
 
 /** Campos que faltan en destino y no se marcaron (`contentType.campo`): su contenido no se migra. */
@@ -143,7 +156,11 @@ export const countEditorFields = (changes: Pick<ModelChanges, 'editorFields'>): 
 
 /** Cambia la estructura del modelo (y por eso se publica). La apariencia sola no publica nada. */
 export const changesStructure = (changes: ModelChanges): boolean =>
-  changes.contentTypesToCreate.length + changes.fieldsToAdd.size + changes.rulesToUpdate.size > 0;
+  changes.contentTypesToCreate.length +
+    changes.infoToUpdate.size +
+    changes.fieldsToAdd.size +
+    changes.rulesToUpdate.size >
+  0;
 
 export const hasModelChanges = (changes: ModelChanges): boolean =>
   changesStructure(changes) || changes.editorFields.size > 0;

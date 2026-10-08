@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { compareEntryFields, migrationChanges, summarizeValue, VALUE } from '../src/core/entry-compare.ts';
-import { contentType, entry, field, link } from './fixtures.ts';
+import { compareEntryFields, migrationChanges, summarizeValue, TAGS, VALUE } from '../src/core/entry-compare.ts';
+import { contentType, entry, field, link, locales } from './fixtures.ts';
 
 describe('compareEntryFields', () => {
   const ct = contentType('banner', [field('title'), field('cta'), field('image', 'Link'), field('legal')]);
@@ -67,6 +67,9 @@ describe('summarizeValue', () => {
 
 describe('migrationChanges', () => {
   const ct = contentType('banner', [field('title', 'Symbol', { localized: true }), field('cta')]);
+  const es = locales(['es-CO']);
+  const model = (dstCT = ct, loc = { src: es, dst: es }, srcCT = ct) => ({ srcCT, dstCT, locales: loc });
+  const ids = (changes: { id: string }[]) => changes.map((f) => f.id);
 
   test('solo cuenta lo que la migración cambiaría: campos del modelo de origen, en sus idiomas', () => {
     const src = entry('b', 'banner', { title: { 'es-CO': 'Hola' }, cta: { 'es-CO': 'Ver' } });
@@ -75,23 +78,75 @@ describe('migrationChanges', () => {
       cta: { 'es-CO': 'Comprar' },
       soloDestino: { 'es-CO': 'x' },
     });
-    assert.deepEqual(
-      migrationChanges(src, dst, ct, new Set(['es-CO'])).map((f) => f.id),
-      ['cta'],
-    );
+    assert.deepEqual(ids(migrationChanges(src, dst, model())), ['cta']);
   });
 
   test('sin cambios, lista vacía', () => {
     const same = entry('b', 'banner', { title: { 'es-CO': 'Hola' } });
-    assert.deepEqual(migrationChanges(same, same, ct, new Set(['es-CO'])), []);
+    assert.deepEqual(migrationChanges(same, same, model()), []);
   });
 
   test('un campo vaciado en origen cuenta como cambio', () => {
     const src = entry('b', 'banner', {});
     const dst = entry('b', 'banner', { cta: { 'es-CO': 'Comprar' } });
     assert.deepEqual(
-      migrationChanges(src, dst, ct, new Set(['es-CO'])).map((f) => [f.id, f.status]),
+      migrationChanges(src, dst, model()).map((f) => [f.id, f.status]),
       [['cta', VALUE.ONLY_DST]],
     );
+  });
+
+  test('el orden de los idiomas o de las claves de un rich text no es un cambio', () => {
+    const both = locales(['es-CO', 'en-US']);
+    const rich = contentType('banner', [field('title', 'Symbol', { localized: true }), field('body', 'RichText')]);
+    const src = entry('b', 'banner', {
+      title: { 'es-CO': 'Hola', 'en-US': 'Hi' },
+      body: { 'es-CO': { nodeType: 'document', data: {}, content: [] } },
+    });
+    const dst = entry('b', 'banner', {
+      title: { 'en-US': 'Hi', 'es-CO': 'Hola' },
+      body: { 'es-CO': { content: [], data: {}, nodeType: 'document' } },
+    });
+    assert.deepEqual(migrationChanges(src, dst, model(rich, { src: both, dst: both }, rich)), []);
+  });
+
+  test('un idioma que destino no tiene no es un cambio (no se puede escribir)', () => {
+    const src = entry('b', 'banner', { title: { 'es-CO': 'Hola', 'en-US': 'Hi' } });
+    const dst = entry('b', 'banner', { title: { 'es-CO': 'Hola' } });
+    assert.deepEqual(migrationChanges(src, dst, model(ct, { src: locales(['es-CO', 'en-US']), dst: es })), []);
+  });
+
+  test('un campo con otro tipo en destino no es un cambio (nunca se escribe)', () => {
+    const src = entry('b', 'banner', { cta: { 'es-CO': 'Ver' } });
+    const dst = entry('b', 'banner', { cta: { 'es-CO': 3 } });
+    const dstCT = contentType('banner', [field('title', 'Symbol', { localized: true }), field('cta', 'Integer')]);
+    assert.deepEqual(migrationChanges(src, dst, model(dstCT)), []);
+  });
+
+  test('un campo que falta en el modelo de destino cuenta, marcado como nuevo', () => {
+    const src = entry('b', 'banner', { cta: { 'es-CO': 'Ver' } });
+    const dst = entry('b', 'banner', {});
+    const dstCT = contentType('banner', [field('title', 'Symbol', { localized: true })]);
+    assert.deepEqual(
+      migrationChanges(src, dst, model(dstCT)).map((f) => [f.id, f.newField]),
+      [['cta', true]],
+    );
+  });
+
+  test('las traducciones de destino de un campo que en origen no está localizado se conservan', () => {
+    const both = locales(['es-CO', 'en-US']);
+    const dstCT = contentType('banner', [field('title', 'Symbol', { localized: true })]);
+    const srcCT = contentType('banner', [field('title')]);
+    const src = entry('b', 'banner', { title: { 'es-CO': 'Hola' } });
+    const dst = entry('b', 'banner', { title: { 'es-CO': 'Hola', 'en-US': 'Hi' } });
+    assert.deepEqual(migrationChanges(src, dst, model(dstCT, { src: both, dst: both }, srcCT)), []);
+  });
+
+  test('tags de origen que faltan en destino cuentan; los que solo tiene destino no', () => {
+    const src = entry('b', 'banner', { title: { 'es-CO': 'Hola' } }, ['navidad']);
+    const dst = entry('b', 'banner', { title: { 'es-CO': 'Hola' } }, ['solo-master']);
+    const [tags] = migrationChanges(src, dst, model());
+    assert.deepEqual([tags?.id, tags?.src], [TAGS, ['solo-master', 'navidad']]);
+    assert.deepEqual(migrationChanges(dst, src, model()).length, 1);
+    assert.deepEqual(migrationChanges(src, src, model()), []);
   });
 });

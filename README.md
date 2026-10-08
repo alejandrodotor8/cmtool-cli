@@ -169,7 +169,7 @@ Sin comando, la herramienta muestra este menú. Los comandos que comparan pueden
 3. Revisa el árbol: la entry que pegaste (**padre**) y las entries a las que apunta (**hijos**).
    - El padre se crea si no existe en destino.
    - Un hijo que ya existe en destino **se reutiliza sin tocarlo**. Igual se muestra lo que tiene debajo y se revisa su modelo.
-   - De lo que ya existe en destino, el árbol muestra **qué cambió en origen**: *"se actualiza · 2 campo(s): Título, CTA"*, *"ya existe · sin cambios"* o, en un hijo, *"ya existe · cambió en develop, no se migra"*. Solo cuenta lo que la migración cambiaría (campos del modelo de origen, en los idiomas de origen).
+   - De lo que ya existe en destino, el árbol muestra **qué cambió en origen**: *"se actualiza · 2 campo(s): Título, CTA"*, *"ya existe · sin cambios"* o, en un hijo, *"ya existe · cambió en develop, no se migra"*. Solo cuenta lo que la migración **cambiaría de verdad**: arma la entry como quedaría en destino, con las mismas reglas con que se escribe, y la compara con la actual. No cuentan el orden de los idiomas o de las claves de un rich text, los idiomas que destino no tiene ni los campos con otro tipo (nunca se escriben). Un campo que falta en el modelo de destino sale como *(campo nuevo)*: si no lo agregas al modelo, esa entry no se actualiza. También cuenta si origen tiene tags que la entry no tiene en destino.
    - Si algo que ya existe cambió, te pregunta **qué actualizar**: la primera opción es **actualizar todas**; también puedes **elegir cuáles** (padre por padre e hijo por hijo; las que elegiste vienen marcadas y los hijos no) o no actualizar ninguna. Lo que no actualices (o no tenga cambios) no se toca. Un hijo marcado se trata como un padre: si apunta a entries que no existen en destino, también se crean.
    - Un hijo que no existe en destino se crea, y se revisan sus propios hijos con la misma regla.
    - Un **texto enlazado** dentro de un rich text (`↗`) no es un hijo: no se migra. Si apunta a una entry que no existe en destino, te avisa que el enlace quedará roto.
@@ -180,7 +180,8 @@ Sin comando, la herramienta muestra este menú. Los comandos que comparan pueden
    - campos que **faltan** en destino → eliges cuáles agregar (si no marcas nada, no se toca el modelo y esos campos no se migran);
    - campos que **sobran** en destino → no se tocan y conservan su valor;
    - campos con **otro tipo** → no se migran;
-   - campos con el mismo tipo pero **reglas distintas** (`!`): otro nombre, obligatorio o localizado en un solo ambiente (si no está localizado en destino, solo se copia el locale por defecto) o validaciones distintas (tipos de entry permitidos, tamaño, formato…);
+   - campos con el mismo tipo pero **reglas distintas** (`!`): otro nombre, obligatorio o localizado en un solo ambiente (si no está localizado en destino, solo se copia el locale por defecto), validaciones distintas (tipos de entry permitidos, tamaño, formato…), si se puede editar, si sale en la API o su valor por defecto;
+   - **datos del content type** distintos: nombre, descripción o campo de título;
    - content types que **no existen** en destino → eliges si crearlos (si no, esas entries no se migran).
 6. Revisa el **resumen** y confirma. El resumen avisa qué entries quedarán con **campos obligatorios vacíos** en destino (no se podrán publicar hasta completarlos). Revisa el idioma por defecto y los idiomas que en destino no permiten campos vacíos. Si el destino parece producción (es `master` o tiene un alias), tienes que escribir el nombre del ambiente para confirmar.
 7. Al terminar te dice dónde quedó el **respaldo** y el comando para **repetir** la migración.
@@ -252,15 +253,15 @@ Cada migración guarda un respaldo en `~/.ctf-migrate/backups/<cuenta>/` (en Win
 ## Garantías
 
 - Nunca publica entries ni assets.
-- El modelo solo cambia con lo que elijas: **todo**, que siempre es la primera opción, o **cambio por cambio** (crear un content type, agregar un campo, llevar las reglas de un campo, copiar la apariencia de un campo). Nunca borra campos ni cambia su ID o tipo. Los cambios de estructura (content types, campos, reglas) se publican, porque Contentful lo exige; la apariencia sola no publica nada.
-- **Reglas de un campo** (nombre, obligatorio, localizado, validaciones): se llevan las de origen. La opción avisa cuando puede afectar el contenido que ya existe: si el campo pasa a ser obligatorio, las entries con ese campo vacío no se podrán publicar, y si deja de ser localizado, se pierden los valores de los otros idiomas. Cómo estaban queda en el respaldo; `restore` no las revierte.
+- El modelo solo cambia con lo que elijas: **todo**, que siempre es la primera opción, o **cambio por cambio** (crear un content type, cambiar su nombre, descripción y campo de título, agregar un campo, llevar las reglas de un campo, copiar la apariencia de un campo). Nunca borra campos ni cambia su ID o tipo. El campo de título solo se cambia si ese campo existe en destino (o se agrega en la misma ejecución). Los cambios de estructura (content types, datos, campos, reglas) se publican, porque Contentful lo exige; la apariencia sola no publica nada.
+- **Reglas de un campo** (nombre, obligatorio, localizado, validaciones, si se puede editar, si sale en la API y valor por defecto): se llevan las de origen. La opción avisa cuando puede afectar el contenido que ya existe: si el campo pasa a ser obligatorio, las entries con ese campo vacío no se podrán publicar; si deja de ser localizado, se pierden los valores de los otros idiomas, y si deja de salir en la API, el sitio no lo recibe. Cómo estaban queda en el respaldo; `restore` no las revierte.
 - **Apariencia del editor** (help text, widget de cada campo): Contentful la guarda aparte del modelo. Se copia sola al crear un content type o agregar campos; la de campos que ya existen se ofrece en `migrate` y `migrate-model`, campo por campo. Un help text vacío, unos ajustes vacíos o un widget por defecto escrito en un ambiente y omitido en el otro cuentan como iguales. De un widget de app o extensión (que podría no estar instalada en destino) solo se copia el help text. No se revierte con `restore`, pero queda registrada en el respaldo.
-- Si una entry ya existe en destino, se actualizan solo los campos que existen en ambos modelos con el mismo tipo. Los campos que solo existen en destino conservan su valor.
+- Si una entry ya existe en destino, se actualizan solo los campos que existen en ambos modelos con el mismo tipo. Los campos que solo existen en destino conservan su valor, igual que los idiomas que origen no trae: los que origen no tiene y las traducciones de un campo que en origen no está localizado.
 - Si una entry ya existe y está publicada, queda como **Changed**: lo publicado sigue en vivo.
-- Los tags que falten en destino se crean.
+- Los tags que falten en destino se crean. Al actualizar una entry se le **agregan** los tags de origen; nunca se le quita uno que tenga en destino.
 - Antes de actualizar una entry existente, guarda cómo estaba (ver `restore`).
 - **Varias cuentas**: cada respaldo registra la cuenta (usuario, email y región) y se guarda en su carpeta. `history` y `restore` solo muestran los de la cuenta con la que iniciaste sesión; `restore` no deja restaurar el respaldo de otra cuenta. Los respaldos anteriores a la 0.6.0, que no registran cuenta, se muestran aparte.
-- Justo antes de escribir vuelve a mirar destino: si algo del árbol apareció, desapareció o se archivó mientras revisabas, se detiene sin escribir.
+- Justo antes de escribir vuelve a mirar destino: si algo del árbol apareció, desapareció o se archivó mientras revisabas, o si alguien editó una entry que se iba a actualizar, se detiene sin escribir.
 - Si el árbol pasa de 300 entries, se detiene: seguramente un link está arrastrando una página entera. Los límites están en [src/config.ts](src/config.ts).
 
 ## Seguridad
@@ -358,7 +359,8 @@ Los tests son **unitarios**: prueban las reglas y utilidades, no hacen migracion
 `isolation.test.ts` verifica que esa protección esté activa. Los tests cubren:
 
 - **Reglas de migración** (`plan.test.ts`): qué se crea, actualiza, reutiliza o no se crea; qué se ofrece agregar al modelo; el plan final.
-- **Transformación de valores** (`fields.test.ts`): locales, merge con la entry existente y assets.
+- **Transformación de valores** (`fields.test.ts`): locales, merge con la entry existente (sin perder traducciones ni tags de destino) y assets.
+- **Escritura de punta a punta** (`execute.test.ts`): orden de las fases, lo que llega a Contentful y lo que queda en el respaldo.
 - **Modelo, links e IDs** (`model.test.ts`, `entries.test.ts`, `ids.test.ts`).
 - **Seguridad**: el writer solo escribe en destino y solo publica content types (`write.test.ts`); el token solo va a hosts de Contentful (`session.test.ts`); los errores no muestran el token (`errors.test.ts`); los archivos solo se copian desde el CDN de Contentful (`fields.test.ts`).
 - **Lectura del árbol** (`read.test.ts`): por niveles, links rotos y ciclos.

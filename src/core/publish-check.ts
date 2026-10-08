@@ -5,18 +5,9 @@
 import type { Analysis } from '../analyze.ts';
 import type { ContentType, Entry, Field } from '../contentful/types.ts';
 import { contentTypeOf } from './entries.ts';
-import { fieldsForDestination, mergeWithExisting } from './fields.ts';
-import { type ContentTypeDiff, rulesFrom } from './model.ts';
+import { fieldsForDestination, mergeWithExisting, writableFields } from './fields.ts';
+import { rulesFrom } from './model.ts';
 import { ACTION, type Plan } from './plan.ts';
-
-/**
- * Campos que se escriben: los que existen en ambos modelos con el mismo tipo.
- * Los que solo existen en destino (o tienen otro tipo) no se tocan, así conservan su valor.
- */
-export function writableFields(dstCT: ContentType, diff: ContentTypeDiff | undefined): Map<string, Field> {
-  const skip = new Set([...(diff?.mismatched ?? []), ...(diff?.extra ?? [])].map((f) => f.id));
-  return new Map(dstCT.fields.filter((f) => !skip.has(f.id)).map((f) => [f.id, f]));
-}
 
 /** Cómo quedará el content type en destino después de aplicar los cambios de modelo del plan. */
 export function projectedContentType(ctId: string, analysis: Analysis, plan: Plan): ContentType | undefined {
@@ -42,7 +33,7 @@ export interface RequiredGap {
  * en el locale por defecto. Solo incluye entries con al menos un hueco.
  */
 export function requiredGaps(analysis: Analysis, plan: Plan): Map<string, RequiredGap[]> {
-  const { locales, diffs, dstEntries } = analysis;
+  const { locales, diffs, dstEntries, contentTypes } = analysis;
   const gaps = new Map<string, RequiredGap[]>();
 
   for (const { id, action, entry } of plan.entries) {
@@ -50,10 +41,11 @@ export function requiredGaps(analysis: Analysis, plan: Plan): Map<string, Requir
     const ct = projectedContentType(ctId, analysis, plan);
     if (!ct) continue;
 
+    const source = { locales: locales.src, ct: contentTypes.src.get(ctId) };
     const writable = writableFields(ct, diffs.get(ctId));
-    const incoming = fieldsForDestination(entry, writable, locales.dst);
+    const incoming = fieldsForDestination(entry, writable, locales.dst, source);
     const current: Entry['fields'] = dstEntries.get(id)?.fields ?? {};
-    const result = action === ACTION.UPDATE ? mergeWithExisting(current, incoming, writable, locales.src) : incoming;
+    const result = action === ACTION.UPDATE ? mergeWithExisting(current, incoming, writable, source) : incoming;
 
     const defaultLocale = locales.dst.default ? [locales.dst.default] : [];
     const entryGaps = ct.fields

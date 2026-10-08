@@ -1,6 +1,16 @@
 /** Constructores mínimos de objetos de Contentful para los tests. */
 import type { Analysis } from '../src/analyze.ts';
-import type { Asset, Cma, ContentType, Entry, EntryTree, Field, Locales, Tag } from '../src/contentful/types.ts';
+import type {
+  Asset,
+  Cma,
+  ContentType,
+  EditorInterface,
+  Entry,
+  EntryTree,
+  Field,
+  Locales,
+  Tag,
+} from '../src/contentful/types.ts';
 import { childEntryIds, contentTypeOf, hyperlinkedEntryIds, isArchived, makeTitleOf } from '../src/core/entries.ts';
 import { migrationChanges } from '../src/core/entry-compare.ts';
 import { diffContentType } from '../src/core/model.ts';
@@ -105,7 +115,16 @@ export function analysisOf({
     [...dstById].flatMap(([id, current]) => {
       const source = tree.entries.get(id);
       return source
-        ? [[id, migrationChanges(source, current, contentTypes.src.get(contentTypeOf(source)), loc.codes)] as const]
+        ? [
+            [
+              id,
+              migrationChanges(source, current, {
+                srcCT: contentTypes.src.get(contentTypeOf(source)),
+                dstCT: contentTypes.dst.get(contentTypeOf(source)),
+                locales: { src: loc, dst: loc },
+              }),
+            ] as const,
+          ]
         : [];
     }),
   );
@@ -147,7 +166,10 @@ export interface RecordedCall {
  * CMA falso que registra cada llamada. `entries` alimenta `entry.getMany` / `entry.get`;
  * las escrituras devuelven lo que recibieron con un `sys` mínimo.
  */
-export function fakeCma(entries: Entry[] = []): { cma: Cma; calls: RecordedCall[] } {
+export function fakeCma(
+  entries: Entry[] = [],
+  editorInterfaces: Map<string, EditorInterface> = new Map(),
+): { cma: Cma; calls: RecordedCall[] } {
   const calls: RecordedCall[] = [];
   const byId = new Map(entries.map((e) => [e.sys.id, e]));
 
@@ -158,8 +180,13 @@ export function fakeCma(entries: Entry[] = []): { cma: Cma; calls: RecordedCall[
       const ids = query['sys.id[in]'].split(',');
       return { items: ids.flatMap((id) => byId.get(id) ?? []) };
     }
+    if (entity === 'editorInterface' && method === 'get') {
+      return editorInterfaces.get(params.contentTypeId as string) ?? { sys: { version: 1 }, controls: [] };
+    }
     if (method === 'get') return byId.get(params.entryId as string) ?? { sys: { id: 'x', version: 1 }, fields: {} };
-    return { ...(data as object), sys: { id: 'x', version: 1 } };
+    // Como Contentful: devuelve lo guardado con el mismo ID y la versión siguiente.
+    const sys = (data as { sys?: { id?: string; version?: number } } | undefined)?.sys;
+    return { ...(data as object), sys: { ...sys, id: sys?.id ?? 'x', version: (sys?.version ?? 0) + 1 } };
   };
 
   const cma = new Proxy(

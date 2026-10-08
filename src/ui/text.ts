@@ -3,7 +3,8 @@
  */
 import type { BackupData } from '../backup.ts';
 import { EDITOR_PART, type EditorFieldDiff, type EditorPart } from '../core/editor.ts';
-import { type ContentTypeDiff, FIELD, type FieldRow, fieldType } from '../core/model.ts';
+import type { FieldComparison } from '../core/entry-compare.ts';
+import { type ContentTypeDiff, CT_INFO, type CtInfoPart, FIELD, type FieldRow, fieldType } from '../core/model.ts';
 import { CHANGE, type ModelPick } from '../core/model-changes.ts';
 
 export const BACKUP_KIND_LABEL: Record<BackupData['kind'], string> = {
@@ -48,12 +49,19 @@ function rulesText({ rules, dstField }: FieldRow, dst: string, dstDefault: strin
     rules.localizationLost && `no localizado en ${dst}: solo se copia ${dstDefault ?? 'el locale por defecto'}`,
     rules.localizedOnlyInDst && `localizado solo en ${dst}`,
     rules.validations.length && validationsText(rules.validations),
+    rules.editingDiffers && dstField && (dstField.disabled ? `no se puede editar en ${dst}` : `editable en ${dst}`),
+    rules.apiDiffers && dstField && (dstField.omitted ? `oculto en la API en ${dst}` : `sale en la API en ${dst}`),
+    rules.defaultValueDiffers && 'valor por defecto distinto',
   ]
     .filter(Boolean)
     .join(' · ');
 }
 
 const yesNo = (value: boolean | undefined) => (value ? 'sí' : 'no');
+
+/** "2 campo(s): Título, CTA (campo nuevo)": lo que cambiaría al actualizar una entry. */
+export const changedFieldsText = (fields: FieldComparison[], max = 50): string =>
+  `${fields.length} campo(s): ${clipText(fields.map((f) => (f.newField ? `${f.name} (campo nuevo)` : f.name)).join(', '), max)}`;
 
 /**
  * Qué cambia en destino al llevar las reglas de origen ("obligatorio: no → sí"…), con un
@@ -68,8 +76,12 @@ export function ruleUpdateText({ rules, field, dstField }: FieldRow): string {
     (rules.localizationLost || rules.localizedOnlyInDst) &&
       `localizado: ${yesNo(dstField.localized)} → ${yesNo(field.localized)}`,
     rules.validations.length && validationsText(rules.validations),
+    rules.editingDiffers && `editable: ${yesNo(!dstField.disabled)} → ${yesNo(!field.disabled)}`,
+    rules.apiDiffers && `sale en la API: ${yesNo(!dstField.omitted)} → ${yesNo(!field.omitted)}`,
+    rules.defaultValueDiffers && 'valor por defecto',
     rules.requiredOnlyInSrc && '⚠ las entries con este campo vacío no se podrán publicar',
     rules.localizedOnlyInDst && '⚠ se pierden los valores de los otros idiomas',
+    rules.apiDiffers && field.omitted && '⚠ el campo deja de salir en la API: el sitio no lo recibe',
   ]
     .filter(Boolean)
     .join(' · ');
@@ -119,6 +131,24 @@ export function fieldStatusText(
   }
 }
 
+const CT_INFO_LABEL: Record<CtInfoPart, string> = {
+  [CT_INFO.NAME]: 'nombre',
+  [CT_INFO.DESCRIPTION]: 'descripción',
+  [CT_INFO.DISPLAY_FIELD]: 'campo de título',
+};
+
+/** "nombre «Banner» (en master: «Banner viejo») · campo de título: Slug (en master: Título)". */
+export function ctInfoText({ info, rows }: ContentTypeDiff, dst: string): string {
+  const fieldName = (id: string | undefined) =>
+    id ? (rows.find((r) => r.field.id === id)?.field.name ?? id) : undefined;
+  return info
+    .map(({ part, src, dst: current }) => {
+      const show = part === CT_INFO.DISPLAY_FIELD ? fieldName : (v: string | undefined) => v;
+      return `${CT_INFO_LABEL[part]} ${quoted(show(src))} (en ${dst}: ${quoted(show(current))})`;
+    })
+    .join(' · ');
+}
+
 /**
  * Resumen de un content type comparado con destino ("2 falta(n) · 1 sobra(n)"…; vacío si
  * está al día). `editorFields`: cuántos campos tienen otra apariencia del editor.
@@ -126,6 +156,8 @@ export function fieldStatusText(
 export function contentTypeStatusParts(diff: ContentTypeDiff, dst: string, editorFields = 0): string[] {
   if (diff.missingCT) return [`no existe en ${dst}`];
   return [
+    diff.info.length &&
+      `${diff.info.map((i) => CT_INFO_LABEL[i.part]).join(', ')} ${diff.info.length > 1 ? 'distintos' : 'distinto'}`,
     diff.missing.length && `${diff.missing.length} falta(n)`,
     diff.extra.length && `${diff.extra.length} sobra(n)`,
     diff.mismatched.length && `${diff.mismatched.length} otro tipo`,
@@ -139,6 +171,7 @@ export function modelPicksSummary(picks: Pick<ModelPick, 'kind'>[]): string {
   const count = (kind: ModelPick['kind']) => picks.filter((p) => p.kind === kind).length;
   return [
     count(CHANGE.CREATE) && `${count(CHANGE.CREATE)} content type(s) nuevo(s)`,
+    count(CHANGE.INFO) && `datos de ${count(CHANGE.INFO)} content type(s)`,
     count(CHANGE.ADD) && `${count(CHANGE.ADD)} campo(s) nuevo(s)`,
     count(CHANGE.RULES) && `reglas de ${count(CHANGE.RULES)} campo(s)`,
     count(CHANGE.EDITOR) && `apariencia de ${count(CHANGE.EDITOR)} campo(s)`,
@@ -157,6 +190,8 @@ export function modelPickText(pick: ModelPick, diff: ContentTypeDiff, dst: strin
         label: `Crear «${diff.name}» con sus ${diff.missing.length} campos`,
         hint: diff.missing.map((f) => f.name).join(', '),
       };
+    case CHANGE.INFO:
+      return { label: `Datos de «${diff.name}»`, hint: ctInfoText(diff, dst) };
     case CHANGE.ADD:
       return { label: `Agregar el campo «${pick.field.name}»`, hint: `${fieldType(pick.field)} · falta en ${dst}` };
     case CHANGE.RULES: {

@@ -11,7 +11,7 @@ import {
 import type { EditorDiffs } from '../../core/model-changes.ts';
 import { log } from '../log.ts';
 import { clip, legend, MARK, table } from '../table.ts';
-import { contentTypeStatusParts, fieldStatusText } from '../text.ts';
+import { contentTypeStatusParts, ctInfoText, fieldStatusText } from '../text.ts';
 import { envColumns, route } from './shared.ts';
 
 /** Marca en cada ambiente y color del estado, según cómo está el campo en destino. */
@@ -86,6 +86,7 @@ export function renderModelDiffs(
       ],
       rows: diff.rows.map((row, i) => fieldRow(row, i, view, editorByField.get(row.field.id))),
     });
+    if (diff.info.length) log.info(ctInfoText(diff, dst));
     const users = usedBy?.(diff.id);
     if (users?.length) log.info(`usado por: ${clip(users.join(', '), 90)}`);
   }

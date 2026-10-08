@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import { writableFields } from '../src/core/fields.ts';
 import { buildPlan } from '../src/core/plan.ts';
-import { projectedContentType, type RequiredGap, requiredGaps, writableFields } from '../src/core/publish-check.ts';
+import { projectedContentType, type RequiredGap, requiredGaps } from '../src/core/publish-check.ts';
 import { analysisOf, contentType, entry, field, locales } from './fixtures.ts';
 
 const gapIds = (gaps: Map<string, RequiredGap[]>) =>

@@ -14,7 +14,7 @@ import { parseSince } from '../core/query.ts';
 import { AbortError, CancelError } from '../errors.ts';
 import { log } from './log.ts';
 import { clip } from './table.ts';
-import { BACKUP_KIND_LABEL, modelPicksSummary, modelPickText } from './text.ts';
+import { BACKUP_KIND_LABEL, changedFieldsText, modelPicksSummary, modelPickText } from './text.ts';
 
 /** La respuesta de un prompt, o CancelError si el usuario canceló. */
 function answer<T>(value: T): Exclude<T, symbol> {
@@ -218,7 +218,7 @@ export function askEntryUpdates(
   const option = (c: UpdateCandidate) => ({
     value: c.id,
     label: `${clip(titleOf(c.id), 40)} ${pc.dim(c.isRoot ? '· la elegiste' : '· hijo')}`,
-    hint: `${c.fields.length} campo(s): ${clip(c.fields.map((f) => f.name).join(', '), 50)}`,
+    hint: changedFieldsText(c.fields),
   });
   const [only] = candidates;
   return allOrSome(

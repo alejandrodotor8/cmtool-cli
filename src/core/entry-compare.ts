@@ -1,8 +1,10 @@
 /**
  * Comparación de una entry entre dos ambientes, campo por campo. Funciones puras.
  */
-import type { ContentType, Entry } from '../contentful/types.ts';
+import type { ContentType, Entry, Locales } from '../contentful/types.ts';
+import { fieldsForDestination, mergeWithExisting, writableFields } from './fields.ts';
 import { exactJson } from './json.ts';
+import { diffContentType } from './model.ts';
 
 export const VALUE = {
   SAME: 'same',
@@ -19,6 +21,25 @@ export interface FieldComparison {
   status: ValueStatus;
   src: unknown;
   dst: unknown;
+  /** El campo falta en el modelo de destino: el cambio solo se aplica si se agrega. */
+  newField?: boolean;
+}
+
+/** ID con el que se comparan los tags de una entry (no son un campo del modelo). */
+export const TAGS = 'metadata.tags';
+
+/** Compara dos valores; `undefined` si son iguales (el orden de las claves no cuenta). */
+function compareValues(id: string, name: string, a: unknown, b: unknown): FieldComparison | undefined {
+  if (a === undefined && b === undefined) return undefined;
+  const status =
+    b === undefined
+      ? VALUE.ONLY_SRC
+      : a === undefined
+        ? VALUE.ONLY_DST
+        : exactJson(a) === exactJson(b)
+          ? VALUE.SAME
+          : VALUE.DIFFERENT;
+  return { id, name, status, src: a, dst: b };
 }
 
 /**
@@ -39,20 +60,9 @@ export function compareEntryFields(
     : [...new Set([...names.keys(), ...Object.keys(src.fields ?? {}), ...Object.keys(dst.fields ?? {})])];
   const pick = (value: unknown) => (locales ? onlyLocales(value, locales) : value);
 
-  return ids.flatMap((id) => {
-    const a = pick(src.fields?.[id]);
-    const b = pick(dst.fields?.[id]);
-    if (a === undefined && b === undefined) return [];
-    const status =
-      b === undefined
-        ? VALUE.ONLY_SRC
-        : a === undefined
-          ? VALUE.ONLY_DST
-          : exactJson(a) === exactJson(b)
-            ? VALUE.SAME
-            : VALUE.DIFFERENT;
-    return [{ id, name: names.get(id) ?? id, status, src: a, dst: b }];
-  });
+  return ids.flatMap(
+    (id) => compareValues(id, names.get(id) ?? id, pick(src.fields?.[id]), pick(dst.fields?.[id])) ?? [],
+  );
 }
 
 /** Resumen corto de un valor para mostrarlo en una tabla. */
@@ -90,6 +100,55 @@ function onlyLocales(value: unknown, locales: Set<string>): unknown {
   return kept.length ? Object.fromEntries(kept) : undefined;
 }
 
-/** Los campos que una migración cambiaría en destino (modelo de origen, locales de origen). */
-export const migrationChanges = (src: Entry, dst: Entry, ct: ContentType | undefined, srcLocales: Set<string>) =>
-  compareEntryFields(src, dst, ct, { locales: srcLocales, modelOnly: true }).filter((f) => f.status !== VALUE.SAME);
+/** Modelos e idiomas de los dos ambientes, para saber qué escribiría una migración. */
+export interface MigrationModel {
+  srcCT: ContentType | undefined;
+  dstCT: ContentType | undefined;
+  locales: { src: Locales; dst: Locales };
+}
+
+/**
+ * Lo que una migración cambiaría en una entry que ya existe en destino. Arma la entry como
+ * quedaría (con las mismas reglas con que se escribe: campos con el mismo tipo, idiomas de
+ * destino, lo que solo existe allá se conserva) y la compara con la actual. Los campos que
+ * faltan en el modelo de destino cuentan, marcados como `newField`: se escriben si se agregan.
+ * También cuenta si origen tiene tags que la entry no tiene en destino.
+ */
+export function migrationChanges(src: Entry, dst: Entry, { srcCT, dstCT, locales }: MigrationModel): FieldComparison[] {
+  if (!srcCT || !dstCT) return [];
+  const diff = diffContentType(srcCT, dstCT);
+  const writable = writableFields(dstCT, diff);
+  for (const field of diff.missing) writable.set(field.id, field);
+  const newFields = new Set(diff.missing.map((f) => f.id));
+
+  const source = { locales: locales.src, ct: srcCT };
+  const current = dst.fields ?? {};
+  const incoming = fieldsForDestination(src, writable, locales.dst, source);
+  const projected = mergeWithExisting(current, incoming, writable, source);
+
+  const fields = srcCT.fields
+    .filter((f) => writable.has(f.id))
+    .flatMap((f) => {
+      const change = compareValues(f.id, f.name, projected[f.id], current[f.id]);
+      if (!change || change.status === VALUE.SAME) return [];
+      return [newFields.has(f.id) ? { ...change, newField: true } : change];
+    });
+  return [...fields, ...tagChanges(src, dst)];
+}
+
+/** Tags de origen que la entry no tiene en destino (al actualizar se agregan; ninguno se quita). */
+function tagChanges(src: Entry, dst: Entry): FieldComparison[] {
+  const ids = (e: Entry) => (e.metadata?.tags ?? []).map((t) => t.sys.id);
+  const current = ids(dst);
+  const added = ids(src).filter((id) => !current.includes(id));
+  if (!added.length) return [];
+  return [
+    {
+      id: TAGS,
+      name: 'Tags',
+      status: current.length ? VALUE.DIFFERENT : VALUE.ONLY_SRC,
+      src: [...current, ...added],
+      dst: current,
+    },
+  ];
+}

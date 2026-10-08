@@ -48,6 +48,10 @@ export function renderRestore(data: BackupData, items: { saved: SavedEntry; curr
   if (added.length) log.info(`Campos agregados al modelo (no se quitan): ${clip(added.join(', '), 100)}`);
   const editor = Object.entries(data.editorUpdated ?? {}).map(([ctId, ids]) => `${ctId} (${ids.length})`);
   if (editor.length) log.info(`Apariencia del editor actualizada (no se revierte): ${clip(editor.join(', '), 100)}`);
+  const info = Object.keys(data.infoUpdated ?? {});
+  if (info.length) {
+    log.info(`Nombre, descripción o campo de título cambiados (no se revierten): ${clip(info.join(', '), 100)}`);
+  }
   const rules = Object.entries(data.rulesUpdated ?? {}).map(
     ([ctId, fields]) => `${ctId}.${fields.map((f) => f.id).join(`, ${ctId}.`)}`,
   );

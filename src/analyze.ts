@@ -15,7 +15,7 @@ import type { Asset, Cma, ContentType, Entry, EntryTree, Locales, Tag } from './
 import { assetIdsOf, contentTypeOf, isArchived, makeTitleOf } from './core/entries.ts';
 import { type FieldComparison, migrationChanges } from './core/entry-compare.ts';
 import { type ContentTypeDiff, diffContentType } from './core/model.ts';
-import { type Action, changedInDst, classifyTree, writtenEntries } from './core/plan.ts';
+import { ACTION, type Action, changedInDst, classifyTree, writtenEntries } from './core/plan.ts';
 
 /** Lo que se sabe del árbol antes de decidir qué actualizar. */
 export interface TreeAnalysis {
@@ -75,11 +75,20 @@ export async function analyzeTree(
   const dstEntries = await fetchEntries(cma, dst, [...tree.entries.keys(), ...hyperlinked]);
 
   report(`Comparando con ${dst}…`);
-  const [srcCTs, srcLocales] = await Promise.all([load.contentTypes(src), load.locales(src)]);
+  // Los modelos e idiomas quedan en memoria: la etapa 2 no los vuelve a pedir.
+  const [srcCTs, dstCTs, srcLocales, dstLocales] = await Promise.all([
+    load.contentTypes(src),
+    load.contentTypes(dst),
+    load.locales(src),
+    load.locales(dst),
+  ]);
   const changes = new Map<string, FieldComparison[]>();
   for (const [id, entry] of tree.entries) {
     const current = dstEntries.get(id);
-    if (current) changes.set(id, migrationChanges(entry, current, srcCTs.get(contentTypeOf(entry)), srcLocales.codes));
+    if (!current) continue;
+    const ct = contentTypeOf(entry);
+    const model = { srcCT: srcCTs.get(ct), dstCT: dstCTs.get(ct), locales: { src: srcLocales, dst: dstLocales } };
+    changes.set(id, migrationChanges(entry, current, model));
   }
 
   return {
@@ -157,10 +166,12 @@ export async function completeAnalysis(
 
 /**
  * Vuelve a mirar destino justo antes de escribir. Devuelve las entries del árbol que
- * aparecieron, desaparecieron o se archivaron mientras el usuario revisaba el plan.
+ * aparecieron, desaparecieron o se archivaron mientras el usuario revisaba el plan, y las
+ * que se van a actualizar y alguien editó en ese tiempo.
  */
 export async function changesSinceAnalysis(cma: Cma, analysis: Analysis): Promise<string[]> {
   const ids = [...analysis.tree.entries.keys()];
   const now = await fetchEntries(cma, analysis.dst, ids);
-  return changedInDst(ids, analysis.dstEntries, now);
+  const updated = new Set(ids.filter((id) => analysis.actions.get(id) === ACTION.UPDATE));
+  return changedInDst(ids, analysis.dstEntries, now, updated);
 }

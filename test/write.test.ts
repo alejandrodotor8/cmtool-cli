@@ -19,7 +19,10 @@ describe('createWriter', () => {
     await writer.addFields(contentType('banner', [field('title')]), [field('subtitle')]);
     await writer.createAsset('img1', asset('img1', { 'es-CO': { url: '//images.ctfassets.net/a.jpg' } }).fields);
     await writer.createEntry('e2', 'banner', { title: { 'es-CO': 'Nuevo' } }, []);
-    await writer.updateEntry('e1', (current) => ({ ...current, title: { 'es-CO': 'Nuevo' } }), []);
+    await writer.updateEntry('e1', (current) => ({
+      fields: { ...current.fields, title: { 'es-CO': 'Nuevo' } },
+      tags: [],
+    }));
     await writer.updateEditorInterface('banner', (current) => current);
     await writer.updateFieldRules(contentType('banner', [field('title')]), (f) => ({ ...f, required: true }));
 
@@ -55,7 +58,10 @@ describe('createWriter', () => {
     const { cma, calls } = fakeCma([entry('e1', 'banner', { title: { 'es-CO': 'Viejo' } })]);
     const writer = createWriter(cma, { src: 'develop', dst: 'qa' });
 
-    await writer.updateEntry('e1', (current) => ({ ...current, title: { 'es-CO': 'Nuevo' } }), []);
+    await writer.updateEntry('e1', (current) => ({
+      fields: { ...current.fields, title: { 'es-CO': 'Nuevo' } },
+      tags: [],
+    }));
 
     const update = calls.find((c) => c.method === 'entry.update');
     assert.ok(update);
@@ -70,8 +76,7 @@ describe('createWriter', () => {
     const seen: unknown[] = [];
     await writer.updateEntry(
       'e1',
-      (current) => current,
-      [],
+      (current) => ({ fields: current.fields, tags: [] }),
       (current) => {
         seen.push(current.fields);
         assert.equal(calls.filter((c) => c.method === 'entry.update').length, 0, 'todavía no actualizó');
@@ -83,8 +88,7 @@ describe('createWriter', () => {
     await assert.rejects(
       writer.updateEntry(
         'e1',
-        (current) => current,
-        [],
+        (current) => ({ fields: current.fields, tags: [] }),
         () => {
           throw new Error('disco lleno');
         },
@@ -101,7 +105,7 @@ describe('createWriter', () => {
     const writer = createWriter(cma, { src: 'develop', dst: 'qa' });
     await writer.createAsset('img1', asset('img1', { 'es-CO': { url: '//images.ctfassets.net/a.jpg' } }).fields);
     await writer.createEntry('e2', 'banner', {}, []);
-    await writer.updateEntry('e1', (current) => current, []);
+    await writer.updateEntry('e1', (current) => ({ fields: current.fields, tags: [] }));
     await writer.createContentType(contentType('promo', [field('title')]));
 
     const published = calls.filter((c) => c.method.endsWith('.publish')).map((c) => c.method);

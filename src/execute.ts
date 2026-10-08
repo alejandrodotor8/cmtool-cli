@@ -10,11 +10,16 @@ import type { Asset, ContentType, EditorInterface, Locales, Tag } from './conten
 import type { Writer } from './contentful/write.ts';
 import { mergeControls } from './core/editor.ts';
 import { contentTypeOf } from './core/entries.ts';
-import { assetFieldsForDestination, fieldsForDestination, mergeWithExisting } from './core/fields.ts';
-import { rulesFrom } from './core/model.ts';
+import {
+  assetFieldsForDestination,
+  fieldsForDestination,
+  mergeTags,
+  mergeWithExisting,
+  writableFields,
+} from './core/fields.ts';
+import { rulesFrom, withInfoOf } from './core/model.ts';
 import { changesStructure, type ModelChanges } from './core/model-changes.ts';
 import { ACTION, type Plan } from './core/plan.ts';
-import { writableFields } from './core/publish-check.ts';
 import type { createRunner } from './ui/runner.ts';
 
 /** Lo que necesita cualquier fase para escribir. */
@@ -70,11 +75,16 @@ export async function applyModelChanges(
 }
 
 async function applyStructure(
-  { contentTypesToCreate, fieldsToAdd, rulesToUpdate }: ModelChanges,
+  { contentTypesToCreate, infoToUpdate, fieldsToAdd, rulesToUpdate }: ModelChanges,
   dstCTs: Map<string, ContentType>,
   { writer, backup, runner }: WriteContext,
 ) {
-  runner.start('Modelo', contentTypesToCreate.length + fieldsToAdd.size + rulesToUpdate.size);
+  runner.start('Modelo', contentTypesToCreate.length + fieldsToAdd.size + rulesToUpdate.size + infoToUpdate.size);
+  const existing = (ctId: string) => {
+    const current = dstCTs.get(ctId);
+    if (!current) throw new Error(`el content type "${ctId}" no existe en ${writer.environment}`);
+    return current;
+  };
   for (const ct of contentTypesToCreate) {
     await runner.run(`content type ${ct.sys.id} creado`, async () => {
       dstCTs.set(ct.sys.id, await writer.createContentType(ct));
@@ -83,9 +93,7 @@ async function applyStructure(
   }
   for (const [ctId, fields] of fieldsToAdd) {
     await runner.run(`${ctId}: +${fields.map((f) => f.id).join(', ')}`, async () => {
-      const current = dstCTs.get(ctId);
-      if (!current) throw new Error(`el content type "${ctId}" no existe en ${writer.environment}`);
-      dstCTs.set(ctId, await writer.addFields(current, fields));
+      dstCTs.set(ctId, await writer.addFields(existing(ctId), fields));
       backup.recordFields(
         ctId,
         fields.map((f) => f.id),
@@ -94,14 +102,27 @@ async function applyStructure(
   }
   for (const [ctId, srcFields] of rulesToUpdate) {
     await runner.run(`${ctId}: reglas de ${srcFields.map((f) => f.id).join(', ')}`, async () => {
-      const current = dstCTs.get(ctId);
-      if (!current) throw new Error(`el content type "${ctId}" no existe en ${writer.environment}`);
+      const current = existing(ctId);
       const ids = new Set(srcFields.map((f) => f.id));
       backup.recordRules(
         ctId,
         current.fields.filter((f) => ids.has(f.id)),
       );
       dstCTs.set(ctId, await writer.updateFieldRules(current, rulesFrom(srcFields)));
+    });
+  }
+  // Al final: el campo de título puede ser uno que se acaba de agregar.
+  for (const [ctId, srcCT] of infoToUpdate) {
+    await runner.run(`${ctId}: nombre, descripción y campo de título`, async () => {
+      const current = existing(ctId);
+      const info = withInfoOf(current, srcCT);
+      if (info.displayField && !current.fields.some((f) => f.id === info.displayField)) {
+        throw new Error(
+          `el campo de título "${info.displayField}" no existe en ${writer.environment}: agrégalo primero`,
+        );
+      }
+      backup.recordInfo(ctId, current);
+      dstCTs.set(ctId, await writer.updateContentTypeInfo(current, info));
     });
   }
   runner.end();
@@ -126,7 +147,7 @@ export async function executePlan(
   srcEditors: () => Promise<Map<string, EditorInterface>>,
   ctx: WriteContext,
 ): Promise<string[]> {
-  const { titleOf, locales, diffs } = analysis;
+  const { titleOf, locales, diffs, contentTypes } = analysis;
   const { writer, backup, runner } = ctx;
   const dstCTs = new Map(analysis.contentTypes.dst); // se actualiza con los cambios de modelo
   const dstTagIds = new Set(analysis.tags.dstIds);
@@ -148,16 +169,19 @@ export async function executePlan(
     }
 
     // Solo campos que existen en ambos modelos con el mismo tipo; el resto conserva su valor.
+    const source = { locales: locales.src, ct: contentTypes.src.get(ctId) };
     const writable = writableFields(dstCT, diffs.get(ctId));
-    const fields = fieldsForDestination(entry, writable, locales.dst);
+    const fields = fieldsForDestination(entry, writable, locales.dst, source);
     const tags = (entry.metadata?.tags ?? []).filter((t) => dstTagIds.has(t.sys.id));
 
     if (action === ACTION.UPDATE) {
       await runner.run(`${label} actualizada ${pc.dim('(queda Changed si estaba publicada)')}`, async () => {
         await writer.updateEntry(
           id,
-          (current) => mergeWithExisting(current, fields, writable, locales.src),
-          tags,
+          (current) => ({
+            fields: mergeWithExisting(current.fields ?? {}, fields, writable, source),
+            tags: mergeTags(current.metadata?.tags ?? [], tags),
+          }),
           (current) => backup.recordUpdate(current, title),
         );
         backup.confirmUpdate(id);

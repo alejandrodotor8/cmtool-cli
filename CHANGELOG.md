@@ -2,6 +2,28 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.10.0 — 2026-10-07
+
+### Agregado
+
+- **Datos del content type**: se comparan el nombre, la descripción y el campo de título, y se pueden llevar a destino ("Datos de «Banner»"). El campo de título solo se cambia si ese campo existe en destino o se agrega en la misma ejecución.
+- Las reglas de un campo también comparan y llevan si se puede editar (`disabled`), si sale en la API (`omitted`) y su valor por defecto. Avisa si el campo deja de salir en la API.
+- Antes de escribir también se detiene si alguien editó en destino una entry que se iba a actualizar mientras revisabas el plan.
+- Tests de la escritura de punta a punta: orden de las fases, lo que llega a Contentful y lo que queda en el respaldo.
+
+### Corregido
+
+- **Qué cambió en una entry** ahora es exactamente lo que se escribiría: arma la entry como quedaría en destino y la compara con la actual. Antes marcaba como cambio:
+  - el mismo contenido con los idiomas o las claves de un rich text en otro orden;
+  - un idioma que destino no tiene (no se puede escribir);
+  - un campo con otro tipo en destino (nunca se escribe).
+- **Se perdían traducciones**: al actualizar un campo que en origen no está localizado pero en destino sí, se borraban sus otros idiomas en destino. Ahora se conservan.
+- **Se perdían tags**: al actualizar una entry se reemplazaban sus tags y se quitaban los que solo tenía en destino. Ahora se agregan los de origen y no se quita ninguno. Los tags nuevos también cuentan como cambio.
+- Una entry que solo cambia en campos nuevos del modelo que no agregaste ya no se actualiza (no escribiría nada y quedaría como *Changed*); el resumen lo dice. En el árbol, esos campos salen como *(campo nuevo)*.
+- Con idiomas por defecto distintos entre ambientes, el valor de un campo no localizado pasa al idioma por defecto de destino en vez de perderse.
+- Las reglas del modelo y la apariencia tampoco cuentan el orden de las claves como diferencia.
+- Un widget omitido en un ambiente ya no cuenta como distinto si el tipo de campo no tiene widget por defecto conocido.
+
 ## 0.9.0 — 2026-10-07
 
 ### Agregado

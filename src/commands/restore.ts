@@ -72,10 +72,10 @@ export async function restore(args: CliArgs): Promise<number> {
   write.runner.start('Restaurando', toRestore.length);
   for (const { saved } of toRestore) {
     await write.runner.run(`${saved.title} ${pc.dim(saved.id)}`, async () => {
+      // Vuelve exactamente a como estaba: campos y tags guardados, sin mezclar.
       await write.writer.updateEntry(
         saved.id,
-        () => saved.fields,
-        saved.tags,
+        () => ({ fields: saved.fields, tags: saved.tags }),
         (entry) => write.backup.recordUpdate(entry, saved.title),
       );
       write.backup.confirmUpdate(saved.id);

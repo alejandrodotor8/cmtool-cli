@@ -5,6 +5,7 @@ import type { FieldComparison } from '../../core/entry-compare.ts';
 import { ACTION, type Action, willExistInDst } from '../../core/plan.ts';
 import { log } from '../log.ts';
 import { clip, legend, MARK, table } from '../table.ts';
+import { changedFieldsText } from '../text.ts';
 import { envColumns } from './shared.ts';
 
 /** Lo que necesita el árbol (sirve antes y después de decidir qué actualizar). */
@@ -12,10 +13,6 @@ export type TreeView = Pick<
   Analysis,
   'src' | 'dst' | 'rootIds' | 'tree' | 'existsInDst' | 'archivedInDst' | 'actions' | 'titleOf' | 'changes'
 >;
-
-/** "2 campo(s): Título, CTA". */
-const changedFields = (fields: FieldComparison[]) =>
-  `${fields.length} campo(s): ${clip(fields.map((f) => f.name).join(', '), 40)}`;
 
 export const countActions = (actions: Map<string, Action>, action: Action): number =>
   [...actions.values()].filter((a) => a === action).length;
@@ -33,7 +30,7 @@ function actionLabel(
     case ACTION.CREATE:
       return pc.green('se crea');
     case ACTION.UPDATE:
-      return pc.yellow(`se actualiza · ${changedFields(fields)}`);
+      return pc.yellow(`se actualiza · ${changedFieldsText(fields)}`);
     case ACTION.KEEP:
       return fields.length
         ? pc.dim(`ya existe · no se actualiza (${fields.length} cambio(s))`)

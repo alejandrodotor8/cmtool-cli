@@ -20,6 +20,7 @@ import {
 import { APP_NAME } from '../app.ts';
 import { type CliArgs, repeatCommand } from '../cli-args.ts';
 import { LIMITS } from '../config.ts';
+import { cache } from '../core/cache.ts';
 import { toDecision } from '../core/decision.ts';
 import { editorDiffsFor } from '../core/editor.ts';
 import { contentTypeOf } from '../core/entries.ts';
@@ -56,7 +57,6 @@ import { renderModelDiffs } from '../ui/views/model.ts';
 import { renderModelPicks, renderRepeat, renderSummary } from '../ui/views/summary.ts';
 import {
   type Context,
-  cached,
   confirmWriting,
   contextSteps,
   finishDryRun,
@@ -72,8 +72,8 @@ export async function migrate(args: CliArgs): Promise<number> {
   printTitle('Migrar entries', { dryRun: args.dryRun, note: 'entries e imágenes quedan en draft' });
 
   const context = contextSteps(args);
-  const trees = cached<TreeAnalysis>();
-  const analyses = cached<Analysis>();
+  const trees = cache<TreeAnalysis>();
+  const analyses = cache<Analysis>();
   let ctx: Context;
   let rootIds: string[] = [];
   let tree: TreeAnalysis;

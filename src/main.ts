@@ -5,6 +5,7 @@
 
 import { VERSION } from './app.ts';
 import { type Command, parseCliArgs, usage, validateFlags } from './cli-args.ts';
+import { prefetch } from './commands/context.ts';
 import { RUNNERS } from './commands/registry.ts';
 import { printIntro, type RunMode } from './ui/header.ts';
 import { steps } from './ui/navigation.ts';
@@ -21,6 +22,7 @@ export async function main(argv: string[], mode: RunMode): Promise<number> {
     return 0;
   }
   printIntro(mode);
+  prefetch(args);
   // Elegido en el menú, Esc desde la primera pregunta del comando vuelve al menú.
   let command = args.command;
   const code = await steps([

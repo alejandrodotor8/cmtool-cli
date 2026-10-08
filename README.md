@@ -94,7 +94,7 @@ Crea un token en Contentful (*Settings → CMA tokens*) y defínelo en la termin
 
 | Comando | Qué corre | Cuándo cambia |
 | --- | --- | --- |
-| `cfm` | el **build**: JavaScript compilado en `dist/` | solo cuando vuelves a correr el script `build` |
+| `cfm` | el **build**: todo empaquetado en un solo archivo, `dist/cli.js` (arranca más rápido) | solo cuando vuelves a correr el script `build` |
 | `cfm-dev` | el **código fuente** de `src/`, sin compilar | al instante, con cada cambio que guardes |
 
 - Usa **`cfm`** para trabajar: no le afectan los cambios a medio hacer ni cambiar de rama en git.
@@ -104,6 +104,9 @@ Crea un token en Contentful (*Settings → CMA tokens*) y defínelo en la termin
 - Si el código de `src/` es más nuevo que el build, `cfm` **avisa** antes de empezar (y sigue corriendo la versión anterior).
 - **No hace falta volver a instalar los comandos** después de un build: apuntan a esta carpeta y toman el `dist/` nuevo. Solo hay que repetir la instalación si mueves la carpeta, si cambian los comandos en `package.json` o, con npm, si cambias de versión de Node.
 - `dist/` no se sube al repo: cada quien lo genera con su gestor.
+- `pnpm-workspace.yaml` es solo para quien use pnpm: le permite a esbuild (el empaquetador del build) correr su instalación. npm y bun lo ignoran.
+- **Por qué un solo archivo**: el build junta el código y sus dependencias (contentful-management, axios…) con esbuild. Así `cfm` abre ~20 archivos al arrancar en vez de ~440, que era lo que hacía lenta la primera ejecución (con el disco en frío, cada archivo cuenta). `cfm-dev` sigue leyendo los archivos sueltos, así que arranca más lento.
+- **Mientras ves el menú**, la herramienta ya se conecta con Contentful y trae tus spaces (y los ambientes, si ya se sabe el space). Al elegir, normalmente ya están listos. Con `--verbose` no lo hace, para no mezclar líneas con el menú.
 
 ### Notas
 
@@ -294,7 +297,8 @@ bin/
   cfm.mjs        comando del build: carga dist/cli.js (avisa si el build quedó viejo)
   stale-build.mjs        compara las fechas de src/ y del build
   cfm-dev.mjs    comando de desarrollo: carga src/cli.ts sin compilar
-dist/                    build generado (no se sube); tsconfig.build.json lo configura
+dist/                    build generado (no se sube): un solo archivo, cli.js
+scripts/build.mjs        el build: empaqueta src/ y sus dependencias con esbuild
 src/
   cli.ts                 arranque: corre main y traduce errores a mensajes y códigos de salida
   main.ts                --version, --help, menú y despacho al comando
@@ -358,7 +362,7 @@ Con tu gestor (`npm run …`, `pnpm …` o `bun run …`):
 | `format` | aplica el formato y los arreglos automáticos de Biome |
 | `test` | tests (`node:test`, sin dependencias extra) |
 | `check` | typecheck + lint + tests; córrelo antes de hacer commit |
-| `build` | compila `src/` a `dist/` (lo que corre `cfm`) |
+| `build` | empaqueta `src/` y sus dependencias en `dist/cli.js` (lo que corre `cfm`) |
 | `start` | corre el build desde la carpeta, sin el comando global |
 | `dev` | corre el código fuente desde la carpeta, sin el comando global |
 

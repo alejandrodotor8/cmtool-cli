@@ -2,6 +2,20 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.12.0 — 2026-10-08
+
+### Cambiado
+
+- **Arranque más rápido**: el build empaqueta el código y sus dependencias en un solo archivo (`dist/cli.js`, con esbuild). `cfm` abre ~20 archivos al arrancar en vez de ~440; en caliente pasa de ~170 ms a ~50 ms, y la primera ejecución (con el disco en frío) es la que más gana.
+- **Conecta con Contentful mientras ves el menú**: trae tus spaces (y los ambientes, si ya se sabe el space; en `history` y `restore`, tu cuenta) en segundo plano. Al elegir, normalmente ya están listos. Con `--verbose` no lo hace.
+- Una sola sesión por ejecución: si vuelves al menú y eliges otro comando, no se repiten las lecturas.
+- Una lectura que falla (por ejemplo, sin red) ya no queda guardada: se vuelve a intentar.
+
+### Agregado
+
+- Dependencia de desarrollo `esbuild` (solo para el build; funciona con npm, pnpm y bun, en macOS y Windows).
+- `pnpm-workspace.yaml`: solo para pnpm (npm y bun lo ignoran). Permite a esbuild correr su script de instalación; sin él, `pnpm install` termina con error en pnpm 11+.
+
 ## 0.11.0 — 2026-10-07
 
 ### Agregado

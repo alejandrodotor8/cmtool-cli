@@ -19,6 +19,7 @@ import {
 } from '../contentful/read.ts';
 import type { Account, Cma, ContentType, EditorInterface, Environment, Space } from '../contentful/types.ts';
 import { createWriter } from '../contentful/write.ts';
+import { remember } from '../core/cache.ts';
 import { applyDecision, type Decision } from '../core/decision.ts';
 import { looksLikeProduction, resolveEnvironment } from '../core/environments.ts';
 import { allPicks, type ModelOption, type ModelPick, pickKey } from '../core/model-changes.ts';
@@ -37,32 +38,76 @@ import { renderRepeat } from '../ui/views/summary.ts';
 
 /**
  * Sesión, contador de llamadas a la API, si se muestran animaciones, un cliente sin space
- * y la cuenta con la que se trabaja (se consulta una sola vez, solo si hace falta).
+ * y lo que se lee una sola vez por ejecución: spaces, ambientes de cada space y la cuenta.
  */
-export function openSession(args: Pick<CliArgs, 'verbose'>) {
+function createSession(args: Pick<CliArgs, 'verbose'>) {
   const session = loadSession();
   const api = trackApiCalls(args.verbose);
   const animate = shouldAnimate(args.verbose);
   const client = createCma(session, undefined, api.onRequest);
+  const cmaFor = remember(async (spaceId) => createCma(session, spaceId, api.onRequest));
+  const spaces = remember(() => listSpaces(client));
+  const environments = remember(async (spaceId) => listEnvironments(await cmaFor(spaceId)));
+  const user = remember(() => currentUser(client));
   let account: Promise<Account> | undefined;
   return {
     session,
     api,
     animate,
     client,
+    cmaFor,
+    spaces: () => spaces(''),
+    environments,
+    user: () => user(''),
     account: (): Promise<Account> => {
       account ??= withStatus(
         'Verificando tu cuenta…',
         animate,
         async () => {
-          const user = await currentUser(client);
-          return { userId: user.id, email: user.email, host: session.host };
+          const found = await user('');
+          return { userId: found.id, email: found.email, host: session.host };
         },
         (a) => `Cuenta: ${a.email ?? a.userId}`,
       );
       return account;
     },
   };
+}
+
+let opened: ReturnType<typeof createSession> | undefined;
+
+/** La sesión de esta ejecución (una sola: lo que se lee queda para todos los comandos y pasos). */
+export function openSession(args: Pick<CliArgs, 'verbose'>): ReturnType<typeof createSession> {
+  opened ??= createSession(args);
+  return opened;
+}
+
+/**
+ * Adelanta las primeras lecturas mientras el usuario mira el menú o la primera pregunta:
+ * spaces y ambientes (o la cuenta, en history y restore). Así, al elegir, la conexión con
+ * Contentful ya está abierta y los datos listos. No muestra nada y nunca falla: si algo
+ * sale mal, se vuelve a intentar (y se informa) cuando de verdad hace falta.
+ */
+export function prefetch(args: Pick<CliArgs, 'verbose' | 'command' | 'space'>): void {
+  if (args.verbose) return; // las líneas de --verbose se mezclarían con el menú
+  let base: SessionContext;
+  try {
+    base = openSession(args);
+  } catch {
+    return; // sin sesión: el comando lo explica
+  }
+  if (args.command === 'history' || args.command === 'restore') {
+    base.user().catch(() => {});
+    return;
+  }
+  base
+    .spaces()
+    .then((found) => {
+      const preferred = args.space ?? base.session.defaultSpaceId;
+      const id = found.length === 1 ? found[0]?.sys.id : found.find((s) => s.sys.id === preferred)?.sys.id;
+      if (id) return base.environments(id);
+    })
+    .catch(() => {});
 }
 
 export type SessionContext = ReturnType<typeof openSession>;
@@ -75,24 +120,6 @@ export interface Context extends SessionContext, Loaders {
   src: string;
   dst: string;
   dstEnv: Environment;
-}
-
-/** Guarda el resultado de cada llamada (por ambiente) para no repetirla. */
-function memo<T>(load: (env: string) => Promise<T>): (env: string) => Promise<T> {
-  const cache = new Map<string, Promise<T>>();
-  return (env) => {
-    if (!cache.has(env)) cache.set(env, load(env));
-    return cache.get(env) as Promise<T>;
-  };
-}
-
-/** Guarda resultados por clave: volver atrás y seguir igual no repite las lecturas. */
-export function cached<T>(): (key: string, load: () => Promise<T>) => Promise<T> {
-  const cache = new Map<string, Promise<T>>();
-  return (key, load) => {
-    if (!cache.has(key)) cache.set(key, load());
-    return cache.get(key) as Promise<T>;
-  };
 }
 
 /** Aplica una decisión pasada por flag y avisa lo que ya no está disponible. */
@@ -133,41 +160,30 @@ function requireEnvironment(envs: Environment[], name: string): string {
  */
 export function contextSteps(args: CliArgs): { steps: Step[]; ctx: () => Context } {
   const base = openSession(args);
-  const { session, api, animate } = base;
-  // Lo que se lee de Contentful queda en memoria: volver atrás no repite llamadas.
-  let spaces: Promise<Space[]> | undefined;
-  const envsBySpace = new Map<string, Promise<Environment[]>>();
+  const { session, animate } = base;
   let spaceId = '';
   let src = '';
   let dst = '';
   let cma: Cma | undefined;
   let context: Context | undefined;
 
-  const environments = (id: string) => {
-    if (!envsBySpace.has(id)) {
-      const client = createCma(session, id, api.onRequest);
-      envsBySpace.set(
-        id,
-        withStatus(
-          'Leyendo ambientes…',
-          animate,
-          () => listEnvironments(client),
-          (found) => `${found.length} ambientes`,
-        ),
-      );
-    }
-    return envsBySpace.get(id) as Promise<Environment[]>;
-  };
+  // Lo que se lee queda en la sesión: volver atrás no repite llamadas.
+  const environments = (id: string) =>
+    withStatus(
+      'Leyendo ambientes…',
+      animate,
+      () => base.environments(id),
+      (found) => `${found.length} ambientes`,
+    );
 
   const steps: Step[] = [
     async () => {
-      spaces ??= withStatus(
+      const found = await withStatus(
         'Conectando con Contentful…',
         animate,
-        () => listSpaces(base.client),
-        (found) => `Conectado · ${found.length} space(s)`,
+        () => base.spaces(),
+        (list) => `Conectado · ${list.length} space(s)`,
       );
-      const found = await spaces;
       if (!found.length) throw new AbortError('Tu usuario no tiene acceso a ningún space.');
       if (args.space && !found.some((s) => s.sys.id === args.space)) {
         throw new AbortError(`No tienes acceso al space "${args.space}".`);
@@ -175,7 +191,7 @@ export function contextSteps(args: CliArgs): { steps: Step[]; ctx: () => Context
       spaceId =
         args.space ??
         (found.length === 1 ? (found[0] as Space).sys.id : await pickSpace(found, session.defaultSpaceId));
-      cma = createCma(session, spaceId, api.onRequest);
+      cma = await base.cmaFor(spaceId);
     },
     async () => {
       const envs = await environments(spaceId);
@@ -223,9 +239,9 @@ export function buildContext(
     src,
     dst,
     dstEnv: envs.find((e) => e.id === dst) ?? { id: dst, aliases: [] },
-    contentTypes: memo((env) => readContentTypes(cma, env)),
-    locales: memo((env) => readLocales(cma, env)),
-    editorInterfaces: memo((env) => readEditorInterfaces(cma, env)),
+    contentTypes: remember((env) => readContentTypes(cma, env)),
+    locales: remember((env) => readLocales(cma, env)),
+    editorInterfaces: remember((env) => readEditorInterfaces(cma, env)),
   };
 }
 

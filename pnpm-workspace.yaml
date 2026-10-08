@@ -1,0 +1,7 @@
+# Solo para pnpm (npm y bun lo ignoran): permite a esbuild, que se usa únicamente
+# en el build, correr su script de instalación. Sin esto, pnpm 11+ termina con error.
+# allowBuilds: pnpm 11 o superior · onlyBuiltDependencies: pnpm 10.
+allowBuilds:
+  esbuild: true
+onlyBuiltDependencies:
+  - esbuild

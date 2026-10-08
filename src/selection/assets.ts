@@ -6,22 +6,46 @@ import type { Context } from '../commands/context.ts';
 import { LIMITS } from '../config.ts';
 import { searchAssets } from '../contentful/read.ts';
 import { log } from '../ui/log.ts';
+import { goBack, steps } from '../ui/navigation.ts';
 import { askIds, askText, choose, chooseMany } from '../ui/prompts.ts';
 import { withStatus } from '../ui/status.ts';
 import { clip } from '../ui/table.ts';
 
 export async function selectAssetIds(ctx: Context, args: Pick<CliArgs, 'ids' | 'search'>): Promise<string[]> {
   if (args.ids) return args.ids;
-  const text =
-    args.search ??
-    ((await choose('¿Cómo eliges los archivos?', [
-      { value: 'ids', label: 'Por asset ID o URL', hint: 'sin llamadas extra' },
-      { value: 'search', label: 'Buscar por nombre', hint: '1 llamada por búsqueda' },
-    ])) === 'search'
-      ? await askText('Buscar', { validate: (v) => (v ? undefined : 'Escribe algo para buscar.') })
-      : undefined);
-  if (text === undefined) return askIds('assets');
+  if (args.search) return searchAssetsAndPick(ctx, args.search, { preselect: true });
 
+  let method = 'ids';
+  let ids: string[] = [];
+  await steps([
+    async () => {
+      method = await choose('¿Cómo eliges los archivos?', [
+        { value: 'ids', label: 'Por asset ID o URL', hint: 'sin llamadas extra' },
+        { value: 'search', label: 'Buscar por nombre', hint: '1 llamada por búsqueda' },
+      ]);
+    },
+    async () => {
+      if (method === 'ids') {
+        ids = await askIds('assets');
+        return;
+      }
+      let text = '';
+      await steps([
+        async () => {
+          text = await askText('Buscar', { validate: (v) => (v ? undefined : 'Escribe algo para buscar.') });
+        },
+        async () => {
+          ids = await searchAssetsAndPick(ctx, text, { preselect: false });
+          if (!ids.length) goBack();
+        },
+      ]);
+    },
+  ]);
+  return ids;
+}
+
+/** Busca archivos por texto (una llamada) y deja elegir entre los resultados. */
+async function searchAssetsAndPick(ctx: Context, text: string, { preselect }: { preselect: boolean }) {
   const results = await withStatus(
     `Buscando en ${ctx.src}…`,
     ctx.animate,
@@ -43,6 +67,6 @@ export async function selectAssetIds(ctx: Context, args: Pick<CliArgs, 'ids' | '
         hint: `${file?.contentType ?? ''} · ${a.sys.id}`,
       };
     }),
-    { initialValues: args.search ? results.map((a) => a.sys.id) : [] },
+    { initialValues: preselect ? results.map((a) => a.sys.id) : [] },
   );
 }

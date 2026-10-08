@@ -144,9 +144,11 @@ cfm --version    # versión instalada
 
 Sin comando, la herramienta muestra este menú. Los comandos que comparan pueden guardar un **reporte Markdown** para compartir (`--report archivo.md`, o te lo ofrece al final).
 
+**Moverse entre preguntas**: **Esc** vuelve a la pregunta anterior (también hay una opción **← Volver** al final de cada lista) y **Ctrl+C** sale sin escribir nada. Se puede volver desde la confirmación final hasta el menú; las lecturas a Contentful quedan en memoria, así que volver no repite llamadas. Las preguntas que resolviste con flags se saltan al volver.
+
 ### Migrar entries
 
-1. Elige el **space** y los ambientes **origen** y **destino**.
+1. Elige el **space** (si tienes uno solo, se elige solo) y los ambientes **origen** y **destino**. Los ambientes salen en orden: desarrollo (`develop`) y pruebas (`qa`, `staging`…) primero y **producción al final** (`master` o el que tenga un alias), marcada como *producción*. Si eliges producción como **origen**, te pide confirmarlo: lo normal es migrar desde un ambiente de pruebas hacia producción.
 2. Elige **cómo seleccionar las entries**. Cada opción indica cuánto consume de la API:
 
    | Forma | Llamadas a la API | Flag |
@@ -170,12 +172,12 @@ Sin comando, la herramienta muestra este menú. Los comandos que comparan pueden
    - El padre se crea si no existe en destino.
    - Un hijo que ya existe en destino **se reutiliza sin tocarlo**. Igual se muestra lo que tiene debajo y se revisa su modelo.
    - De lo que ya existe en destino, el árbol muestra **qué cambió en origen**: *"se actualiza · 2 campo(s): Título, CTA"*, *"ya existe · sin cambios"* o, en un hijo, *"ya existe · cambió en develop, no se migra"*. Solo cuenta lo que la migración **cambiaría de verdad**: arma la entry como quedaría en destino, con las mismas reglas con que se escribe, y la compara con la actual. No cuentan el orden de los idiomas o de las claves de un rich text, los idiomas que destino no tiene ni los campos con otro tipo (nunca se escriben). Un campo que falta en el modelo de destino sale como *(campo nuevo)*: si no lo agregas al modelo, esa entry no se actualiza. También cuenta si origen tiene tags que la entry no tiene en destino.
-   - Si algo que ya existe cambió, te pregunta **qué actualizar**: la primera opción es **actualizar todas**; también puedes **elegir cuáles** (padre por padre e hijo por hijo; las que elegiste vienen marcadas y los hijos no) o no actualizar ninguna. Lo que no actualices (o no tenga cambios) no se toca. Un hijo marcado se trata como un padre: si apunta a entries que no existen en destino, también se crean.
+   - Si algo que ya existe cambió, te pregunta **qué actualizar** (o lo dice `--update all|none|id,id`): la primera opción es **actualizar todas**; también puedes **elegir cuáles** (padre por padre e hijo por hijo; las que elegiste vienen marcadas y los hijos no) o no actualizar ninguna. Lo que no actualices (o no tenga cambios) no se toca. Un hijo marcado se trata como un padre: si apunta a entries que no existen en destino, también se crean.
    - Un hijo que no existe en destino se crea, y se revisan sus propios hijos con la misma regla.
    - Un **texto enlazado** dentro de un rich text (`↗`) no es un hijo: no se migra. Si apunta a una entry que no existe en destino, te avisa que el enlace quedará roto.
    - Si una entry está **archivada** en destino, no se actualiza (y si es un hijo reutilizado, te avisa que el padre no se podrá publicar).
    - Si se van a escribir más de 20 entries, te pide confirmar que el árbol es lo que esperabas.
-4. **Imágenes**: si faltan imágenes en destino, te pregunta si migrar con imágenes. Si dices que sí, reutiliza las que ya existen y crea las que faltan.
+4. **Imágenes**: si faltan imágenes en destino, te pregunta si migrar con imágenes (o lo dicen `--assets` / `--no-assets`). Si dices que sí, reutiliza las que ya existen y crea las que faltan.
 5. **Modelo**: compara el modelo de padres e hijos con el de destino (también la **apariencia del editor**: help text, widget y sus ajustes; la tabla dice exactamente qué difiere en cada campo, aunque las entries no tengan cambios) y te muestra:
    - campos que **faltan** en destino → eliges cuáles agregar (si no marcas nada, no se toca el modelo y esos campos no se migran);
    - campos que **sobran** en destino → no se tocan y conservan su valor;
@@ -183,21 +185,29 @@ Sin comando, la herramienta muestra este menú. Los comandos que comparan pueden
    - campos con el mismo tipo pero **reglas distintas** (`!`): otro nombre, obligatorio o localizado en un solo ambiente (si no está localizado en destino, solo se copia el locale por defecto), validaciones distintas (tipos de entry permitidos, tamaño, formato…), si se puede editar, si sale en la API o su valor por defecto;
    - **datos del content type** distintos: nombre, descripción o campo de título;
    - content types que **no existen** en destino → eliges si crearlos (si no, esas entries no se migran).
-6. Revisa el **resumen** y confirma. El resumen avisa qué entries quedarán con **campos obligatorios vacíos** en destino (no se podrán publicar hasta completarlos). Revisa el idioma por defecto y los idiomas que en destino no permiten campos vacíos. Si el destino parece producción (es `master` o tiene un alias), tienes que escribir el nombre del ambiente para confirmar.
-7. Al terminar te dice dónde quedó el **respaldo** y el comando para **repetir** la migración.
+
+   Lo que elijas aquí también se puede decir con `--model all|none|<cambios>`.
+6. Revisa el **resumen** y confirma. El resumen dice cuántas entries se crean, se actualizan y se reutilizan, qué imágenes y tags se crean, y lista **cada cambio de modelo** (content type, cambio y detalle). Debajo muestra el comando para **repetirlo sin preguntas**. También avisa qué entries quedarán con **campos obligatorios vacíos** en destino (no se podrán publicar hasta completarlos). Revisa el idioma por defecto y los idiomas que en destino no permiten campos vacíos. Si el destino parece producción (es `master` o tiene un alias), tienes que escribir el nombre del ambiente para confirmar.
+7. Al terminar te dice dónde quedó el **respaldo** y otra vez el comando para **repetir** la migración.
 
 ### Migrar modelo, imágenes, comparar y estado
 
-- **`migrate-model`**: muestra los content types de origen que difieren en destino —content types y campos que faltan, **reglas** de campos o la **apariencia del editor** (help text, widget)— y eliges qué aplicar: todo de una vez, cambio por cambio o nada. Nunca borra campos ni cambia su ID o tipo. `--content-type a,b` para limitarlo.
-- **`migrate-assets`**: elige archivos por ID/URL (`/assets/<id>`) o buscando por nombre (`--search`). Los que ya existen en destino se reutilizan.
+- **`migrate-model`**: muestra los content types de origen que difieren en destino —content types y campos que faltan, **reglas** de campos o la **apariencia del editor** (help text, widget)— y eliges qué aplicar: todo de una vez, cambio por cambio o nada (o `--model`). El resumen lista cada cambio antes de confirmar. Nunca borra campos ni cambia su ID o tipo. `--content-type a,b` para limitarlo.
+- **`migrate-assets`**: elige archivos por ID/URL (`/assets/<id>`) o buscando por nombre (`--search`). Los que ya existen en destino se reutilizan. El resumen dice cuántos se crean y cuántos se reutilizan.
 - **`compare-models`**: una tabla con todos los content types y su estado, el detalle campo por campo de los que difieren y qué campos tienen otra **apariencia del editor**. `--content-type a,b` para ver solo esos.
 - **`compare-entry`**: elige entries igual que al migrar (ID, búsqueda, recientes, tag, archivo) y ve, campo por campo, qué valor tienen en cada ambiente.
 - **`status`**: resumen de content types iguales, con diferencias, que faltan o que sobran, más idiomas y tags que faltan.
 - **`history`**: las migraciones anteriores **de la cuenta con la que iniciaste sesión** (fecha, tipo, ambientes, qué se actualizó y creó, y su respaldo).
 
-### Atajos con flags
+### Atajos con flags y "Repetir"
 
-Todo lo que se pregunta al principio se puede pasar por flags, para ir más rápido:
+Cada comando muestra el comando **"Repetir"**: el mismo comando con flags para todo lo que elegiste (space, ambientes, entries y decisiones). En los que escriben aparece en el resumen, antes de confirmar, y al terminar; en los de lectura, al terminar. Cópialo para hacer lo mismo otra vez sin preguntas. Por ejemplo:
+
+```bash
+cfm migrate --space abc123 --from develop --to qa --ids 5NIY0nRGNkKvvjO8yc8Pp1 --update all --assets --model add:banner.subtitle,editor:imagen.alt
+```
+
+Todo lo que se pregunta se puede pasar por flags, para ir más rápido:
 
 ```bash
 cfm migrate --space <space> --from develop --to qa --ids 5NIY0nRGNkKvvjO8yc8Pp1,otroId
@@ -209,8 +219,11 @@ cfm status --from develop --to qa
 
 - `--from`/`--to` aceptan aliases como `master`.
 - Con flags para elegir entries y sin comando, se asume `migrate`.
-- Las preguntas de imágenes y modelo, y la confirmación final, se hacen siempre.
-- Al terminar una migración, la herramienta imprime el comando equivalente (**"Repetir"**) para copiarlo.
+- Decisiones sin preguntar:
+  - `--update all|none|id,id`: qué entries que ya existen en destino actualizar.
+  - `--assets` / `--no-assets`: crear o no las imágenes que faltan.
+  - `--model all|none|<cambios>`: qué cambios de modelo aplicar. Cada cambio es `create:<ct>`, `info:<ct>`, `add:<ct>.<campo>`, `rules:<ct>.<campo>` o `editor:<ct>.<campo>`; el "Repetir" los escribe por ti. Si algo ya no está pendiente (por ejemplo, ya se aplicó), te avisa y sigue con lo demás.
+- La **confirmación final se pide siempre** (y en producción, escribiendo el nombre del ambiente).
 - `cfm --help` lista cada flag y a qué comandos sirve.
 
 ### Ver cada llamada a la API: `--verbose`
@@ -365,7 +378,8 @@ Los tests son **unitarios**: prueban las reglas y utilidades, no hacen migracion
 - **Seguridad**: el writer solo escribe en destino y solo publica content types (`write.test.ts`); el token solo va a hosts de Contentful (`session.test.ts`); los errores no muestran el token (`errors.test.ts`); los archivos solo se copian desde el CDN de Contentful (`fields.test.ts`).
 - **Lectura del árbol** (`read.test.ts`): por niveles, links rotos y ciclos.
 - **Respaldo y restore** (`backup.test.ts`, `restore.test.ts`, `write.test.ts`): el respaldo se guarda antes de actualizar y, si falla, no se actualiza; detecta cambios posteriores a la migración.
-- **Argumentos y flags** (`cli-args.test.ts`, `environments.test.ts`, `version.test.ts`): comandos, a qué comandos sirve cada flag, `--since`, `--version`, la ayuda generada, y que el comando "Repetir" se vuelve a leer igual.
+- **Argumentos y flags** (`cli-args.test.ts`, `decision.test.ts`, `environments.test.ts`, `version.test.ts`): comandos, a qué comandos sirve cada flag, `--since`, `--version`, los flags de decisión, la ayuda generada, que el comando "Repetir" se vuelve a leer igual y el orden de los ambientes.
+- **Navegación** (`navigation.test.ts`): volver al último paso que preguntó, saltando los resueltos por flags; flujos anidados; Esc vuelve y Ctrl+C sale.
 - **Búsqueda, comparaciones y reportes** (`query.test.ts`, `entry-compare.test.ts`, `status.test.ts`, `model-changes.test.ts`, `report.test.ts`): filtros en una sola llamada, comparación de entries y ambientes, cambios de modelo y reportes Markdown.
 - **Código fuente** (`security.test.ts`): solo el writer escribe, nunca borra/archiva/despublica, y solo publica content types. `client.test.ts`: `--verbose` nunca muestra el token.
 - **Comportamiento** (`entries.test.ts`, `read.test.ts`, `plan.test.ts`, `errors.test.ts`): textos enlazados que no son hijos, límite del árbol, entries archivadas, cambios en destino durante la revisión y conflictos de versión.

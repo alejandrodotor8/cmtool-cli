@@ -17,17 +17,23 @@ import {
   readEditorInterfaces,
   readLocales,
 } from '../contentful/read.ts';
-import type { Account, Cma, ContentType, EditorInterface, Environment } from '../contentful/types.ts';
+import type { Account, Cma, ContentType, EditorInterface, Environment, Space } from '../contentful/types.ts';
 import { createWriter } from '../contentful/write.ts';
-import { resolveEnvironment } from '../core/environments.ts';
+import { applyDecision, type Decision } from '../core/decision.ts';
+import { looksLikeProduction, resolveEnvironment } from '../core/environments.ts';
+import { allPicks, type ModelOption, type ModelPick, pickKey } from '../core/model-changes.ts';
+import type { UpdateCandidate } from '../core/plan.ts';
 import { AbortError } from '../errors.ts';
 import type { WriteContext } from '../execute.ts';
 import { loadSession } from '../session.ts';
 import { trackApiCalls } from '../ui/api-calls.ts';
 import { printCancelled, printNote, printOutro, shouldAnimate } from '../ui/header.ts';
+import { log } from '../ui/log.ts';
+import { type Step, steps } from '../ui/navigation.ts';
 import { confirmWrite, pickDestination, pickSource, pickSpace } from '../ui/prompts.ts';
 import { createRunner } from '../ui/runner.ts';
 import { withStatus } from '../ui/status.ts';
+import { renderRepeat } from '../ui/views/summary.ts';
 
 /**
  * Sesión, contador de llamadas a la API, si se muestran animaciones, un cliente sin space
@@ -80,6 +86,39 @@ function memo<T>(load: (env: string) => Promise<T>): (env: string) => Promise<T>
   };
 }
 
+/** Guarda resultados por clave: volver atrás y seguir igual no repite las lecturas. */
+export function cached<T>(): (key: string, load: () => Promise<T>) => Promise<T> {
+  const cache = new Map<string, Promise<T>>();
+  return (key, load) => {
+    if (!cache.has(key)) cache.set(key, load());
+    return cache.get(key) as Promise<T>;
+  };
+}
+
+/** Aplica una decisión pasada por flag y avisa lo que ya no está disponible. */
+function decide(available: string[], decision: Decision, flag: string): Set<string> {
+  const { chosen, unknown } = applyDecision(available, decision);
+  if (unknown.length) log.warn(`--${flag}: ya no hay nada que hacer con ${unknown.join(', ')}.`);
+  log.info(`--${flag}: ${chosen.length} de ${available.length}, sin preguntar`);
+  return new Set(chosen);
+}
+
+/** `--update`: qué entries existentes actualizar, sin preguntar. */
+export const updatesFromFlag = (candidates: UpdateCandidate[], decision: Decision): string[] => [
+  ...decide(
+    candidates.map((c) => c.id),
+    decision,
+    'update',
+  ),
+];
+
+/** `--model`: qué cambios de modelo aplicar, sin preguntar. */
+export function modelPicksFromFlag(options: ModelOption[], decision: Decision): ModelPick[] {
+  const available = allPicks(options);
+  const keys = decide(available.map(pickKey), decision, 'model');
+  return available.filter((pick) => keys.has(pickKey(pick)));
+}
+
 /** Ambiente pasado por flag (ID o alias); si no existe, se detiene. */
 function requireEnvironment(envs: Environment[], name: string): string {
   const id = resolveEnvironment(envs, name);
@@ -87,36 +126,89 @@ function requireEnvironment(envs: Environment[], name: string): string {
   return id;
 }
 
-/** Space, origen y destino: de los flags o preguntando. */
-export async function openContext(args: CliArgs): Promise<Context> {
+/**
+ * Pasos para elegir space, origen y destino (de los flags o preguntando), para que los
+ * comandos los pongan al principio de su flujo: así Esc vuelve de una pregunta a otra.
+ * `ctx()` devuelve el contexto una vez que corrieron.
+ */
+export function contextSteps(args: CliArgs): { steps: Step[]; ctx: () => Context } {
   const base = openSession(args);
   const { session, api, animate } = base;
+  // Lo que se lee de Contentful queda en memoria: volver atrás no repite llamadas.
+  let spaces: Promise<Space[]> | undefined;
+  const envsBySpace = new Map<string, Promise<Environment[]>>();
+  let spaceId = '';
+  let src = '';
+  let dst = '';
+  let cma: Cma | undefined;
+  let context: Context | undefined;
 
-  const spaces = await withStatus(
-    'Conectando con Contentful…',
-    animate,
-    () => listSpaces(base.client),
-    (found) => `Conectado · ${found.length} space(s)`,
-  );
-  if (!spaces.length) throw new AbortError('Tu usuario no tiene acceso a ningún space.');
-  if (args.space && !spaces.some((s) => s.sys.id === args.space)) {
-    throw new AbortError(`No tienes acceso al space "${args.space}".`);
-  }
-  const spaceId = args.space ?? (await pickSpace(spaces, session.defaultSpaceId));
-  const cma = createCma(session, spaceId, api.onRequest);
+  const environments = (id: string) => {
+    if (!envsBySpace.has(id)) {
+      const client = createCma(session, id, api.onRequest);
+      envsBySpace.set(
+        id,
+        withStatus(
+          'Leyendo ambientes…',
+          animate,
+          () => listEnvironments(client),
+          (found) => `${found.length} ambientes`,
+        ),
+      );
+    }
+    return envsBySpace.get(id) as Promise<Environment[]>;
+  };
 
-  const envs = await withStatus(
-    'Leyendo ambientes…',
-    animate,
-    () => listEnvironments(cma),
-    (found) => `${found.length} ambientes`,
-  );
-  if (envs.length < 2) throw new AbortError('Este space tiene un solo ambiente; no hay con qué comparar.');
-  const src = args.from ? requireEnvironment(envs, args.from) : await pickSource(envs);
-  const dst = args.to ? requireEnvironment(envs, args.to) : await pickDestination(envs, src);
-  if (src === dst) throw new AbortError('Origen y destino son el mismo ambiente.');
+  const steps: Step[] = [
+    async () => {
+      spaces ??= withStatus(
+        'Conectando con Contentful…',
+        animate,
+        () => listSpaces(base.client),
+        (found) => `Conectado · ${found.length} space(s)`,
+      );
+      const found = await spaces;
+      if (!found.length) throw new AbortError('Tu usuario no tiene acceso a ningún space.');
+      if (args.space && !found.some((s) => s.sys.id === args.space)) {
+        throw new AbortError(`No tienes acceso al space "${args.space}".`);
+      }
+      spaceId =
+        args.space ??
+        (found.length === 1 ? (found[0] as Space).sys.id : await pickSpace(found, session.defaultSpaceId));
+      cma = createCma(session, spaceId, api.onRequest);
+    },
+    async () => {
+      const envs = await environments(spaceId);
+      if (envs.length < 2) throw new AbortError('Este space tiene un solo ambiente; no hay con qué comparar.');
+      if (args.from) {
+        src = requireEnvironment(envs, args.from);
+        const env = envs.find((e) => e.id === src);
+        if (env && looksLikeProduction(env)) log.warn(`Origen ${pc.bold(src)}: parece producción.`);
+      } else {
+        src = await pickSource(envs);
+      }
+    },
+    async () => {
+      const envs = await environments(spaceId);
+      dst = args.to ? requireEnvironment(envs, args.to) : await pickDestination(envs, src);
+      if (src === dst) throw new AbortError('Origen y destino son el mismo ambiente.');
+      context = buildContext(base, { cma: cma as Cma, spaceId, src, dst, envs });
+    },
+  ];
+  return {
+    steps,
+    ctx: () => {
+      if (!context) throw new Error('contextSteps: el contexto todavía no está listo');
+      return context;
+    },
+  };
+}
 
-  return buildContext(base, { cma, spaceId, src, dst, envs });
+/** Space, origen y destino, para un comando que no necesita volver más allá de esto. */
+export async function openContext(args: CliArgs): Promise<Context> {
+  const { steps: list, ctx } = contextSteps(args);
+  await steps(list);
+  return ctx();
 }
 
 /** Contexto a partir de sus partes (también lo usa restore, que toma space y ambientes del respaldo). */
@@ -188,13 +280,14 @@ export async function startWriting(
 export function finishWriting(
   ctx: SessionContext,
   { backup, runner }: Pick<WriteContext, 'backup' | 'runner'>,
-  { title, lines = [], done }: { title: string; lines?: string[]; done: string },
+  { title, lines = [], repeat, done }: { title: string; lines?: string[]; repeat?: string; done: string },
 ): number {
   const failed = runner.failures.length;
   printNote(
     [
       ...lines,
       ...(lines.length ? [''] : []),
+      ...(repeat ? [`${pc.bold('Repetir')}       ${repeat}`] : []),
       `${pc.bold('Respaldo')}      ${backup.file}`,
       `${pc.bold('Deshacer')}      ${APP_NAME} restore`,
       `${pc.bold('Llamadas API')}  ${ctx.api.count}`,
@@ -212,8 +305,9 @@ export function finishDryRun(ctx: SessionContext, lines: string[] = []): number 
   return 0;
 }
 
-/** Cierre de un comando de solo lectura. */
-export function finishReading(ctx: SessionContext, message: string): number {
+/** Cierre de un comando de solo lectura; con `repeat`, muestra el comando para repetirlo. */
+export function finishReading(ctx: SessionContext, message: string, repeat?: string): number {
+  if (repeat) renderRepeat(repeat);
   printOutro(`${message} ${pc.dim(`· ${ctx.api.count} llamadas a la API`)}`);
   return 0;
 }

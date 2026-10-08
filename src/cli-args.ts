@@ -3,6 +3,7 @@
  */
 import { parseArgs } from 'node:util';
 import { APP_NAME, VERSION } from './app.ts';
+import { type Decision, formatDecision, parseDecision } from './core/decision.ts';
 import { parseEntryIds } from './core/ids.ts';
 import { parseSince } from './core/query.ts';
 import { AbortError } from './errors.ts';
@@ -40,7 +41,7 @@ interface FlagSpec {
   /** Cómo se escribe el valor en la ayuda. */
   arg?: string;
   help: string;
-  group: 'Ambientes' | 'Elegir entries' | 'Salida' | 'General';
+  group: 'Ambientes' | 'Elegir entries' | 'Decisiones (no pregunta)' | 'Salida' | 'General';
   /** Comandos que la aceptan; `global` = todos. */
   commands: Command[] | 'global';
 }
@@ -105,6 +106,26 @@ export const FLAGS = {
     group: 'Elegir entries',
     commands: ['migrate'],
   },
+  update: {
+    type: 'string',
+    arg: '<all|none|id,id>',
+    help: 'qué entries que ya existen en destino actualizar',
+    group: 'Decisiones (no pregunta)',
+    commands: ['migrate'],
+  },
+  assets: {
+    type: 'boolean',
+    help: 'crear las imágenes que faltan (--no-assets: no crearlas)',
+    group: 'Decisiones (no pregunta)',
+    commands: ['migrate'],
+  },
+  model: {
+    type: 'string',
+    arg: '<all|none|cambios>',
+    help: 'qué cambios de modelo aplicar (como los escribe "Repetir")',
+    group: 'Decisiones (no pregunta)',
+    commands: ['migrate', 'migrate-model'],
+  },
   report: {
     type: 'string',
     arg: '<archivo.md>',
@@ -149,6 +170,12 @@ export interface CliArgs {
   since: string | undefined;
   mine: boolean;
   missing: boolean;
+  /** Qué entries existentes actualizar (sin preguntar). */
+  update: Decision | undefined;
+  /** Crear las imágenes que faltan (`--assets` / `--no-assets`); `undefined`: preguntar. */
+  assets: boolean | undefined;
+  /** Qué cambios de modelo aplicar, por clave (sin preguntar). */
+  model: Decision | undefined;
   report: string | undefined;
   /** Flags que se pasaron (para validar contra el comando elegido en el menú). */
   given: FlagName[];
@@ -160,6 +187,7 @@ const parse = (args: string[]) =>
   parseArgs({
     args,
     allowPositionals: true,
+    allowNegative: true,
     options: Object.fromEntries(
       Object.entries(FLAGS).map(([name, f]) => [name, { type: f.type, ...('short' in f ? { short: f.short } : {}) }]),
     ) as { [K in FlagName]: { type: (typeof FLAGS)[K]['type'] } },
@@ -179,9 +207,8 @@ export function parseCliArgs(argv: string[]): CliArgs {
     throw new AbortError(e instanceof Error ? e.message : String(e), HELP_HINT);
   }
   const values = parsed.values as Record<FlagName, string | boolean | undefined>;
-  const given = (Object.keys(FLAGS) as FlagName[]).filter(
-    (name) => values[name] !== undefined && values[name] !== false,
-  );
+  // `--no-x` da false: también cuenta como pasado (para validar a qué comando sirve).
+  const given = (Object.keys(FLAGS) as FlagName[]).filter((name) => values[name] !== undefined);
 
   const [first, file, ...extra] = parsed.positionals;
   if (first !== undefined && !isCommand(first)) throw new AbortError(`Comando desconocido: "${first}".`, HELP_HINT);
@@ -194,6 +221,16 @@ export function parseCliArgs(argv: string[]): CliArgs {
     if (typeof value !== 'string') return undefined;
     if (!value.trim()) throw new AbortError(`--${name} está vacío.`, HELP_HINT);
     return value.trim();
+  };
+
+  const decision = (name: FlagName): Decision | undefined => {
+    const value = text(name);
+    if (value === undefined) return undefined;
+    const parsedDecision = parseDecision(value);
+    if (Array.isArray(parsedDecision) && !parsedDecision.length) {
+      throw new AbortError(`--${name} no tiene ningún valor.`, HELP_HINT);
+    }
+    return parsedDecision;
   };
 
   let ids: string[] | undefined;
@@ -231,6 +268,9 @@ export function parseCliArgs(argv: string[]): CliArgs {
     since,
     mine: values.mine === true,
     missing: values.missing === true,
+    update: decision('update'),
+    assets: typeof values.assets === 'boolean' ? values.assets : undefined,
+    model: decision('model'),
     report: text('report'),
     given,
   };
@@ -249,19 +289,40 @@ export function validateFlags(command: Command, args: Pick<CliArgs, 'given'>): v
   }
 }
 
-/** El comando equivalente con flags, para repetir una migración sin pasar por los menús. */
-export function repeatCommand({
-  spaceId,
-  src,
-  dst,
-  rootIds,
-}: {
+/** Lo que se eligió en una ejecución, para escribir el comando que la repite. */
+export interface RepeatOptions {
   spaceId: string;
   src: string;
   dst: string;
-  rootIds: string[];
-}) {
-  return `${APP_NAME} migrate --space ${spaceId} --from ${src} --to ${dst} --ids ${rootIds.join(',')}`;
+  ids?: string[];
+  contentTypes?: string[];
+  update?: Decision;
+  assets?: boolean;
+  model?: Decision;
+}
+
+/**
+ * El comando equivalente con flags: repite lo mismo sin pasar por los menús ni por las
+ * preguntas que ya se respondieron (la confirmación final se hace siempre).
+ */
+export function repeatCommand(
+  command: Command,
+  { spaceId, src, dst, ids, contentTypes, update, assets, model }: RepeatOptions,
+): string {
+  return [
+    APP_NAME,
+    command,
+    `--space ${spaceId}`,
+    `--from ${src}`,
+    `--to ${dst}`,
+    ids?.length && `--ids ${ids.join(',')}`,
+    contentTypes?.length && `--content-type ${contentTypes.join(',')}`,
+    update && `--update ${formatDecision(update)}`,
+    assets !== undefined && (assets ? '--assets' : '--no-assets'),
+    model && `--model ${formatDecision(model)}`,
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 /** Ayuda generada a partir de COMMANDS y FLAGS. */
@@ -289,7 +350,10 @@ export function usage(): string {
     `  ${APP_NAME} migrate --from develop --to qa --ids 5NIY0nRGNkKvvjO8yc8Pp1`,
     `  ${APP_NAME} migrate --from develop --to qa --since 7d --mine`,
     `  ${APP_NAME} compare-models --from develop --to qa --report modelos.md`,
+    `  ${APP_NAME} migrate --from develop --to qa --ids 5NIY0nRGNkKvvjO8yc8Pp1 --update all --assets --model all`,
     '',
-    'Las preguntas de imágenes y modelo, y la confirmación final, se hacen siempre.',
+    'Al elegir, Esc vuelve a la pregunta anterior y Ctrl+C sale.',
+    'Con --update, --assets/--no-assets y --model no se pregunta eso; la confirmación final se hace siempre.',
+    'Cada comando muestra al final el comando "Repetir" con todo lo que elegiste.',
   ].join('\n');
 }

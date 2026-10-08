@@ -10,6 +10,7 @@ export function printIntro(mode: RunMode) {
   const dev = mode === 'dev' ? pc.yellow('  [desarrollo: código fuente]') : '';
   console.log();
   p.intro(`${pc.bgCyan(pc.black(` ${APP_NAME} `))} ${pc.dim(`v${VERSION}`)}${dev}`);
+  if (process.stdin.isTTY) p.log.message(pc.dim('Esc vuelve a la pregunta anterior · Ctrl+C sale'));
 }
 
 /** Título del comando, con aviso de --dry-run o una nota. */

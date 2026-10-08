@@ -93,6 +93,23 @@ export function modelOptions(
 /** Todos los cambios posibles. */
 export const allPicks = (options: ModelOption[]): ModelPick[] => options.flatMap((o) => o.picks);
 
+/**
+ * Clave de un cambio para el flag `--model` (y el comando "Repetir"): `create:banner`,
+ * `info:banner`, `add:banner.subtitle`, `rules:banner.title`, `editor:banner.title`.
+ */
+export function pickKey(pick: ModelPick): string {
+  switch (pick.kind) {
+    case CHANGE.CREATE:
+    case CHANGE.INFO:
+      return `${pick.kind}:${pick.ctId}`;
+    case CHANGE.ADD:
+    case CHANGE.RULES:
+      return `${pick.kind}:${pick.ctId}.${pick.field.id}`;
+    case CHANGE.EDITOR:
+      return `${pick.kind}:${pick.ctId}.${pick.editor.fieldId}`;
+  }
+}
+
 /** Convierte lo que marcó el usuario en cambios concretos. */
 export function modelChangesFrom(picked: ModelPick[], srcCTs: Map<string, ContentType>): ModelChanges {
   const contentTypesToCreate: ContentType[] = [];

@@ -13,6 +13,7 @@ import {
   modelChangesFrom,
   modelOptions,
   notAddedFields,
+  pickKey,
 } from '../src/core/model-changes.ts';
 import { contentType, field } from './fixtures.ts';
 
@@ -156,5 +157,22 @@ describe('modelOptions: un cambio por cosa', () => {
     );
     assert.equal(countRuleFields(changes), 1);
     assert.equal(changesStructure(changes), true);
+  });
+});
+
+describe('pickKey', () => {
+  test('cada cambio tiene una clave estable para --model', () => {
+    const [option] = modelOptions(
+      [
+        diffContentType(
+          contentType('page', [field('title', 'Symbol', { name: 'Título' }), field('slug'), field('body', 'Text')]),
+          contentType('page', [field('title'), field('slug')]),
+        ),
+      ],
+      undefined,
+      new Map([['page', [helpText('slug')]]]),
+    );
+    assert.deepEqual(option?.picks.map(pickKey), ['rules:page.title', 'editor:page.slug', 'add:page.body']);
+    assert.equal(pickKey({ kind: CHANGE.CREATE, ctId: 'promo' }), 'create:promo');
   });
 });

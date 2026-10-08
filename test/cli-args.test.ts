@@ -109,18 +109,72 @@ describe('validateFlags', () => {
 describe('repeatCommand', () => {
   test('arma el comando con flags para repetir la migración', () => {
     assert.equal(
-      repeatCommand({ spaceId: 's1', src: 'develop', dst: 'qa', rootIds: ['a', 'b'] }),
+      repeatCommand('migrate', { spaceId: 's1', src: 'develop', dst: 'qa', ids: ['a', 'b'] }),
       'cfm migrate --space s1 --from develop --to qa --ids a,b',
     );
   });
 
+  test('incluye las decisiones, así no vuelve a preguntar', () => {
+    assert.equal(
+      repeatCommand('migrate', {
+        spaceId: 's1',
+        src: 'develop',
+        dst: 'qa',
+        ids: ['a'],
+        update: 'all',
+        assets: false,
+        model: ['add:banner.cta', 'editor:banner.title'],
+      }),
+      'cfm migrate --space s1 --from develop --to qa --ids a --update all --no-assets --model add:banner.cta,editor:banner.title',
+    );
+  });
+
   test('el comando que arma se vuelve a leer igual', () => {
-    const command = repeatCommand({ spaceId: 's1', src: 'develop', dst: 'qa', rootIds: ['a', 'b'] });
+    const command = repeatCommand('migrate', {
+      spaceId: 's1',
+      src: 'develop',
+      dst: 'qa',
+      ids: ['a', 'b'],
+      update: ['a'],
+      assets: true,
+      model: 'none',
+    });
     const args = parseCliArgs(command.split(' ').slice(1));
     assert.deepEqual(
-      [args.command, args.space, args.from, args.to, args.ids],
-      ['migrate', 's1', 'develop', 'qa', ['a', 'b']],
+      [args.command, args.space, args.from, args.to, args.ids, args.update, args.assets, args.model],
+      ['migrate', 's1', 'develop', 'qa', ['a', 'b'], ['a'], true, 'none'],
     );
+  });
+
+  test('otros comandos: modelo con --content-type y --model', () => {
+    const command = repeatCommand('migrate-model', {
+      spaceId: 's1',
+      src: 'develop',
+      dst: 'master',
+      contentTypes: ['banner'],
+      model: 'all',
+    });
+    const args = parseCliArgs(command.split(' ').slice(1));
+    assert.deepEqual([args.command, args.contentTypes, args.model], ['migrate-model', ['banner'], 'all']);
+  });
+});
+
+describe('flags de decisión', () => {
+  test('--update y --model aceptan all, none o una lista', () => {
+    assert.equal(parseCliArgs(['migrate', '--update', 'ALL']).update, 'all');
+    assert.deepEqual(parseCliArgs(['migrate', '--update', 'a, b']).update, ['a', 'b']);
+    assert.equal(parseCliArgs(['migrate-model', '--model', 'none']).model, 'none');
+  });
+
+  test('--assets y --no-assets; sin ninguno, se pregunta', () => {
+    assert.equal(parseCliArgs(['migrate', '--assets']).assets, true);
+    assert.equal(parseCliArgs(['migrate', '--no-assets']).assets, false);
+    assert.equal(parseCliArgs(['migrate']).assets, undefined);
+  });
+
+  test('no sirven en comandos que no los usan', () => {
+    assert.throws(() => parseCliArgs(['compare-models', '--model', 'all']), /no sirve/);
+    assert.throws(() => parseCliArgs(['status', '--no-assets']), /no sirve/);
   });
 });
 

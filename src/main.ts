@@ -4,9 +4,10 @@
  */
 
 import { VERSION } from './app.ts';
-import { parseCliArgs, usage, validateFlags } from './cli-args.ts';
+import { type Command, parseCliArgs, usage, validateFlags } from './cli-args.ts';
 import { RUNNERS } from './commands/registry.ts';
 import { printIntro, type RunMode } from './ui/header.ts';
+import { steps } from './ui/navigation.ts';
 import { pickCommand } from './ui/prompts.ts';
 
 export async function main(argv: string[], mode: RunMode): Promise<number> {
@@ -20,7 +21,14 @@ export async function main(argv: string[], mode: RunMode): Promise<number> {
     return 0;
   }
   printIntro(mode);
-  const command = args.command ?? (await pickCommand());
-  validateFlags(command, args);
-  return RUNNERS[command]({ ...args, command });
+  // Elegido en el menú, Esc desde la primera pregunta del comando vuelve al menú.
+  let command = args.command;
+  const code = await steps([
+    async () => {
+      command = args.command ?? (await pickCommand());
+      validateFlags(command, args);
+    },
+    () => RUNNERS[command as Command]({ ...args, command }),
+  ]);
+  return code ?? 0;
 }

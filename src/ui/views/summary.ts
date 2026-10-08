@@ -7,11 +7,14 @@ import {
   countRuleFields,
   hasModelChanges,
   type ModelChanges,
+  type ModelOption,
+  type ModelPick,
 } from '../../core/model-changes.ts';
 import { ACTION, type Plan } from '../../core/plan.ts';
 import type { RequiredGap } from '../../core/publish-check.ts';
 import { log } from '../log.ts';
 import { clip, table } from '../table.ts';
+import { modelPickText } from '../text.ts';
 import { countActions } from './entries.ts';
 import { route } from './shared.ts';
 
@@ -95,4 +98,30 @@ export function modelSummary(changes: ModelChanges): string {
     countEditorFields(changes) && `apariencia de ${countEditorFields(changes)} campo(s)`,
   ].filter(Boolean);
   return pc.yellow(parts.join(' · ')) + (changesStructure(changes) ? pc.dim(' (se publica el modelo)') : '');
+}
+
+/** El comando que repite lo mismo sin preguntas (antes de confirmar y en los comandos de lectura). */
+export function renderRepeat(command: string): void {
+  log.info(
+    `${pc.bold('Para repetirlo sin preguntas')} ${pc.dim('(la confirmación se pide siempre)')}\n${pc.cyan(command)}`,
+  );
+}
+
+/** Los cambios de modelo que se van a aplicar, uno por fila: content type, cambio y detalle. */
+export function renderModelPicks(options: ModelOption[], picked: ModelPick[], dst: string): void {
+  if (!picked.length) return;
+  const chosen = new Set(picked);
+  const rows = options.flatMap(({ diff, picks }) =>
+    picks
+      .filter((pick) => chosen.has(pick))
+      .map((pick) => {
+        const { label, hint } = modelPickText(pick, diff, dst);
+        return [pc.bold(clip(diff.name, 24)), label, pc.dim(clip(hint, 60))];
+      }),
+  );
+  table({
+    title: `Cambios en el modelo de ${dst}  ${pc.dim(`${picked.length} cambio(s)`)}`,
+    columns: [{ header: 'Content type' }, { header: 'Cambio' }, { header: 'Detalle' }],
+    rows,
+  });
 }

@@ -14,6 +14,7 @@ import { parseEntryIds } from '../core/ids.ts';
 import { type EntryQuery, entryQueryParams, isEmptyQuery } from '../core/query.ts';
 import { AbortError } from '../errors.ts';
 import { log } from '../ui/log.ts';
+import { goBack, steps } from '../ui/navigation.ts';
 import {
   askFile,
   askIds,
@@ -74,24 +75,70 @@ export async function selectEntryIds(
   if (!isEmptyQuery(flagQuery)) return pickFromSearch(ctx, flagQuery, { preselect: true });
 
   const methods = allowMissing ? METHODS : METHODS.filter((m) => m.value !== 'missing');
-  switch (await choose('¿Cómo eliges las entries?', methods)) {
+  let method: Method = 'ids';
+  let ids: string[] = [];
+  await steps([
+    async () => {
+      method = await choose('¿Cómo eliges las entries?', methods);
+    },
+    async () => {
+      ids = await byMethod(ctx, method);
+    },
+  ]);
+  return ids;
+}
+
+/** Las preguntas de cada forma de elegir (Esc vuelve a la anterior, y de la primera a elegir la forma). */
+async function byMethod(ctx: Context, method: Method): Promise<string[]> {
+  let ids: string[] = [];
+  switch (method) {
     case 'ids':
       return askIds('entries');
     case 'file':
       return idsFromFile(await askFile('Archivo con los entry IDs'));
     case 'search':
-      return searchUntilFound(ctx, {}, { textRequired: true });
+      return searchAndPick(ctx, {}, { textRequired: true });
     case 'content-type': {
-      const contentType = await pickContentType((await ctx.contentTypes(ctx.src)).values());
-      return searchUntilFound(ctx, { contentTypes: [contentType] }, { textRequired: false });
+      let contentType = '';
+      await steps([
+        async () => {
+          contentType = await pickContentType((await ctx.contentTypes(ctx.src)).values());
+        },
+        async () => {
+          ids = await searchAndPick(ctx, { contentTypes: [contentType] }, { textRequired: false });
+        },
+      ]);
+      return ids;
     }
     case 'recent': {
-      const since = await askSince();
-      const mine = await askYesNo('¿Solo las que editaste tú?', false);
-      return pickFromSearch(ctx, { since, updatedBy: mine ? await myUserId(ctx) : undefined }, { preselect: false });
+      let since = '';
+      let mine = false;
+      await steps([
+        async () => {
+          since = await askSince();
+        },
+        async () => {
+          mine = await askYesNo('¿Solo las que editaste tú?', false);
+        },
+        async () => {
+          const query = { since, updatedBy: mine ? await myUserId(ctx) : undefined };
+          ids = await pickFromSearch(ctx, query, { preselect: false });
+        },
+      ]);
+      return ids;
     }
-    case 'tag':
-      return pickFromSearch(ctx, { tag: await pickTag(ctx) }, { preselect: false });
+    case 'tag': {
+      let tag = '';
+      await steps([
+        async () => {
+          tag = await pickTag(ctx);
+        },
+        async () => {
+          ids = await pickFromSearch(ctx, { tag }, { preselect: false });
+        },
+      ]);
+      return ids;
+    }
     case 'missing':
       return missingInDst(ctx, undefined, undefined);
   }
@@ -130,21 +177,30 @@ async function pickTag(ctx: Context): Promise<string> {
   );
 }
 
-/** Pregunta un texto y busca; si no hay resultados, vuelve a preguntar. */
-async function searchUntilFound(
+/** Pregunta un texto, busca y deja elegir; sin resultados, vuelve a preguntar el texto. */
+async function searchAndPick(
   ctx: Context,
   base: EntryQuery,
   { textRequired }: { textRequired: boolean },
 ): Promise<string[]> {
-  while (true) {
-    const text = await askText(textRequired ? 'Buscar' : 'Filtrar por texto (opcional)', {
-      placeholder: textRequired ? 'Parte del título o del contenido' : 'Vacío: las más recientes de ese tipo',
-      validate: (v) => (textRequired && !v ? 'Escribe algo para buscar.' : undefined),
-    });
-    const ids = await pickFromSearch(ctx, { ...base, text: text || undefined }, { preselect: false });
-    if (ids.length) return ids;
-    log.warn('Sin resultados. Prueba con otro texto (Ctrl+C para salir).');
-  }
+  let text = '';
+  let ids: string[] = [];
+  await steps([
+    async () => {
+      text = await askText(textRequired ? 'Buscar' : 'Filtrar por texto (opcional)', {
+        placeholder: textRequired ? 'Parte del título o del contenido' : 'Vacío: las más recientes de ese tipo',
+        validate: (v) => (textRequired && !v ? 'Escribe algo para buscar.' : undefined),
+      });
+    },
+    async () => {
+      ids = await pickFromSearch(ctx, { ...base, text: text || undefined }, { preselect: false });
+      if (!ids.length) {
+        log.warn('Sin resultados. Prueba con otro texto.');
+        goBack();
+      }
+    },
+  ]);
+  return ids;
 }
 
 /** Opciones para elegir entries: título, content type, ID y fecha de última edición. */
@@ -184,9 +240,22 @@ async function pickFromSearch(
  */
 async function missingInDst(ctx: Context, contentType: string | undefined, since: string | undefined) {
   const cts = await ctx.contentTypes(ctx.src);
-  const ctId = contentType ?? (await pickContentType(cts.values(), 'Content type a revisar'));
-  if (!cts.has(ctId)) throw new AbortError(`El content type "${ctId}" no existe en ${ctx.src}.`);
+  let ids: string[] = [];
+  let ctId = contentType ?? '';
+  await steps([
+    async () => {
+      ctId = contentType ?? (await pickContentType(cts.values(), 'Content type a revisar'));
+      if (!cts.has(ctId)) throw new AbortError(`El content type "${ctId}" no existe en ${ctx.src}.`);
+    },
+    async () => {
+      ids = await pickMissing(ctx, ctId, since);
+    },
+  ]);
+  return ids;
+}
 
+/** Las entries de un content type que faltan en destino, para elegir cuáles migrar. */
+async function pickMissing(ctx: Context, ctId: string, since: string | undefined): Promise<string[]> {
   const srcEntries = await withStatus(
     `Leyendo ${ctId} en ${ctx.src}…`,
     ctx.animate,

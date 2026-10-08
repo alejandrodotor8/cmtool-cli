@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { CliArgs } from '../cli-args.ts';
 import { log } from '../ui/log.ts';
+import { steps } from '../ui/navigation.ts';
 import { askText, askYesNo } from '../ui/prompts.ts';
 
 /**
@@ -10,8 +11,16 @@ import { askText, askYesNo } from '../ui/prompts.ts';
  */
 export async function offerReport(args: Pick<CliArgs, 'report'>, defaultName: string, build: () => string) {
   let file = args.report;
-  if (!file && process.stdin.isTTY && (await askYesNo('¿Guardar esto como reporte Markdown?', false))) {
-    file = (await askText('Nombre del archivo', { placeholder: defaultName })) || defaultName;
+  if (!file && process.stdin.isTTY) {
+    let save = false;
+    await steps([
+      async () => {
+        save = await askYesNo('¿Guardar esto como reporte Markdown?', false);
+      },
+      async () => {
+        if (save) file = (await askText('Nombre del archivo', { placeholder: defaultName })) || defaultName;
+      },
+    ]);
   }
   if (!file) return;
   const target = path.resolve(file);

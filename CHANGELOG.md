@@ -2,6 +2,21 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.11.0 — 2026-10-07
+
+### Agregado
+
+- **Volver atrás**: **Esc** vuelve a la pregunta anterior en cualquier pregunta (listas, casillas, textos, pegar IDs, confirmación) y cada lista tiene la opción **← Volver**. Se puede volver desde la confirmación final hasta el menú. Las preguntas resueltas con flags se saltan al volver y las lecturas a Contentful no se repiten. **Ctrl+C** sale.
+- **Ambientes en orden**: desarrollo (`develop`) y pruebas (`qa`, `staging`…) primero y producción (`master` o el ambiente con alias) al final, marcada como *producción*.
+- **Producción como origen**: si eliges producción como ambiente de origen, pide confirmarlo (lo normal es ir de pruebas a producción). Con `--from master` solo avisa.
+- **"Repetir" en todos los comandos y con todas las decisiones**: el comando para hacer lo mismo sin preguntas aparece en el resumen antes de confirmar y al terminar (en los de lectura, al terminar). Antes solo `migrate` lo mostraba, y sin las decisiones.
+- Flags de decisión: `--update all|none|<ids>`, `--assets` / `--no-assets` y `--model all|none|<cambios>`. La confirmación final se pide siempre.
+- **Resumen antes de confirmar** en `migrate-model` (cada cambio: content type, cambio y detalle) y en `migrate-assets` (cuántos se crean y se reutilizan). En `migrate`, el resumen también lista cada cambio de modelo.
+
+### Cambiado
+
+- Si tu usuario tiene un solo space, se elige solo.
+
 ## 0.10.0 — 2026-10-07
 
 ### Agregado

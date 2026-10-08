@@ -2,23 +2,42 @@
  * `cfm migrate`: migra entries (padre + hijos) de un ambiente a otro.
  *   1. elegir space, ambientes y entries;
  *   2. analizar (solo lectura);
- *   3. mostrar y decidir (imágenes, modelo);
- *   4. confirmar, respaldar y escribir en destino.
+ *   3. mostrar y decidir (qué actualizar, imágenes, modelo);
+ *   4. resumen, confirmar, respaldar y escribir en destino.
+ * Cada pregunta es un paso: Esc vuelve a la anterior. Las decisiones se pueden pasar por
+ * flags (`--update`, `--assets`, `--model`), y el resumen muestra el comando que las repite.
  */
 
 import pc from 'picocolors';
-import { analyzeTree, changesSinceAnalysis, completeAnalysis, withActions } from '../analyze.ts';
+import {
+  type Analysis,
+  analyzeTree,
+  changesSinceAnalysis,
+  completeAnalysis,
+  type TreeAnalysis,
+  withActions,
+} from '../analyze.ts';
 import { APP_NAME } from '../app.ts';
 import { type CliArgs, repeatCommand } from '../cli-args.ts';
 import { LIMITS } from '../config.ts';
+import { toDecision } from '../core/decision.ts';
 import { editorDiffsFor } from '../core/editor.ts';
 import { contentTypeOf } from '../core/entries.ts';
-import { hasModelChanges, modelOptions } from '../core/model-changes.ts';
+import {
+  allPicks,
+  hasModelChanges,
+  type ModelOption,
+  type ModelPick,
+  modelOptions,
+  pickKey,
+} from '../core/model-changes.ts';
 import {
   brokenHyperlinks,
   buildPlan,
   defaultUpdates,
   isWrite,
+  type Plan,
+  type UpdateCandidate,
   updateCandidates,
   writtenContentTypes,
 } from '../core/plan.ts';
@@ -28,129 +47,190 @@ import { executePlan } from '../execute.ts';
 import { selectEntryIds } from '../selection/entries.ts';
 import { printCancelled, printTitle } from '../ui/header.ts';
 import { log } from '../ui/log.ts';
+import { steps } from '../ui/navigation.ts';
 import { askEntryUpdates, askModelChanges, askWithAssets, confirmLargeMigration } from '../ui/prompts.ts';
 import { withStatus } from '../ui/status.ts';
 import { renderAssets } from '../ui/views/assets.ts';
 import { renderEntryTree } from '../ui/views/entries.ts';
 import { renderModelDiffs } from '../ui/views/model.ts';
-import { renderSummary } from '../ui/views/summary.ts';
+import { renderModelPicks, renderRepeat, renderSummary } from '../ui/views/summary.ts';
 import {
+  type Context,
+  cached,
   confirmWriting,
+  contextSteps,
   finishDryRun,
   finishReading,
   finishWriting,
   loadEditors,
-  openContext,
+  modelPicksFromFlag,
   startWriting,
+  updatesFromFlag,
 } from './context.ts';
 
 export async function migrate(args: CliArgs): Promise<number> {
   printTitle('Migrar entries', { dryRun: args.dryRun, note: 'entries e imágenes quedan en draft' });
 
-  // 1. Qué migrar y hacia dónde
-  const ctx = await openContext(args);
-  const { src, dst } = ctx;
-  const rootIds = await selectEntryIds(ctx, args);
-  if (!rootIds.length) return finishReading(ctx, 'No se eligió ninguna entry.');
-  const repeat = repeatCommand({ spaceId: ctx.spaceId, src, dst, rootIds });
+  const context = contextSteps(args);
+  const trees = cached<TreeAnalysis>();
+  const analyses = cached<Analysis>();
+  let ctx: Context;
+  let rootIds: string[] = [];
+  let tree: TreeAnalysis;
+  let candidates: UpdateCandidate[] = [];
+  let toUpdate = new Set<string>();
+  let analysis: Analysis;
+  let withAssets: boolean | undefined;
+  let options: ModelOption[] = [];
+  let picked: ModelPick[] = [];
+  let plan: Plan;
 
-  // 2. Árbol: qué existe en destino y qué cambió (solo lectura)
-  const tree = await withStatus(
-    `Analizando ${src} ──▶ ${dst}…`,
-    ctx.animate,
-    (status) => analyzeTree(ctx.cma, { src, dst, rootIds }, status.update, ctx),
-    (t) => `Árbol listo · ${t.tree.entries.size} entries · ${ctx.api.count} llamadas`,
-  );
+  /** El comando que repite esta migración con todo lo que se eligió. */
+  const repeat = () =>
+    repeatCommand('migrate', {
+      spaceId: ctx.spaceId,
+      src: ctx.src,
+      dst: ctx.dst,
+      ids: rootIds,
+      update: candidates.length
+        ? toDecision(
+            candidates.map((c) => c.id),
+            toUpdate,
+          )
+        : undefined,
+      assets: withAssets,
+      model: options.length ? toDecision(allPicks(options).map(pickKey), picked.map(pickKey)) : undefined,
+    });
 
-  // 3. Mostrar y decidir qué actualizar de lo que ya existe
-  const candidates = updateCandidates(tree);
-  let toUpdate = defaultUpdates(candidates);
-  renderEntryTree(withActions(tree, toUpdate));
-  if (candidates.length) {
-    const titleOf = (id: string) => {
-      const entry = tree.tree.entries.get(id);
-      return entry ? tree.titleOf(entry) : id;
-    };
-    const chosen = new Set(await askEntryUpdates(candidates, { titleOf, src, dst }));
-    const changedChoice = chosen.size !== toUpdate.size || [...chosen].some((id) => !toUpdate.has(id));
-    toUpdate = chosen;
-    if (changedChoice) renderEntryTree(withActions(tree, toUpdate), 'Entries con tu elección');
-  }
-  const writes = [...withActions(tree, toUpdate).actions.values()].filter(isWrite).length;
-  if (!args.dryRun && writes > LIMITS.confirmWritesAbove && !(await confirmLargeMigration(writes, dst))) {
-    printCancelled();
-    return 0;
-  }
+  const code = await steps([
+    // 1. Qué migrar y hacia dónde
+    ...context.steps,
+    async () => {
+      ctx = context.ctx();
+      rootIds = await selectEntryIds(ctx, args);
+      if (!rootIds.length) return finishReading(ctx, 'No se eligió ninguna entry.');
+    },
 
-  const analysis = await withStatus(
-    'Revisando modelo, imágenes y tags…',
-    ctx.animate,
-    (status) => completeAnalysis(ctx.cma, tree, toUpdate, status.update, ctx),
-    (a) => `Análisis listo · ${a.diffs.size} content types · ${ctx.api.count} llamadas`,
-  );
+    // 2. Árbol: qué existe en destino y qué cambió; decidir qué actualizar de lo que ya existe
+    async () => {
+      const { src, dst } = ctx;
+      tree = await trees(`${ctx.spaceId}|${src}|${dst}|${rootIds.join(',')}`, () =>
+        withStatus(
+          `Analizando ${src} ──▶ ${dst}…`,
+          ctx.animate,
+          (status) => analyzeTree(ctx.cma, { src, dst, rootIds }, status.update, ctx),
+          (t) => `Árbol listo · ${t.tree.entries.size} entries · ${ctx.api.count} llamadas`,
+        ),
+      );
+      candidates = updateCandidates(tree);
+      toUpdate = defaultUpdates(candidates);
+      renderEntryTree(withActions(tree, toUpdate));
+      if (!candidates.length) return;
 
-  let withAssets = false;
-  if (analysis.assets.ids.length) {
-    renderAssets(analysis);
-    const missing = analysis.assets.missing.length;
-    if (missing) {
-      withAssets = await askWithAssets(missing);
+      const chosen = new Set(
+        args.update
+          ? updatesFromFlag(candidates, args.update)
+          : await askEntryUpdates(candidates, { titleOf: (id) => titleOfId(tree, id), src, dst }),
+      );
+      const changedChoice = chosen.size !== toUpdate.size || [...chosen].some((id) => !toUpdate.has(id));
+      toUpdate = chosen;
+      if (changedChoice) renderEntryTree(withActions(tree, toUpdate), 'Entries con tu elección');
+    },
+    async () => {
+      const writes = [...withActions(tree, toUpdate).actions.values()].filter(isWrite).length;
+      if (!args.dryRun && writes > LIMITS.confirmWritesAbove && !(await confirmLargeMigration(writes, ctx.dst))) {
+        printCancelled();
+        return 0;
+      }
+    },
+
+    // 3. Imágenes y modelo de lo que se escribe
+    async () => {
+      const key = `${ctx.spaceId}|${ctx.src}|${ctx.dst}|${rootIds.join(',')}|${[...toUpdate].sort().join(',')}`;
+      analysis = await analyses(key, () =>
+        withStatus(
+          'Revisando modelo, imágenes y tags…',
+          ctx.animate,
+          (status) => completeAnalysis(ctx.cma, tree, toUpdate, status.update, ctx),
+          (a) => `Análisis listo · ${a.diffs.size} content types · ${ctx.api.count} llamadas`,
+        ),
+      );
+      withAssets = undefined;
+      if (!analysis.assets.ids.length) return;
+      renderAssets(analysis);
+      const missing = analysis.assets.missing.length;
+      if (!missing) return;
+      withAssets = args.assets ?? (await askWithAssets(missing));
       if (!withAssets) {
         log.warn(
-          `Las entries quedarán apuntando a ${missing} imagen(es) que no existen en ${dst}; no se podrán publicar hasta que existan.`,
+          `Las entries quedarán apuntando a ${missing} imagen(es) que no existen en ${ctx.dst}; no se podrán publicar hasta que existan.`,
         );
       }
-    }
-  }
+    },
+    async () => {
+      const usedBy = (ctId: string) =>
+        [...analysis.tree.entries.values()]
+          .filter((e) => contentTypeOf(e) === ctId)
+          .map((e) => analysis.titleOf(e) + (isWrite(analysis.actions.get(e.sys.id)) ? '' : ' (reutilizada)'));
+      const [srcEditors, dstEditors] = await loadEditors(ctx);
+      const editorDiffs = editorDiffsFor(analysis.diffs.values(), srcEditors, dstEditors);
+      renderModelDiffs(
+        analysis.diffs.values(),
+        { src: ctx.src, dst: ctx.dst, dstDefault: analysis.locales.dst.default, editorDiffs },
+        usedBy,
+      );
+      options = modelOptions(analysis.diffs.values(), writtenContentTypes(analysis), editorDiffs);
+      if (!options.length) picked = [];
+      else picked = args.model ? modelPicksFromFlag(options, args.model) : await askModelChanges(options, ctx.dst);
+    },
 
-  const usedBy = (ctId: string) =>
-    [...analysis.tree.entries.values()]
-      .filter((e) => contentTypeOf(e) === ctId)
-      .map((e) => analysis.titleOf(e) + (isWrite(analysis.actions.get(e.sys.id)) ? '' : ' (reutilizada)'));
-  const [srcEditors, dstEditors] = await loadEditors(ctx);
-  const editorDiffs = editorDiffsFor(analysis.diffs.values(), srcEditors, dstEditors);
-  renderModelDiffs(
-    analysis.diffs.values(),
-    { src, dst, dstDefault: analysis.locales.dst.default, editorDiffs },
-    usedBy,
-  );
-  const options = modelOptions(analysis.diffs.values(), writtenContentTypes(analysis), editorDiffs);
-  const picked = options.length ? await askModelChanges(options, dst) : [];
+    // 4. Resumen (con el comando para repetirlo) y confirmación
+    async () => {
+      plan = buildPlan(analysis, { withAssets: withAssets ?? false, picked });
+      if (!plan.entries.length && !hasModelChanges(plan) && !plan.tagsToCreate.length) {
+        return finishReading(ctx, `No hay nada que crear ni actualizar en ${ctx.dst}.`);
+      }
+      renderSummary(analysis, plan, { gaps: requiredGaps(analysis, plan), hyperlinks: brokenHyperlinks(analysis) });
+      renderModelPicks(options, picked, ctx.dst);
+      if (args.dryRun) return finishDryRun(ctx, ['Para migrar de verdad:', pc.cyan(repeat())]);
+      renderRepeat(repeat());
+      const question = `¿Migrar a ${pc.bold(ctx.dst)}? ${pc.dim('(entries e imágenes en draft)')}`;
+      if (!(await confirmWriting(ctx, question))) return 0;
+    },
 
-  const plan = buildPlan(analysis, { withAssets, picked });
-  if (!plan.entries.length && !hasModelChanges(plan) && !plan.tagsToCreate.length) {
-    return finishReading(ctx, `No hay nada que crear ni actualizar en ${dst}.`);
-  }
-  renderSummary(analysis, plan, { gaps: requiredGaps(analysis, plan), hyperlinks: brokenHyperlinks(analysis) });
-  if (args.dryRun) return finishDryRun(ctx, ['Para migrar de verdad:', pc.cyan(repeat)]);
+    // 5. Escribir (ya no se pregunta nada)
+    async () => {
+      // Lo que se mostró tiene que seguir siendo cierto: si destino cambió mientras revisabas, no se escribe.
+      const changed = await withStatus(
+        `Verificando que ${ctx.dst} no cambió…`,
+        ctx.animate,
+        () => changesSinceAnalysis(ctx.cma, analysis),
+        (list) => (list.length ? `${ctx.dst} cambió` : `${ctx.dst} sigue igual`),
+      );
+      if (changed.length) {
+        throw new AbortError(
+          `${ctx.dst} cambió mientras revisabas el plan (${changed.join(', ')}). No se escribió nada.`,
+          `Vuelve a correr ${APP_NAME} para analizar de nuevo.`,
+        );
+      }
 
-  // 4. Confirmar, respaldar y escribir
-  if (!(await confirmWriting(ctx, `¿Migrar a ${pc.bold(dst)}? ${pc.dim('(entries e imágenes en draft)')}`))) return 0;
-  // Lo que se mostró tiene que seguir siendo cierto: si destino cambió mientras revisabas, no se escribe.
-  const changed = await withStatus(
-    `Verificando que ${dst} no cambió…`,
-    ctx.animate,
-    () => changesSinceAnalysis(ctx.cma, analysis),
-    (list) => (list.length ? `${dst} cambió` : `${dst} sigue igual`),
-  );
-  if (changed.length) {
-    throw new AbortError(
-      `${dst} cambió mientras revisabas el plan (${changed.join(', ')}). No se escribió nada.`,
-      `Vuelve a correr ${APP_NAME} para analizar de nuevo.`,
-    );
-  }
+      const write = await startWriting(ctx, 'migrate', rootIds);
+      await executePlan(plan, analysis, () => ctx.editorInterfaces(ctx.src), write);
+      return finishWriting(ctx, write, {
+        title: 'Migración lista',
+        lines: rootIds.map((id) =>
+          pc.cyan(`https://${ctx.session.appHost}/spaces/${ctx.spaceId}/environments/${ctx.dst}/entries/${id}`),
+        ),
+        repeat: repeat(),
+        done: 'Listo. Ninguna entry ni imagen fue publicada.',
+      });
+    },
+  ]);
+  return code ?? 0;
+}
 
-  const write = await startWriting(ctx, 'migrate', rootIds);
-  await executePlan(plan, analysis, () => ctx.editorInterfaces(src), write);
-  return finishWriting(ctx, write, {
-    title: 'Migración lista',
-    lines: [
-      ...rootIds.map((id) =>
-        pc.cyan(`https://${ctx.session.appHost}/spaces/${ctx.spaceId}/environments/${dst}/entries/${id}`),
-      ),
-      '',
-      `${pc.bold('Repetir')}       ${repeat}`,
-    ],
-    done: 'Listo. Ninguna entry ni imagen fue publicada.',
-  });
+/** Título de una entry del árbol por su ID. */
+function titleOfId(tree: TreeAnalysis, id: string): string {
+  const entry = tree.tree.entries.get(id);
+  return entry ? tree.titleOf(entry) : id;
 }

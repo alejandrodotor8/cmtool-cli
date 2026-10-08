@@ -1,26 +1,40 @@
 /**
  * Preguntas al usuario (con @clack/prompts). Cada función devuelve la respuesta; no lee ni
- * escribe en Contentful. Ctrl+C o Esc cancelan: se lanza CancelError.
+ * escribe en Contentful. Esc vuelve al paso anterior (si hay uno) y Ctrl+C sale.
  */
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import type { BackupFile } from '../backup.ts';
 import { COMMANDS, type Command } from '../cli-args.ts';
 import type { ContentType, Environment, Space } from '../contentful/types.ts';
+import { looksLikeProduction, sortEnvironments } from '../core/environments.ts';
 import { parseIds } from '../core/ids.ts';
 import { allPicks, type ModelOption, type ModelPick } from '../core/model-changes.ts';
 import type { UpdateCandidate } from '../core/plan.ts';
 import { parseSince } from '../core/query.ts';
-import { AbortError, CancelError } from '../errors.ts';
+import { AbortError, BackError, CancelError } from '../errors.ts';
 import { log } from './log.ts';
+import { beforePrompt, cancelledWithEscape, canGoBack, goBack, notePrompt, steps } from './navigation.ts';
 import { clip } from './table.ts';
 import { BACKUP_KIND_LABEL, changedFieldsText, modelPicksSummary, modelPickText } from './text.ts';
 
-/** La respuesta de un prompt, o CancelError si el usuario canceló. */
-function answer<T>(value: T): Exclude<T, symbol> {
-  if (p.isCancel(value)) throw new CancelError();
+/**
+ * Hace una pregunta y devuelve la respuesta. Si se cancela con Esc y hay un paso anterior,
+ * lanza BackError (vuelve); si no, CancelError (sale).
+ */
+async function ask<T>(prompt: () => Promise<T>): Promise<Exclude<T, symbol>> {
+  beforePrompt();
+  const value = await prompt();
+  if (p.isCancel(value)) throw cancelledWithEscape() && canGoBack() ? new BackError() : new CancelError();
+  notePrompt();
   return value as Exclude<T, symbol>;
 }
+
+/** Opción "← Volver" de las listas (solo aparece si hay a dónde volver). */
+const BACK = '\u0000volver';
+const withBack = <T>(options: Choice<T>[]): p.Option<T>[] =>
+  (canGoBack() ? [...options, { value: BACK as T, label: pc.dim('← Volver'), hint: 'Esc' }] : options) as p.Option<T>[];
+const unlessBack = <T>(value: T): T => (value === BACK ? goBack() : value);
 
 export interface Choice<T> {
   value: T;
@@ -32,32 +46,34 @@ export interface Choice<T> {
 
 /** Elegir una opción. */
 export async function choose<T>(message: string, options: Choice<T>[], initialValue?: T): Promise<T> {
-  return answer(await p.select<T>({ message, options: options as p.Option<T>[], initialValue, maxItems: 12 }));
+  return unlessBack(await ask(() => p.select<T>({ message, options: withBack(options), initialValue, maxItems: 12 })));
 }
 
 /** Elegir una opción escribiendo para filtrar (listas largas). */
 export async function search<T>(message: string, options: Choice<T>[], initialValue?: T): Promise<T> {
-  return answer(
-    await p.autocomplete<T>({
-      message,
-      placeholder: 'Escribe para filtrar…',
-      options: options as p.Option<T>[],
-      initialValue,
-      maxItems: 12,
-    }),
+  return unlessBack(
+    await ask(() =>
+      p.autocomplete<T>({
+        message,
+        placeholder: 'Escribe para filtrar…',
+        options: withBack(options),
+        initialValue,
+        maxItems: 12,
+      }),
+    ),
   );
 }
 
 /** Marcar varias opciones (se puede escribir para filtrar). */
-export async function chooseMany<T>(
+export function chooseMany<T>(
   message: string,
   options: Choice<T>[],
   { initialValues = [], required = true }: { initialValues?: T[]; required?: boolean } = {},
 ): Promise<T[]> {
-  return answer(
-    await p.autocompleteMultiselect<T>({
+  return ask(() =>
+    p.autocompleteMultiselect<T>({
       message,
-      placeholder: 'Escribe para filtrar · espacio marca · enter continúa',
+      placeholder: 'Escribe para filtrar · espacio marca · enter continúa · Esc vuelve',
       options: options as p.Option<T>[],
       initialValues,
       required,
@@ -71,7 +87,7 @@ export async function askText(
   message: string,
   { placeholder, validate }: { placeholder?: string; validate?: (value: string) => string | undefined } = {},
 ): Promise<string> {
-  const value = answer(await p.text({ message, placeholder, validate: (v) => validate?.((v ?? '').trim()) }));
+  const value = await ask(() => p.text({ message, placeholder, validate: (v) => validate?.((v ?? '').trim()) }));
   return value.trim();
 }
 
@@ -88,24 +104,31 @@ async function allOrSome<T>(
     pickSome,
   }: { all: Omit<Choice<string>, 'value'>; none: Omit<Choice<string>, 'value'>; pickSome: () => Promise<T[]> },
 ): Promise<T[]> {
-  const mode = await choose(message, [
-    { value: 'all', ...all },
-    ...(items.length > 1 ? [{ value: 'some', label: 'Elegir cuáles', hint: 'marcas uno por uno' }] : []),
-    { value: 'none', ...none },
+  let mode = 'all';
+  let picked: T[] = [];
+  await steps([
+    async () => {
+      mode = await choose(message, [
+        { value: 'all', ...all },
+        ...(items.length > 1 ? [{ value: 'some', label: 'Elegir cuáles', hint: 'marcas uno por uno' }] : []),
+        { value: 'none', ...none },
+      ]);
+    },
+    async () => {
+      picked = mode === 'all' ? items : mode === 'none' ? [] : await pickSome();
+    },
   ]);
-  if (mode === 'all') return items;
-  if (mode === 'none') return [];
-  return pickSome();
+  return picked;
 }
 
 /** Sí / No. */
-export async function askYesNo(message: string, initialValue: boolean): Promise<boolean> {
-  return answer(await p.confirm({ message, active: 'Sí', inactive: 'No', initialValue }));
+export function askYesNo(message: string, initialValue: boolean): Promise<boolean> {
+  return ask(() => p.confirm({ message, active: 'Sí', inactive: 'No', initialValue }));
 }
 
 /** Ruta de un archivo existente (con autocompletado de rutas). */
-export async function askFile(message: string): Promise<string> {
-  return answer(await p.path({ message, directory: false }));
+export function askFile(message: string): Promise<string> {
+  return ask(() => p.path({ message, directory: false }));
 }
 
 // ───────────────────────── específicas ─────────────────────────
@@ -127,14 +150,35 @@ export const pickSpace = (spaces: Space[], defaultId: string | undefined): Promi
     spaces.some((s) => s.sys.id === defaultId) ? defaultId : undefined,
   );
 
+/** Ambientes de prueba primero (develop, QA…) y producción al final; producción va marcada. */
 const envChoices = (envs: Environment[]) =>
-  envs.map((e) => ({
+  sortEnvironments(envs).map((e) => ({
     value: e.id,
-    label: e.id,
+    label: looksLikeProduction(e) ? `${e.id} ${pc.yellow('· producción')}` : e.id,
     hint: e.aliases.length ? `alias: ${e.aliases.join(', ')}` : undefined,
   }));
 
-export const pickSource = (envs: Environment[]): Promise<string> => choose('Ambiente de ORIGEN', envChoices(envs));
+/**
+ * Ambiente de origen. Si parece producción, pide confirmarlo: lo normal es migrar desde
+ * un ambiente de pruebas hacia producción. "No" vuelve a la lista.
+ */
+export async function pickSource(envs: Environment[]): Promise<string> {
+  let src = '';
+  await steps([
+    async () => {
+      src = await choose('Ambiente de ORIGEN', envChoices(envs));
+    },
+    async () => {
+      const env = envs.find((e) => e.id === src);
+      if (!env || !looksLikeProduction(env)) return;
+      log.warn(
+        `${pc.bold(src)} parece producción. Lo normal es migrar desde un ambiente de pruebas (develop, QA) hacia producción, no al revés.`,
+      );
+      if (!(await askYesNo(`¿Seguro que quieres usar ${pc.bold(src)} como ORIGEN?`, false))) goBack();
+    },
+  ]);
+  return src;
+}
 
 export const pickDestination = (envs: Environment[], src: string): Promise<string> =>
   choose(
@@ -171,8 +215,8 @@ export async function askIds(kind: keyof typeof KIND = 'entries'): Promise<strin
     ].join('\n'),
     1,
   );
-  const raw = answer(
-    await p.multiline({
+  const raw = await ask(() =>
+    p.multiline({
       message: `${what} ${pc.dim('·')} ${pc.yellow('Tab + Enter para continuar')}`,
       placeholder: 'Pega aquí…',
       showSubmit: true,
@@ -191,19 +235,27 @@ export async function askIds(kind: keyof typeof KIND = 'entries'): Promise<strin
 
 /** Desde cuándo (para "cambiadas recientemente"). Devuelve la fecha ISO. */
 export async function askSince(): Promise<string> {
-  const choice = await choose('¿Cambiadas desde cuándo?', [
-    { value: 'hoy', label: 'Hoy' },
-    { value: '7d', label: 'Últimos 7 días' },
-    { value: '30d', label: 'Últimos 30 días' },
-    { value: 'fecha', label: 'Desde una fecha…' },
+  let choice = '';
+  let text = '';
+  await steps([
+    async () => {
+      choice = await choose('¿Cambiadas desde cuándo?', [
+        { value: 'hoy', label: 'Hoy' },
+        { value: '7d', label: 'Últimos 7 días' },
+        { value: '30d', label: 'Últimos 30 días' },
+        { value: 'fecha', label: 'Desde una fecha…' },
+      ]);
+    },
+    async () => {
+      text =
+        choice === 'fecha'
+          ? await askText('Fecha', {
+              placeholder: 'AAAA-MM-DD',
+              validate: (v) => (parseSince(v) ? undefined : 'Usa el formato AAAA-MM-DD (por ejemplo 2026-10-01).'),
+            })
+          : choice;
+    },
   ]);
-  const text =
-    choice === 'fecha'
-      ? await askText('Fecha', {
-          placeholder: 'AAAA-MM-DD',
-          validate: (v) => (parseSince(v) ? undefined : 'Usa el formato AAAA-MM-DD (por ejemplo 2026-10-01).'),
-        })
-      : choice;
   return parseSince(text) as string;
 }
 
@@ -280,9 +332,9 @@ export async function askModelChanges(options: ModelOption[], dst: string): Prom
       : { label: `Aplicar todo (${picks.length})`, hint: modelPicksSummary(picks) },
     none: { label: 'No tocar el modelo', hint: `el modelo de ${dst} queda como está` },
     pickSome: async () => {
-      const picked = answer(
-        await p.groupMultiselect({
-          message: `¿Qué aplico? ${pc.dim('(espacio marca · marcar el content type marca todo lo suyo)')}`,
+      const picked = await ask(() =>
+        p.groupMultiselect({
+          message: `¿Qué aplico? ${pc.dim('(espacio marca · marcar el content type marca todo lo suyo · Esc vuelve)')}`,
           options: groups as Record<string, p.Option<ModelPick>[]>,
           required: false,
           selectableGroups: true,
@@ -299,8 +351,7 @@ export async function askModelChanges(options: ModelOption[], dst: string): Prom
  * alias), no basta con "sí": hay que escribir el nombre del ambiente.
  */
 export async function confirmWrite(dstEnv: Environment, question: string): Promise<boolean> {
-  const looksLikeProduction = dstEnv.id === 'master' || dstEnv.aliases.length > 0;
-  if (!looksLikeProduction) return askYesNo(question, true);
+  if (!looksLikeProduction(dstEnv)) return askYesNo(question, true);
 
   const why = dstEnv.aliases.length ? `tiene el alias ${dstEnv.aliases.join(', ')}` : 'es master';
   log.warn(`${pc.bold(dstEnv.id)} ${why}: probablemente es producción.`);

@@ -9,3 +9,6 @@ pnpm-lock.yaml
 bun.lock
 bun.lockb
 yarn.lock
+
+# Notas locales (por ejemplo, la guía del código): no se suben.
+.temp

@@ -12,3 +12,8 @@ yarn.lock
 
 # Notas locales (por ejemplo, la guía del código): no se suben.
 .temp
+
+# graphify: el grafo sí se sube; esto es estado local de cada máquina (rutas propias y caché).
+graphify-out/.graphify_python
+graphify-out/.graphify_root
+graphify-out/cache/

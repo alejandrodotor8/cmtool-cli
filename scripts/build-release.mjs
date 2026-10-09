@@ -1,7 +1,8 @@
 /**
- * Ejecutables de un solo archivo, que no necesitan Node, en release/. Usa `bun build --compile`,
- * así que se corre con bun: `bun run build:exe`. La primera vez descarga el runtime de cada
- * sistema (necesita internet).
+ * Ejecutables de un solo archivo, que no necesitan Node, en release/. Compila con
+ * `bun build --compile`: hace falta tener bun instalado, pero no usarlo como gestor de paquetes
+ * (`npm run build:release`, `pnpm build:release` y `yarn build:release` también sirven). La
+ * primera vez descarga el runtime de cada sistema (necesita internet).
  *
  * - Windows: cfm-windows.exe.
  * - Mac: cfm.app (Apple Silicon e Intel en el mismo ejecutable, con ícono) y cfm-mac.zip para
@@ -16,9 +17,19 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+// Arranca con Node (como el script `build`) y sigue con bun, que es el que compila.
 if (!process.versions.bun) {
-  console.error('build:exe compila con bun: corre `bun run build:exe` (instalar bun: https://bun.sh).');
-  process.exit(1);
+  try {
+    execFileSync('bun', [fileURLToPath(import.meta.url)], { stdio: 'inherit' });
+    process.exit(0);
+  } catch (e) {
+    if (e.code !== 'ENOENT') process.exit(e.status ?? 1);
+    console.error(
+      'build:release compila con bun, y no lo encontré. Instálalo (https://bun.sh) y vuelve a correrlo:\n' +
+        'no hace falta cambiar de gestor de paquetes.',
+    );
+    process.exit(1);
+  }
 }
 
 const root = fileURLToPath(new URL('..', import.meta.url));

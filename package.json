@@ -1,6 +1,6 @@
 {
   "name": "cfm",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "private": true,
   "description": "Migra entries de Contentful entre ambientes de forma interactiva, dejándolas en draft",
   "type": "module",
@@ -10,7 +10,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "build:exe": "bun scripts/build-exe.mjs",
+    "build:release": "node scripts/build-release.mjs",
     "start": "node bin/cfm.mjs",
     "dev": "node bin/cfm-dev.mjs",
     "typecheck": "tsc",

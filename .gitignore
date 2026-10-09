@@ -1,5 +1,5 @@
 node_modules
-# Build y ejecutables (se generan con los scripts `build` y `build:exe`).
+# Build y ejecutables (se generan con los scripts `build` y `build:release`).
 dist
 release
 .DS_Store

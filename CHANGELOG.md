@@ -2,6 +2,13 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.16.1 — 2026-10-09
+
+### Cambiado
+
+- El script que genera la app de Mac y el ejecutable de Windows ahora se llama **`build:release`** (antes `build:exe`), por la carpeta que genera: `build` → `dist/` (el comando `cfm`) y `build:release` → `release/` (lo que se reparte).
+- `build:release` funciona con cualquier gestor (`npm run`, `pnpm`, `yarn`, `bun run`): arranca con Node y usa bun solo para compilar. Si bun no está instalado, lo dice con un mensaje claro en vez de un error del sistema.
+
 ## 0.16.0 — 2026-10-09
 
 ### Agregado

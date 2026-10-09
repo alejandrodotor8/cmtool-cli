@@ -141,11 +141,7 @@ Después sigue los pasos de instalación con su sistema y su gestor.
 
 ### Ejecutables para Mac y Windows
 
-Para quien no va a instalar Node ni el proyecto: una app para Mac y un ejecutable para Windows, que se abren con doble clic. Se generan desde la carpeta del proyecto con **bun**, en un Mac (la app de Mac solo se arma ahí):
-
-```bash
-bun run build:exe
-```
+Para quien no va a instalar Node ni el proyecto: una app para Mac y un ejecutable para Windows, que se abren con doble clic. Se generan desde la carpeta del proyecto, en un Mac (la app de Mac solo se arma ahí), con tu gestor: `npm run build:release`, `pnpm build:release`, `yarn build:release` o `bun run build:release`. Compila con bun, así que hace falta tenerlo instalado, aunque instales las dependencias con otro gestor.
 
 Quedan en `release/` (no se sube al repo):
 
@@ -166,13 +162,13 @@ En los dos:
 - **Actualizar**: arrastra la nueva a *Aplicaciones* y elige **Reemplazar** (cierra antes la ventana de `cfm` si está abierta). La sesión y los respaldos están fuera de la app, así que no se pierde nada. La versión instalada se ve en el encabezado y en Finder (*Obtener información*).
 - **Desde una terminal** acepta los mismos comandos y flags que `cfm`: `/Applications/cfm.app/Contents/MacOS/cfm migrate --dry-run`.
 - **Ícono**: [assets/icon.svg](assets/icon.svg). Si lo cambias, `swift scripts/render-icon.swift` regenera `assets/icon.png`, que es el que usa el build.
-- **Firma**: `build:exe` busca un certificado **Developer ID Application** en el llavero (o usa el que digas en `CFM_SIGN_IDENTITY`):
+- **Firma**: `build:release` busca un certificado **Developer ID Application** en el llavero (o usa el que digas en `CFM_SIGN_IDENTITY`):
   - **Con certificado**: firma para repartir (hardened runtime y los permisos de [scripts/entitlements.plist](scripts/entitlements.plist)). Si además le das un perfil de notarización, la manda a Apple, le pega la aprobación y vuelve a armar el zip; así abre en cualquier Mac sin avisos:
 
     ```bash
     # una sola vez: guarda en el llavero tu Apple ID, el Team ID y una contraseña de app (appleid.apple.com)
     xcrun notarytool store-credentials cfm-notary --apple-id <correo> --team-id <TEAM_ID>
-    CFM_NOTARY_PROFILE=cfm-notary bun run build:exe
+    CFM_NOTARY_PROFILE=cfm-notary bun run build:release
     ```
 
   - **Sin certificado**: firma solo para este Mac. En otros Mac, la primera vez macOS dice que no pudo verificarla: *Ajustes del Sistema → Privacidad y seguridad → Abrir igualmente*.
@@ -365,7 +361,7 @@ dist/                    build generado (no se sube): un solo archivo, cli.js
 release/                 ejecutables generados (no se suben): cfm.app, cfm-mac.zip y cfm-windows.exe
 assets/icon.svg, icon.png  ícono de la app (el PNG sale del SVG con scripts/render-icon.swift)
 scripts/build.mjs        el build: empaqueta src/ y sus dependencias con esbuild
-scripts/build-exe.mjs    la app de Mac y el ejecutable de Windows (bun build --compile), firma y notarización
+scripts/build-release.mjs  la app de Mac y el ejecutable de Windows (bun build --compile), firma y notarización
 scripts/entitlements.plist  permisos de la app firmada con Developer ID
 src/
   cli.ts                 arranque: corre main y traduce errores a mensajes y códigos de salida
@@ -436,7 +432,7 @@ Con tu gestor (`npm run …`, `pnpm …` o `bun run …`):
 | `test` | tests (`node:test`, sin dependencias extra) |
 | `check` | typecheck + lint + tests; córrelo antes de hacer commit |
 | `build` | empaqueta `src/` y sus dependencias en `dist/cli.js` (lo que corre `cfm`) |
-| `build:exe` | genera la app de Mac y el ejecutable de Windows en `release/` (necesita bun; ver [Ejecutables](#ejecutables-para-mac-y-windows)) |
+| `build:release` | genera la app de Mac y el ejecutable de Windows en `release/` (necesita bun instalado, con cualquier gestor; ver [Ejecutables](#ejecutables-para-mac-y-windows)) |
 | `start` | corre el build desde la carpeta, sin el comando global |
 | `dev` | corre el código fuente desde la carpeta, sin el comando global |
 

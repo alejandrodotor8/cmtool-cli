@@ -1,5 +1,5 @@
 /**
- * Entrada de los ejecutables de un solo archivo (script `build:exe`), que no necesitan Node.
+ * Entrada de los ejecutables de un solo archivo (script `build:release`), que no necesitan Node.
  * Corren igual que el build. En Windows, al abrirlos con doble clic, esperan un Enter antes de
  * cerrar; en macOS, la cfm.app abierta desde Finder se vuelve a abrir en la terminal del usuario.
  */

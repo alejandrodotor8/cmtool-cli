@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { CancelError, formatError, isCancel } from '../src/errors.ts';
+import { CancelError, formatError, isCancel, statusOf } from '../src/errors.ts';
 
 describe('formatError', () => {
   test('muestra status, mensaje y detalles, pero nunca la request con el token', () => {
@@ -32,5 +32,14 @@ describe('isCancel', () => {
   test('reconoce la cancelación de una pregunta (Ctrl+C o Esc)', () => {
     assert.equal(isCancel(new CancelError()), true);
     assert.equal(isCancel(new Error('otro')), false);
+  });
+});
+
+describe('statusOf', () => {
+  test('lee el status de un error del CMA, y nada de otros errores', () => {
+    assert.equal(statusOf(new Error(JSON.stringify({ status: 401, statusText: 'Unauthorized' }))), 401);
+    assert.equal(statusOf(new Error('sin red')), undefined);
+    assert.equal(statusOf(new Error('null')), undefined);
+    assert.equal(statusOf(undefined), undefined);
   });
 });

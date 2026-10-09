@@ -2,6 +2,38 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.15.0 — 2026-10-09
+
+### Agregado
+
+- Comando **`logout`** (también en el menú, *Cerrar sesión*): quita el token guardado en este equipo, como `contentful logout`, sin tocar lo demás del archivo. Pide confirmar y avisa que también cierra la sesión del Contentful CLI (comparten el archivo) y que el token sigue existiendo en Contentful hasta que lo revoques allá.
+
+## 0.14.0 — 2026-10-09
+
+### Agregado
+
+- **Iniciar sesión sin el Contentful CLI**: si no encuentra tu sesión, la primera vez pregunta cómo entrar: crear un token en Contentful (abre el navegador) y pegarlo, pegar uno que ya tienes, o usar `contentful login`. El token no se ve al pegarlo, se prueba con Contentful (reconoce la región EU) y se guarda donde lo guarda `contentful login`, con el mismo formato y permiso de lectura solo para tu usuario. La siguiente vez ya no pregunta. Sirve igual en `cfm` y en los ejecutables.
+- Comando **`login`** (también en el menú, *Iniciar sesión*): pegar un token nuevo, por ejemplo si el anterior venció.
+
+### Cambiado
+
+- Con un error 401, el mensaje dice cómo pegar un token nuevo (`cfm login`), además de `contentful login`.
+
+## 0.13.0 — 2026-10-09
+
+### Agregado
+
+- **Ejecutables para Mac y Windows**, que no necesitan Node ni el proyecto: `bun run build:exe` genera en `release/` `cfm-mac` (Apple Silicon e Intel en un solo archivo, firmado para que macOS lo deje abrir) y `cfm-windows.exe`. Se abren con doble clic y aceptan los mismos comandos y flags que `cfm`.
+- En Windows, al abrir el ejecutable con doble clic, espera un Enter antes de cerrar la ventana, para que se alcance a leer el resumen o el error.
+
+### Cambiado
+
+- El nombre y la versión se importan de `package.json` en vez de leerlo del disco, así quedan dentro del build y de los ejecutables.
+
+### Corregido
+
+- `check` fallaba desde que se subió el grafo: Biome revisaba los archivos generados de `graphify-out/`. Ahora los ignora.
+
 ## 0.12.1 — 2026-10-08
 
 ### Corregido

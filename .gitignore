@@ -1,6 +1,7 @@
 node_modules
-# Build (se genera con el script `build`).
+# Build y ejecutables (se generan con los scripts `build` y `build:exe`).
 dist
+release
 .DS_Store
 
 # Cada quien usa su gestor de paquetes (npm, pnpm o bun): los lockfiles no se suben.

@@ -8,7 +8,9 @@ Migra entries de Contentful entre ambientes (por ejemplo, un banner de `develop`
 
 - **Node 22.18 o superior** (recomendado 24). La herramienta siempre corre con Node, que ejecuta TypeScript directo, sin compilar.
 - **Un gestor de paquetes, el que prefieras**: npm (viene con Node), pnpm o bun. El proyecto no obliga a ninguno y no sube lockfiles: cada quien instala con el suyo.
-- Una **sesión de Contentful** (`contentful login`) o un token de administración.
+- Una **cuenta de Contentful**. Si no encuentra tu sesión, la primera vez te pide un token y lo guarda (ver [Sin el Contentful CLI](#sin-el-contentful-cli)); también sirve `contentful login`.
+
+¿Para alguien que no va a instalar Node ni el proyecto? Mira [Ejecutables para Mac y Windows](#ejecutables-para-mac-y-windows).
 
 ## Instalación (una sola vez)
 
@@ -35,7 +37,9 @@ Cierra y abre la terminal después de instalar.
 
 **Solo pnpm**: la primera vez corre `pnpm setup` y abre una terminal nueva, para que sus comandos globales queden en el PATH.
 
-### 2. Contentful CLI e inicio de sesión
+### 2. Contentful CLI e inicio de sesión (opcional)
+
+Si no lo instalas, la primera vez que abras `cfm` te pide pegar un token ([Sin el Contentful CLI](#sin-el-contentful-cli)).
 
 Se abre el navegador para autorizar. La sesión queda en `~/.contentfulrc.json` (en Windows, `C:\Users\<usuario>\.contentfulrc.json`).
 
@@ -83,7 +87,19 @@ Los comandos son los mismos en macOS y Windows (en PowerShell, `$PWD` también e
 
 ### Sin el Contentful CLI
 
-Crea un token en Contentful (*Settings → CMA tokens*) y defínelo en la terminal antes de correr:
+Si `cfm` no encuentra tu sesión, la primera vez te pregunta cómo entrar:
+
+- **Crear un token en Contentful y pegarlo aquí**: abre Contentful en el navegador para que crees un token personal (*Create personal access token*). Lo copias y lo pegas.
+- **Ya tengo un token: pegarlo aquí**.
+- **Iniciar sesión con el Contentful CLI**: termina y te dice que corras `contentful login`.
+
+El token pegado no se ve en pantalla. `cfm` lo prueba con Contentful (y reconoce si es de la región EU) y lo guarda **donde lo guarda `contentful login`**, con el mismo formato: `~/.contentfulrc.json` (o el `.contentfulrc.json` de la carpeta, o `CONTENTFUL_CONFIG_FILE`). El archivo queda con permiso de lectura solo para tu usuario. La siguiente vez ya no pregunta, y el Contentful CLI también lo usa.
+
+Para cambiarlo (por ejemplo, si venció): `cfm login`, o **Iniciar sesión** en el menú.
+
+Para salir: `cfm logout`, o **Cerrar sesión** en el menú. Quita el token del archivo (como `contentful logout`) y deja lo demás. Como el archivo es el mismo, también cierra la sesión del Contentful CLI. El token sigue existiendo en Contentful: si no lo vas a usar más, revócalo allá (*Account settings → CMA tokens*).
+
+También puedes definir el token en la terminal; tiene prioridad sobre el archivo:
 
 | Sistema | Comando |
 | --- | --- |
@@ -111,7 +127,7 @@ Crea un token en Contentful (*Settings → CMA tokens*) y defínelo en la termin
 ### Notas
 
 - **npm y fnm/nvm**: con `npm link` el comando queda instalado en la versión de Node activa; si cambias de versión, repite `npm link`. Con pnpm y bun el comando usa el `node` que tengas activo.
-- **Error 401**: la sesión expiró. Vuelve a correr `contentful login`.
+- **Error 401**: la sesión expiró o el token ya no sirve. Pega uno nuevo con `cfm login` (o vuelve a correr `contentful login`).
 - **Sin lockfile**, las dependencias directas están fijadas a versiones exactas en `package.json`. Para revisar vulnerabilidades: `npm audit`, `pnpm audit` o `bun audit`.
 
 ### Pasarle el proyecto a otra persona
@@ -122,6 +138,30 @@ No hay repositorio remoto, así que se comparte como archivo:
 - **Sin historial**: un zip de la carpeta **sin** `node_modules` ni lockfiles.
 
 Después sigue los pasos de instalación con su sistema y su gestor.
+
+### Ejecutables para Mac y Windows
+
+Para quien no va a instalar Node ni el proyecto: un archivo para Mac y uno para Windows, que se abren con doble clic. Se generan desde la carpeta del proyecto con **bun**, en un Mac (ahí se firma el de Mac; sin firma, macOS no lo abre):
+
+```bash
+bun run build:exe
+```
+
+Quedan en `release/` (no se sube al repo):
+
+| Archivo | Para | Tamaño |
+| --- | --- | --- |
+| `cfm-mac` | Mac, Apple Silicon e Intel (un solo archivo para los dos) | ~128 MB (~45 MB en zip) |
+| `cfm-windows.exe` | Windows 10 y 11, 64 bits | ~121 MB (~40 MB en zip) |
+
+- **Abrirlo**: doble clic. En Mac se abre la Terminal con el menú; en Windows, una ventana que al terminar espera un Enter antes de cerrarse. Desde una terminal acepta los mismos comandos y flags que `cfm` (por ejemplo, `./cfm-mac migrate --dry-run`).
+- **Sesión**: la primera vez pide el token y lo guarda ([Sin el Contentful CLI](#sin-el-contentful-cli)); no hace falta instalar nada más. Es la misma sesión de `cfm` y de `contentful login` (`~/.contentfulrc.json`), y los respaldos también son los mismos (`~/.ctf-migrate/backups`).
+- **Para mandarlo, comprímelo** (zip): pesa un tercio y, en Mac, conserva el permiso para ejecutarse.
+- **No está firmado con un certificado** (Apple Developer o firma de código de Windows), así que en otra máquina el sistema lo frena la primera vez:
+  - **Mac**: dice que no pudo verificar el archivo. Ve a *Ajustes del Sistema → Privacidad y seguridad* y elige **Abrir igualmente**.
+  - **Windows**: "Windows protegió su PC". Elige **Más información → Ejecutar de todas formas**.
+- En Windows 10 se abre la consola antigua: algunos símbolos de las tablas pueden verse como cuadritos.
+- Cada ejecutable lleva la versión con la que se generó: después de un cambio, vuelve a generarlo.
 
 ## Uso
 
@@ -144,6 +184,8 @@ cfm --version    # versión instalada
 | `status` | **Estado de los ambientes**: content types, idiomas y tags que difieren | no |
 | `history` | **Historial** de migraciones de tu cuenta, a partir de los respaldos | no (1 llamada: saber qué cuenta eres) |
 | `restore` | **Deshacer** una migración con su respaldo | sí |
+| `login` | **Iniciar sesión**: pegar o cambiar tu token de Contentful | no (guarda el token en tu equipo) |
+| `logout` | **Cerrar sesión**: borrar el token guardado en tu equipo | no (lo quita de tu equipo) |
 
 Sin comando, la herramienta muestra este menú. Los comandos que comparan pueden guardar un **reporte Markdown** para compartir (`--report archivo.md`, o te lo ofrece al final).
 
@@ -283,7 +325,7 @@ Cada migración guarda un respaldo en `~/.ctf-migrate/backups/<cuenta>/` (en Win
 ## Seguridad
 
 - **Un solo módulo escribe**: [src/contentful/write.ts](src/contentful/write.ts). Queda atado al ambiente destino y no tiene forma de borrar, archivar, despublicar ni escribir en origen. Lo verifica [test/security.test.ts](test/security.test.ts) sobre el código fuente: si alguien agrega una escritura en otro archivo, los tests fallan.
-- **El token solo va a Contentful**: se lee de `CONTENTFUL_MANAGEMENT_TOKEN` o de `~/.contentfulrc.json` y solo se envía a `api.contentful.com` o `api.eu.contentful.com`. Si el archivo de sesión apunta a otro host, la herramienta se detiene. Los mensajes de error nunca imprimen la request (que lleva el token).
+- **El token solo va a Contentful**: se lee de `CONTENTFUL_MANAGEMENT_TOKEN` o de `~/.contentfulrc.json` y solo se envía a `api.contentful.com` o `api.eu.contentful.com`. Si el archivo de sesión apunta a otro host, la herramienta se detiene. Los mensajes de error nunca imprimen la request (que lleva el token). El token que pegas no se ve en pantalla, se prueba solo contra esos hosts y se guarda con permiso de lectura solo para tu usuario.
 - **Las imágenes solo se copian desde el CDN de Contentful** (`*.ctfassets.net`, por https).
 - **Nada se escribe antes de confirmar**: todo lo anterior al resumen es solo lectura.
 - **Dependencias**: solo 3 para correr (`contentful-management`, `@clack/prompts`, `picocolors`) y 3 de desarrollo (`typescript`, `@types/node`, `@biomejs/biome`), todas con versión exacta. Ninguna tiene scripts de instalación. El paquete es `private` para que no se publique en npm por error.
@@ -298,17 +340,21 @@ bin/
   stale-build.mjs        compara las fechas de src/ y del build
   cfm-dev.mjs    comando de desarrollo: carga src/cli.ts sin compilar
 dist/                    build generado (no se sube): un solo archivo, cli.js
+release/                 ejecutables generados (no se suben): cfm-mac y cfm-windows.exe
 scripts/build.mjs        el build: empaqueta src/ y sus dependencias con esbuild
+scripts/build-exe.mjs    los ejecutables de Mac y Windows (bun build --compile)
 src/
   cli.ts                 arranque: corre main y traduce errores a mensajes y códigos de salida
+  exe.ts                 entrada de los ejecutables
   main.ts                --version, --help, menú y despacho al comando
   cli-args.ts            ÚNICA definición de comandos y flags (de ahí salen el menú, la ayuda y la validación)
-  version.ts             versión de package.json
+  app.ts                 nombre y versión (de package.json)
   commands/              un archivo por comando, se lee de arriba abajo
     registry.ts          qué función corre cada comando
     context.ts           lo común: sesión, space y ambientes, lecturas una sola vez, confirmar, respaldar, cerrar
     migrate.ts, migrate-model.ts, migrate-assets.ts, compare-models.ts, compare-entry.ts,
     status.ts, history.ts, restore.ts
+    login.ts             iniciar sesión (pedir y guardar el token) y cerrarla (logout)
   selection/             cómo se eligen entries (ID, búsqueda, recientes, tag, archivo, faltantes) y assets
   report/                reportes Markdown (markdown.ts) y cómo se guardan (save.ts)
   backup.ts              respaldos locales en ~/.ctf-migrate/backups/<cuenta>/
@@ -344,6 +390,8 @@ src/
     table.ts             dibujo de tablas
     log.ts               mensajes de estado
     header.ts            presentación, título, cierres
+    browser.ts           abrir una página en el navegador (la de crear tokens)
+    pause.ts             "Presiona Enter para cerrar" del ejecutable de Windows
     runner.ts            ejecuta escrituras por fases, con barra de progreso y lista de ✔ / ✖
     status.ts            spinner para los pasos que llaman a la API
     api-calls.ts         cuenta las llamadas a la API (y las muestra con --verbose)
@@ -363,6 +411,7 @@ Con tu gestor (`npm run …`, `pnpm …` o `bun run …`):
 | `test` | tests (`node:test`, sin dependencias extra) |
 | `check` | typecheck + lint + tests; córrelo antes de hacer commit |
 | `build` | empaqueta `src/` y sus dependencias en `dist/cli.js` (lo que corre `cfm`) |
+| `build:exe` | genera los ejecutables de Mac y Windows en `release/` (necesita bun; ver [Ejecutables](#ejecutables-para-mac-y-windows)) |
 | `start` | corre el build desde la carpeta, sin el comando global |
 | `dev` | corre el código fuente desde la carpeta, sin el comando global |
 

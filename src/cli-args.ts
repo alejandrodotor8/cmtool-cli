@@ -18,6 +18,8 @@ export const COMMANDS = {
   status: { label: 'Estado de los ambientes', hint: 'resumen de diferencias · solo lectura' },
   history: { label: 'Historial', hint: 'migraciones anteriores y sus respaldos' },
   restore: { label: 'Deshacer una migración', hint: 'con su respaldo' },
+  login: { label: 'Iniciar sesión', hint: 'pegar o cambiar tu token de Contentful' },
+  logout: { label: 'Cerrar sesión', hint: 'borrar el token guardado en este equipo' },
 } as const;
 
 export type Command = keyof typeof COMMANDS;

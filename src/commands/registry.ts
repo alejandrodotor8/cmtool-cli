@@ -6,6 +6,7 @@ import type { CliArgs, Command } from '../cli-args.ts';
 import { compareEntry } from './compare-entry.ts';
 import { compareModelsCommand } from './compare-models.ts';
 import { history } from './history.ts';
+import { login, logout } from './login.ts';
 import { migrate } from './migrate.ts';
 import { migrateAssets } from './migrate-assets.ts';
 import { migrateModel } from './migrate-model.ts';
@@ -21,4 +22,6 @@ export const RUNNERS: Record<Command, (args: CliArgs) => Promise<number>> = {
   status,
   history,
   restore,
+  login,
+  logout,
 };

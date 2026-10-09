@@ -91,6 +91,12 @@ export async function askText(
   return value.trim();
 }
 
+/** Un secreto (por ejemplo, un token): no se ve al escribirlo ni al pegarlo. */
+export async function askSecret(message: string, validate: (value: string) => string | undefined): Promise<string> {
+  const value = await ask(() => p.password({ message, mask: '•', validate: (v) => validate((v ?? '').trim()) }));
+  return value.trim();
+}
+
 /**
  * Aplicar todo, nada, o elegir: la primera opción siempre es todo, para no tener que
  * marcar uno por uno. "Elegir cuáles" solo aparece si hay más de una cosa.

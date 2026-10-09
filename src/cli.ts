@@ -1,20 +1,29 @@
 /**
  * Arranque del comando: corre main y traduce los errores a mensajes y códigos de salida.
- * Lo usan los dos ejecutables de bin/: el del build (dist/) y el de desarrollo (src/).
+ * Lo usan los dos comandos de bin/ (el del build y el de desarrollo) y los ejecutables (src/exe.ts).
  */
 import pc from 'picocolors';
-import { AbortError, formatError, isCancel } from './errors.ts';
+import { APP_NAME } from './app.ts';
+import { AbortError, formatError, isCancel, statusOf } from './errors.ts';
 import { main } from './main.ts';
 import { printCancelled, printOutro, type RunMode } from './ui/header.ts';
 import { log } from './ui/log.ts';
+import { waitForEnter } from './ui/pause.ts';
 
-export async function run(argv: string[], mode: RunMode): Promise<never> {
+/** Con `pauseOnExit`, espera un Enter antes de salir (ver ui/pause.ts). */
+export async function run(argv: string[], mode: RunMode, { pauseOnExit = false } = {}): Promise<never> {
+  const code = await exitCode(argv, mode);
+  if (pauseOnExit) await waitForEnter();
+  process.exit(code);
+}
+
+async function exitCode(argv: string[], mode: RunMode): Promise<number> {
   try {
-    process.exit(await main(argv, mode));
+    return await main(argv, mode);
   } catch (e) {
     if (isCancel(e)) {
       printCancelled();
-      process.exit(0);
+      return 0;
     }
     if (e instanceof AbortError) {
       log.err(e.message);
@@ -22,9 +31,13 @@ export async function run(argv: string[], mode: RunMode): Promise<never> {
     } else {
       const msg = formatError(e);
       log.err(msg);
-      if (msg.startsWith('401')) log.info('Tu sesión expiró. Corre: contentful login');
+      if (statusOf(e) === 401) {
+        log.info(
+          `Tu sesión expiró o el token ya no sirve. Pega uno nuevo con ${APP_NAME} login (o "Iniciar sesión" en el menú).`,
+        );
+      }
     }
     printOutro(pc.red('Se detuvo.'));
-    process.exit(1);
+    return 1;
   }
 }

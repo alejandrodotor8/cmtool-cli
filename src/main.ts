@@ -6,6 +6,7 @@
 import { VERSION } from './app.ts';
 import { type Command, parseCliArgs, usage, validateFlags } from './cli-args.ts';
 import { prefetch } from './commands/context.ts';
+import { ensureSession } from './commands/login.ts';
 import { RUNNERS } from './commands/registry.ts';
 import { printIntro, type RunMode } from './ui/header.ts';
 import { steps } from './ui/navigation.ts';
@@ -22,6 +23,9 @@ export async function main(argv: string[], mode: RunMode): Promise<number> {
     return 0;
   }
   printIntro(mode);
+  // La primera vez, sin sesión: pide el token antes del menú (login lo pide él mismo; logout no lo necesita).
+  const handlesSession = args.command === 'login' || args.command === 'logout';
+  if (!handlesSession && !(await ensureSession(args))) return 0;
   prefetch(args);
   // Elegido en el menú, Esc desde la primera pregunta del comando vuelve al menú.
   let command = args.command;

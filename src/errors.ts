@@ -38,6 +38,16 @@ interface CmaErrorBody {
   details?: { errors?: { name: string; path?: (string | number)[]; details?: string }[] };
 }
 
+/** El status HTTP de un error del CMA (401, 404…), o `undefined` si no es uno. */
+export function statusOf(e: unknown): number | undefined {
+  try {
+    const { status } = JSON.parse(e instanceof Error ? e.message : String(e)) as CmaErrorBody;
+    return typeof status === 'number' ? status : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Mensaje legible de un error del CMA. Solo usa status, mensaje y detalles:
  * nunca imprime la request, que lleva el token en los headers.

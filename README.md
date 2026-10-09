@@ -141,7 +141,7 @@ Después sigue los pasos de instalación con su sistema y su gestor.
 
 ### Ejecutables para Mac y Windows
 
-Para quien no va a instalar Node ni el proyecto: un archivo para Mac y uno para Windows, que se abren con doble clic. Se generan desde la carpeta del proyecto con **bun**, en un Mac (ahí se firma el de Mac; sin firma, macOS no lo abre):
+Para quien no va a instalar Node ni el proyecto: una app para Mac y un ejecutable para Windows, que se abren con doble clic. Se generan desde la carpeta del proyecto con **bun**, en un Mac (la app de Mac solo se arma ahí):
 
 ```bash
 bun run build:exe
@@ -151,17 +151,39 @@ Quedan en `release/` (no se sube al repo):
 
 | Archivo | Para | Tamaño |
 | --- | --- | --- |
-| `cfm-mac` | Mac, Apple Silicon e Intel (un solo archivo para los dos) | ~128 MB (~45 MB en zip) |
+| `cfm.app` | Mac con macOS 13 o superior, Apple Silicon e Intel, con ícono | ~129 MB |
+| `cfm-mac.zip` | la app comprimida, para repartirla | ~48 MB |
 | `cfm-windows.exe` | Windows 10 y 11, 64 bits | ~121 MB (~40 MB en zip) |
 
-- **Abrirlo**: doble clic. En Mac se abre la Terminal con el menú; en Windows, una ventana que al terminar espera un Enter antes de cerrarse. Desde una terminal acepta los mismos comandos y flags que `cfm` (por ejemplo, `./cfm-mac migrate --dry-run`).
+En los dos:
+
 - **Sesión**: la primera vez pide el token y lo guarda ([Sin el Contentful CLI](#sin-el-contentful-cli)); no hace falta instalar nada más. Es la misma sesión de `cfm` y de `contentful login` (`~/.contentfulrc.json`), y los respaldos también son los mismos (`~/.ctf-migrate/backups`).
-- **Para mandarlo, comprímelo** (zip): pesa un tercio y, en Mac, conserva el permiso para ejecutarse.
-- **No está firmado con un certificado** (Apple Developer o firma de código de Windows), así que en otra máquina el sistema lo frena la primera vez:
-  - **Mac**: dice que no pudo verificar el archivo. Ve a *Ajustes del Sistema → Privacidad y seguridad* y elige **Abrir igualmente**.
-  - **Windows**: "Windows protegió su PC". Elige **Más información → Ejecutar de todas formas**.
+- Cada uno lleva la versión con la que se generó (se ve en el encabezado): después de un cambio, vuelve a generarlos.
+
+**Mac (`cfm.app`)**
+
+- **Instalar**: descomprime `cfm-mac.zip` y arrastra `cfm.app` a *Aplicaciones*. Se abre con doble clic, desde Launchpad o con Spotlight: abre el menú en **tu terminal**, la que macOS usa para abrir ejecutables (Warp, iTerm… o Terminal, si no elegiste otra). Para cambiarla: en Finder, *Obtener información* de cualquier ejecutable → *Abrir con* → *Cambiar todo*. Si esa terminal no puede abrirlo, usa Terminal.
+- **Actualizar**: arrastra la nueva a *Aplicaciones* y elige **Reemplazar** (cierra antes la ventana de `cfm` si está abierta). La sesión y los respaldos están fuera de la app, así que no se pierde nada. La versión instalada se ve en el encabezado y en Finder (*Obtener información*).
+- **Desde una terminal** acepta los mismos comandos y flags que `cfm`: `/Applications/cfm.app/Contents/MacOS/cfm migrate --dry-run`.
+- **Ícono**: [assets/icon.svg](assets/icon.svg). Si lo cambias, `swift scripts/render-icon.swift` regenera `assets/icon.png`, que es el que usa el build.
+- **Firma**: `build:exe` busca un certificado **Developer ID Application** en el llavero (o usa el que digas en `CFM_SIGN_IDENTITY`):
+  - **Con certificado**: firma para repartir (hardened runtime y los permisos de [scripts/entitlements.plist](scripts/entitlements.plist)). Si además le das un perfil de notarización, la manda a Apple, le pega la aprobación y vuelve a armar el zip; así abre en cualquier Mac sin avisos:
+
+    ```bash
+    # una sola vez: guarda en el llavero tu Apple ID, el Team ID y una contraseña de app (appleid.apple.com)
+    xcrun notarytool store-credentials cfm-notary --apple-id <correo> --team-id <TEAM_ID>
+    CFM_NOTARY_PROFILE=cfm-notary bun run build:exe
+    ```
+
+  - **Sin certificado**: firma solo para este Mac. En otros Mac, la primera vez macOS dice que no pudo verificarla: *Ajustes del Sistema → Privacidad y seguridad → Abrir igualmente*.
+
+**Windows (`cfm-windows.exe`)**
+
+- **Abrirlo**: doble clic. Se abre una ventana que al terminar espera un Enter antes de cerrarse. Desde una terminal acepta los mismos comandos y flags que `cfm`.
+- **Para mandarlo, comprímelo** (zip): pesa un tercio.
+- **No está firmado**: la primera vez aparece "Windows protegió su PC". Elige **Más información → Ejecutar de todas formas**.
+- El ícono y los datos del archivo (nombre, versión) solo se pueden poner compilando en Windows: bun no lo permite desde un Mac.
 - En Windows 10 se abre la consola antigua: algunos símbolos de las tablas pueden verse como cuadritos.
-- Cada ejecutable lleva la versión con la que se generó: después de un cambio, vuelve a generarlo.
 
 ## Uso
 
@@ -340,12 +362,14 @@ bin/
   stale-build.mjs        compara las fechas de src/ y del build
   cfm-dev.mjs    comando de desarrollo: carga src/cli.ts sin compilar
 dist/                    build generado (no se sube): un solo archivo, cli.js
-release/                 ejecutables generados (no se suben): cfm-mac y cfm-windows.exe
+release/                 ejecutables generados (no se suben): cfm.app, cfm-mac.zip y cfm-windows.exe
+assets/icon.svg, icon.png  ícono de la app (el PNG sale del SVG con scripts/render-icon.swift)
 scripts/build.mjs        el build: empaqueta src/ y sus dependencias con esbuild
-scripts/build-exe.mjs    los ejecutables de Mac y Windows (bun build --compile)
+scripts/build-exe.mjs    la app de Mac y el ejecutable de Windows (bun build --compile), firma y notarización
+scripts/entitlements.plist  permisos de la app firmada con Developer ID
 src/
   cli.ts                 arranque: corre main y traduce errores a mensajes y códigos de salida
-  exe.ts                 entrada de los ejecutables
+  exe.ts                 entrada de los ejecutables (la app de Mac se vuelve a abrir en tu terminal)
   main.ts                --version, --help, menú y despacho al comando
   cli-args.ts            ÚNICA definición de comandos y flags (de ahí salen el menú, la ayuda y la validación)
   app.ts                 nombre y versión (de package.json)
@@ -392,6 +416,7 @@ src/
     header.ts            presentación, título, cierres
     browser.ts           abrir una página en el navegador (la de crear tokens)
     pause.ts             "Presiona Enter para cerrar" del ejecutable de Windows
+    relaunch.ts          la cfm.app abierta desde Finder se abre en la terminal del usuario
     runner.ts            ejecuta escrituras por fases, con barra de progreso y lista de ✔ / ✖
     status.ts            spinner para los pasos que llaman a la API
     api-calls.ts         cuenta las llamadas a la API (y las muestra con --verbose)
@@ -411,7 +436,7 @@ Con tu gestor (`npm run …`, `pnpm …` o `bun run …`):
 | `test` | tests (`node:test`, sin dependencias extra) |
 | `check` | typecheck + lint + tests; córrelo antes de hacer commit |
 | `build` | empaqueta `src/` y sus dependencias en `dist/cli.js` (lo que corre `cfm`) |
-| `build:exe` | genera los ejecutables de Mac y Windows en `release/` (necesita bun; ver [Ejecutables](#ejecutables-para-mac-y-windows)) |
+| `build:exe` | genera la app de Mac y el ejecutable de Windows en `release/` (necesita bun; ver [Ejecutables](#ejecutables-para-mac-y-windows)) |
 | `start` | corre el build desde la carpeta, sin el comando global |
 | `dev` | corre el código fuente desde la carpeta, sin el comando global |
 

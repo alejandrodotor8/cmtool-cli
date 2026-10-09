@@ -2,6 +2,14 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.16.0 — 2026-10-09
+
+### Agregado
+
+- **`cfm.app` para Mac**, con ícono: se instala arrastrándola a *Aplicaciones* y se abre con doble clic, desde Launchpad o con Spotlight. Abre el menú en **tu terminal**: la que macOS usa para abrir ejecutables (Warp, iTerm…, o Terminal si no elegiste otra), sin pedir permisos. Para actualizarla, se reemplaza por la nueva; la sesión y los respaldos no se pierden. `build:exe` la genera en `release/` junto con `cfm-mac.zip` para repartirla, y reemplaza al ejecutable suelto `cfm-mac`.
+- **Firma y notarización**: con un certificado *Developer ID Application* en el llavero, `build:exe` firma la app para repartirla (hardened runtime y los permisos que pide bun). Con `CFM_NOTARY_PROFILE`, además la notariza con Apple, para que abra en cualquier Mac sin avisos. Sin certificado, firma solo para este Mac, como antes.
+- Ícono en `assets/` (SVG y PNG de 1024 px; `swift scripts/render-icon.swift` regenera el PNG).
+
 ## 0.15.0 — 2026-10-09
 
 ### Agregado

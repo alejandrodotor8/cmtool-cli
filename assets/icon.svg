@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img">
+  <title>cfm</title>
+  <!-- Ícono de cfm: contenido que pasa de un ambiente (tarjeta llena) a otro (tarjeta en draft). -->
+  <defs>
+    <linearGradient id="fondo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5B7CFA"/>
+      <stop offset="1" stop-color="#2E43C2"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Base con la forma y los márgenes de los íconos de macOS (824 px en un lienzo de 1024). -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#fondo)"/>
+
+  <!-- Origen: la entry completa. -->
+  <rect x="172" y="357" width="250" height="310" rx="42" fill="#FFFFFF"/>
+  <g stroke="#3B55D9" stroke-width="28" stroke-linecap="round">
+    <line x1="226" y1="440" x2="368" y2="440"/>
+    <line x1="226" y1="512" x2="368" y2="512"/>
+    <line x1="226" y1="584" x2="318" y2="584"/>
+  </g>
+
+  <!-- Flecha. -->
+  <g stroke="#FFFFFF" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <line x1="458" y1="512" x2="562" y2="512"/>
+    <polyline points="524,470 566,512 524,554"/>
+  </g>
+
+  <!-- Destino: la copia, en draft (translúcida y con borde punteado). -->
+  <rect x="602" y="357" width="250" height="310" rx="42" fill="#FFFFFF" fill-opacity="0.22"
+        stroke="#FFFFFF" stroke-width="12" stroke-dasharray="30 20" stroke-linecap="round"/>
+  <g stroke="#FFFFFF" stroke-opacity="0.85" stroke-width="28" stroke-linecap="round">
+    <line x1="656" y1="440" x2="798" y2="440"/>
+    <line x1="656" y1="512" x2="798" y2="512"/>
+    <line x1="656" y1="584" x2="748" y2="584"/>
+  </g>
+</svg>

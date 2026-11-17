@@ -1,6 +1,6 @@
-import pc from 'picocolors';
-import type { Analysis } from '../../analyze.ts';
 import {
+  ACTION,
+  type Analysis,
   changesStructure,
   countEditorFields,
   countNewFields,
@@ -9,12 +9,13 @@ import {
   type ModelChanges,
   type ModelOption,
   type ModelPick,
-} from '../../core/model-changes.ts';
-import { ACTION, type Plan } from '../../core/plan.ts';
-import type { RequiredGap } from '../../core/publish-check.ts';
+  modelPickText,
+  type Plan,
+  type RequiredGap,
+} from 'cmtool-core';
+import pc from 'picocolors';
 import { log } from '../log.ts';
 import { clip, table } from '../table.ts';
-import { modelPickText } from '../text.ts';
 import { countActions } from './entries.ts';
 import { route } from './shared.ts';
 

@@ -1,17 +1,19 @@
-import pc from 'picocolors';
-import type { EditorFieldDiff } from '../../core/editor.ts';
 import {
   type ContentTypeDiff,
+  contentTypeStatusParts,
+  ctInfoText,
+  type EditorDiffs,
+  type EditorFieldDiff,
   FIELD,
   type FieldRow,
   type FieldStatus,
+  fieldStatusText,
   fieldType,
   type ModelComparison,
-} from '../../core/model.ts';
-import type { EditorDiffs } from '../../core/model-changes.ts';
+} from 'cmtool-core';
+import pc from 'picocolors';
 import { log } from '../log.ts';
 import { clip, legend, MARK, table } from '../table.ts';
-import { contentTypeStatusParts, ctInfoText, fieldStatusText } from '../text.ts';
 import { envColumns, route } from './shared.ts';
 
 /** Marca en cada ambiente y color del estado, según cómo está el campo en destino. */

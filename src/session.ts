@@ -1,17 +1,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { AbortError, CMA_HOSTS } from 'cmtool-core';
 import { APP_NAME } from './app.ts';
-import { AbortError } from './errors.ts';
-
-/** Hosts del CMA a los que se permite enviar el token, con su app web. */
-const CMA_HOSTS = new Map([
-  ['api.contentful.com', 'app.contentful.com'],
-  ['api.eu.contentful.com', 'app.eu.contentful.com'],
-]);
-
-/** Los hosts permitidos, en el orden en que se prueba un token nuevo (primero el normal, después EU). */
-export const CMA_HOST_NAMES = [...CMA_HOSTS.keys()];
 
 const CONFIG_NAME = '.contentfulrc.json';
 

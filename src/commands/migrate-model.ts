@@ -4,16 +4,14 @@
  * Nunca borra campos ni cambia su ID o tipo.
  */
 
-import pc from 'picocolors';
-import { APP_NAME } from '../app.ts';
-import { type CliArgs, repeatCommand } from '../cli-args.ts';
-import type { ContentType, EditorInterface } from '../contentful/types.ts';
-import { toDecision } from '../core/decision.ts';
-import { editorDiffsFor } from '../core/editor.ts';
-import { compareModels } from '../core/model.ts';
 import {
   allPicks,
+  applyModelChanges,
+  type ContentType,
   changesStructure,
+  compareModels,
+  type EditorInterface,
+  editorDiffsFor,
   hasModelChanges,
   type ModelChanges,
   type ModelOption,
@@ -22,8 +20,11 @@ import {
   modelOptions,
   notAddedFields,
   pickKey,
-} from '../core/model-changes.ts';
-import { applyModelChanges } from '../execute.ts';
+  toDecision,
+} from 'cmtool-core';
+import pc from 'picocolors';
+import { APP_NAME } from '../app.ts';
+import { type CliArgs, repeatCommand } from '../cli-args.ts';
 import { printTitle } from '../ui/header.ts';
 import { log } from '../ui/log.ts';
 import { steps } from '../ui/navigation.ts';

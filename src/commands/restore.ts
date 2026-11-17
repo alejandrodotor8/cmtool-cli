@@ -4,14 +4,22 @@
  * herramienta nunca borra): solo se lista.
  */
 import path from 'node:path';
+import {
+  AbortError,
+  type BackupData,
+  backupOwner,
+  createCma,
+  fetchEntries,
+  listEnvironments,
+  OWNER,
+  restoreStatus,
+  type SavedEntry,
+  shouldRestore,
+} from 'cmtool-core';
+import { listBackups, readBackup } from 'cmtool-core/node';
 import pc from 'picocolors';
 import { APP_NAME } from '../app.ts';
-import { type BackupData, listBackups, readBackup, type SavedEntry } from '../backup.ts';
 import type { CliArgs } from '../cli-args.ts';
-import { createCma } from '../contentful/client.ts';
-import { fetchEntries, listEnvironments } from '../contentful/read.ts';
-import { backupOwner, OWNER, restoreStatus, shouldRestore } from '../core/restore.ts';
-import { AbortError } from '../errors.ts';
 import { printTitle } from '../ui/header.ts';
 import { log } from '../ui/log.ts';
 import { steps } from '../ui/navigation.ts';

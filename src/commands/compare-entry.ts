@@ -1,9 +1,7 @@
 /** `cfm compare-entry`: una o varias entries campo por campo entre dos ambientes. Solo lectura. */
+
+import { compareEntryFields, contentTypeOf, entryComparisonReport, fetchEntries, makeTitleOf } from 'cmtool-core';
 import { type CliArgs, repeatCommand } from '../cli-args.ts';
-import { fetchEntries } from '../contentful/read.ts';
-import { contentTypeOf, makeTitleOf } from '../core/entries.ts';
-import { compareEntryFields } from '../core/entry-compare.ts';
-import { entryComparisonReport } from '../report/markdown.ts';
 import { offerReport, reportName } from '../report/save.ts';
 import { selectEntryIds } from '../selection/entries.ts';
 import { printTitle } from '../ui/header.ts';

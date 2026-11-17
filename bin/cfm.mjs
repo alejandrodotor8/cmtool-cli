@@ -8,9 +8,13 @@ import { fileURLToPath } from 'node:url';
 import pc from 'picocolors';
 import { buildIsStale } from './stale-build.mjs';
 
-const BUILD_HINT = 'npm run build, pnpm build o bun run build';
+const BUILD_HINT = 'npm run build, pnpm build, yarn build o bun run build';
 const entry = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
-const srcDir = fileURLToPath(new URL('../src', import.meta.url));
+// El build lleva el CLI y el núcleo (cmtool-core, ya compilado en su dist/): si cambia cualquiera de
+// los dos, queda viejo. Instalado desde npm no hay ninguna de las dos carpetas y no se revisa nada.
+const srcDirs = ['../src', '../node_modules/cmtool-core/dist'].map((dir) =>
+  fileURLToPath(new URL(dir, import.meta.url)),
+);
 
 if (!existsSync(entry)) {
   console.error(
@@ -20,9 +24,14 @@ if (!existsSync(entry)) {
 }
 
 // Avisa, pero no bloquea: puede que quieras correr el build anterior a propósito.
-if (existsSync(srcDir) && buildIsStale(srcDir, entry)) {
+if (
+  buildIsStale(
+    srcDirs.filter((dir) => existsSync(dir)),
+    entry,
+  )
+) {
   console.error(
-    pc.yellow('⚠ El build es más viejo que el código en src/: estás corriendo una versión anterior.\n') +
+    pc.yellow('⚠ El build es más viejo que el código (src/ o cmtool-core): estás corriendo una versión anterior.\n') +
       pc.dim(`  Para usar los cambios, corre el script "build" (${BUILD_HINT}) o usa cfm-dev.`),
   );
 }

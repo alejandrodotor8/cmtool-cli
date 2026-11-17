@@ -2,16 +2,17 @@ node_modules
 # Build y ejecutables (se generan con los scripts `build` y `build:release`).
 dist
 release
+*.tgz
 .DS_Store
 
-# Cada quien usa su gestor de paquetes (npm, pnpm o bun): los lockfiles no se suben.
+# Cada quien usa su gestor de paquetes (npm, pnpm, yarn o bun): los lockfiles no se suben.
 package-lock.json
 pnpm-lock.yaml
 bun.lock
 bun.lockb
 yarn.lock
 
-# Notas locales (por ejemplo, la guía del código): no se suben.
+# Notas locales: no se suben.
 .temp
 
 # graphify: el grafo sí se sube; esto es estado local de cada máquina (rutas propias y caché).

@@ -6,7 +6,8 @@
     "moduleResolution": "nodenext",
     "types": ["node"],
 
-    // Node ejecuta los .ts quitando los tipos; este tsconfig solo revisa. El build usa tsconfig.build.json.
+    // Node ejecuta los .ts quitando los tipos (cfm-dev y los tests); el build los empaqueta con esbuild.
+    // Este tsconfig solo revisa: no genera archivos.
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true,
@@ -21,5 +22,5 @@
     "checkJs": true,
     "skipLibCheck": true
   },
-  "include": ["bin", "src", "test"]
+  "include": ["src", "test", "bin"]
 }

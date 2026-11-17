@@ -4,11 +4,11 @@
  * Si una escritura falla, sigue con las demás.
  */
 import * as p from '@clack/prompts';
+import { formatError, type Runner } from 'cmtool-core';
 import pc from 'picocolors';
-import { formatError } from '../errors.ts';
 import { log } from './log.ts';
 
-export function createRunner({ animate }: { animate: boolean }) {
+export function createRunner({ animate }: { animate: boolean }): Runner {
   const failures: string[] = [];
   let phase: { title: string; total: number; done: number; lines: string[]; failed: number } | undefined;
   let bar: ReturnType<typeof p.progress> | undefined;

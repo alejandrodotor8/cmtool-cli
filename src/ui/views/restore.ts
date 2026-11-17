@@ -1,10 +1,15 @@
+import {
+  BACKUP_KIND_LABEL,
+  type BackupData,
+  type Entry,
+  RESTORE,
+  type RestoreStatus,
+  restoreStatus,
+  type SavedEntry,
+} from 'cmtool-core';
 import pc from 'picocolors';
-import type { BackupData, SavedEntry } from '../../backup.ts';
-import type { Entry } from '../../contentful/types.ts';
-import { RESTORE, type RestoreStatus, restoreStatus } from '../../core/restore.ts';
 import { log } from '../log.ts';
 import { clip, table } from '../table.ts';
-import { BACKUP_KIND_LABEL } from '../text.ts';
 import { formatDate, route } from './shared.ts';
 
 const RESTORE_LABEL: Record<RestoreStatus, string> = {

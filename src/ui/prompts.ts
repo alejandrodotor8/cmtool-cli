@@ -3,20 +3,31 @@
  * escribe en Contentful. Esc vuelve al paso anterior (si hay uno) y Ctrl+C sale.
  */
 import * as p from '@clack/prompts';
+import {
+  AbortError,
+  allPicks,
+  BACKUP_KIND_LABEL,
+  type ContentType,
+  changedFieldsText,
+  type Environment,
+  looksLikeProduction,
+  type ModelOption,
+  type ModelPick,
+  modelPicksSummary,
+  modelPickText,
+  parseIds,
+  parseSince,
+  type Space,
+  sortEnvironments,
+  type UpdateCandidate,
+} from 'cmtool-core';
+import type { BackupFile } from 'cmtool-core/node';
 import pc from 'picocolors';
-import type { BackupFile } from '../backup.ts';
 import { COMMANDS, type Command } from '../cli-args.ts';
-import type { ContentType, Environment, Space } from '../contentful/types.ts';
-import { looksLikeProduction, sortEnvironments } from '../core/environments.ts';
-import { parseIds } from '../core/ids.ts';
-import { allPicks, type ModelOption, type ModelPick } from '../core/model-changes.ts';
-import type { UpdateCandidate } from '../core/plan.ts';
-import { parseSince } from '../core/query.ts';
-import { AbortError, BackError, CancelError } from '../errors.ts';
+import { BackError, CancelError } from '../errors.ts';
 import { log } from './log.ts';
 import { beforePrompt, cancelledWithEscape, canGoBack, goBack, notePrompt, steps } from './navigation.ts';
 import { clip } from './table.ts';
-import { BACKUP_KIND_LABEL, changedFieldsText, modelPicksSummary, modelPickText } from './text.ts';
 
 /**
  * Hace una pregunta y devuelve la respuesta. Si se cancela con Esc y hay un paso anterior,

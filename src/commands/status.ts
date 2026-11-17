@@ -1,10 +1,8 @@
 /** `cfm status`: resumen de en qué se diferencian dos ambientes. Solo lectura. */
+
+import { compareModels, environmentStatus, hasDifferences, readTags, statusReport } from 'cmtool-core';
 import { APP_NAME } from '../app.ts';
 import { type CliArgs, repeatCommand } from '../cli-args.ts';
-import { readTags } from '../contentful/read.ts';
-import { compareModels, hasDifferences } from '../core/model.ts';
-import { environmentStatus } from '../core/status.ts';
-import { statusReport } from '../report/markdown.ts';
 import { offerReport, reportName } from '../report/save.ts';
 import { printTitle } from '../ui/header.ts';
 import { log } from '../ui/log.ts';

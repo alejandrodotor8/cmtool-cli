@@ -8,43 +8,39 @@
  * flags (`--update`, `--assets`, `--model`), y el resumen muestra el comando que las repite.
  */
 
-import pc from 'picocolors';
 import {
+  AbortError,
   type Analysis,
+  allPicks,
   analyzeTree,
+  brokenHyperlinks,
+  buildPlan,
+  cache,
   changesSinceAnalysis,
   completeAnalysis,
-  type TreeAnalysis,
-  withActions,
-} from '../analyze.ts';
-import { APP_NAME } from '../app.ts';
-import { type CliArgs, repeatCommand } from '../cli-args.ts';
-import { LIMITS } from '../config.ts';
-import { cache } from '../core/cache.ts';
-import { toDecision } from '../core/decision.ts';
-import { editorDiffsFor } from '../core/editor.ts';
-import { contentTypeOf } from '../core/entries.ts';
-import {
-  allPicks,
+  contentTypeOf,
+  defaultUpdates,
+  editorDiffsFor,
+  executePlan,
   hasModelChanges,
+  isWrite,
+  LIMITS,
   type ModelOption,
   type ModelPick,
   modelOptions,
-  pickKey,
-} from '../core/model-changes.ts';
-import {
-  brokenHyperlinks,
-  buildPlan,
-  defaultUpdates,
-  isWrite,
   type Plan,
+  pickKey,
+  requiredGaps,
+  type TreeAnalysis,
+  toDecision,
   type UpdateCandidate,
   updateCandidates,
+  withActions,
   writtenContentTypes,
-} from '../core/plan.ts';
-import { requiredGaps } from '../core/publish-check.ts';
-import { AbortError } from '../errors.ts';
-import { executePlan } from '../execute.ts';
+} from 'cmtool-core';
+import pc from 'picocolors';
+import { APP_NAME } from '../app.ts';
+import { type CliArgs, repeatCommand } from '../cli-args.ts';
 import { selectEntryIds } from '../selection/entries.ts';
 import { printCancelled, printTitle } from '../ui/header.ts';
 import { log } from '../ui/log.ts';

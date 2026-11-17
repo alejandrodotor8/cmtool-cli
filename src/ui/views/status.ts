@@ -1,5 +1,5 @@
+import type { EnvironmentStatus } from 'cmtool-core';
 import pc from 'picocolors';
-import type { EnvironmentStatus } from '../../core/status.ts';
 import { table } from '../table.ts';
 import { route } from './shared.ts';
 

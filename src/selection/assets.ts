@@ -1,10 +1,10 @@
 /**
  * Elegir assets (imágenes y archivos) de origen: por ID/URL o buscando por texto.
  */
+
+import { LIMITS, searchAssets } from 'cmtool-core';
 import type { CliArgs } from '../cli-args.ts';
 import type { Context } from '../commands/context.ts';
-import { LIMITS } from '../config.ts';
-import { searchAssets } from '../contentful/read.ts';
 import { log } from '../ui/log.ts';
 import { goBack, steps } from '../ui/navigation.ts';
 import { askIds, askText, choose, chooseMany } from '../ui/prompts.ts';

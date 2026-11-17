@@ -1,11 +1,15 @@
+import {
+  ACTION,
+  type Action,
+  type Analysis,
+  changedFieldsText,
+  contentTypeOf,
+  type FieldComparison,
+  willExistInDst,
+} from 'cmtool-core';
 import pc from 'picocolors';
-import type { Analysis } from '../../analyze.ts';
-import { contentTypeOf } from '../../core/entries.ts';
-import type { FieldComparison } from '../../core/entry-compare.ts';
-import { ACTION, type Action, willExistInDst } from '../../core/plan.ts';
 import { log } from '../log.ts';
 import { clip, legend, MARK, table } from '../table.ts';
-import { changedFieldsText } from '../text.ts';
 import { envColumns } from './shared.ts';
 
 /** Lo que necesita el árbol (sirve antes y después de decidir qué actualizar). */

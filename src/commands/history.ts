@@ -2,9 +2,10 @@
  * `cfm history`: migraciones anteriores de tu cuenta, a partir de sus respaldos.
  * Una sola llamada a la API (saber qué cuenta eres); los de otras cuentas no aparecen.
  */
+
+import { accountBackupDir, listBackups } from 'cmtool-core/node';
 import pc from 'picocolors';
 import { APP_NAME } from '../app.ts';
-import { accountBackupDir, listBackups } from '../backup.ts';
 import type { CliArgs } from '../cli-args.ts';
 import { printOutro, printTitle } from '../ui/header.ts';
 import { renderHistory } from '../ui/views/history.ts';

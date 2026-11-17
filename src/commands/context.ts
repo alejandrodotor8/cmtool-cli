@@ -3,29 +3,40 @@
  * hacen una sola vez, confirmación antes de escribir, respaldo y cierre.
  */
 
-import pc from 'picocolors';
-import type { Loaders } from '../analyze.ts';
-import { APP_NAME } from '../app.ts';
-import { type BackupData, startBackup } from '../backup.ts';
-import type { CliArgs } from '../cli-args.ts';
-import { createCma } from '../contentful/client.ts';
 import {
+  AbortError,
+  type Account,
+  allPicks,
+  applyDecision,
+  type BackupData,
+  type Cma,
+  type ContentType,
+  createCma,
+  createWriter,
   currentUser,
+  type Decision,
+  type EditorInterface,
+  type Environment,
+  type Loaders,
   listEnvironments,
   listSpaces,
+  looksLikeProduction,
+  type ModelOption,
+  type ModelPick,
+  pickKey,
   readContentTypes,
   readEditorInterfaces,
   readLocales,
-} from '../contentful/read.ts';
-import type { Account, Cma, ContentType, EditorInterface, Environment, Space } from '../contentful/types.ts';
-import { createWriter } from '../contentful/write.ts';
-import { remember } from '../core/cache.ts';
-import { applyDecision, type Decision } from '../core/decision.ts';
-import { looksLikeProduction, resolveEnvironment } from '../core/environments.ts';
-import { allPicks, type ModelOption, type ModelPick, pickKey } from '../core/model-changes.ts';
-import type { UpdateCandidate } from '../core/plan.ts';
-import { AbortError } from '../errors.ts';
-import type { WriteContext } from '../execute.ts';
+  remember,
+  resolveEnvironment,
+  type Space,
+  type UpdateCandidate,
+  type WriteContext,
+} from 'cmtool-core';
+import { startBackup } from 'cmtool-core/node';
+import pc from 'picocolors';
+import { APP_NAME } from '../app.ts';
+import type { CliArgs } from '../cli-args.ts';
 import { loadSession } from '../session.ts';
 import { trackApiCalls } from '../ui/api-calls.ts';
 import { printCancelled, printNote, printOutro, shouldAnimate } from '../ui/header.ts';
@@ -278,12 +289,15 @@ export async function confirmWriting(ctx: Context, question: string): Promise<bo
   return false;
 }
 
+/** Contexto de escritura del CLI: el respaldo va a un archivo, y su ruta se muestra al terminar. */
+export type FileWriteContext = WriteContext & { backup: ReturnType<typeof startBackup> };
+
 /** Respaldo (en la carpeta de la cuenta), writer y runner para empezar a escribir en destino. */
 export async function startWriting(
   ctx: Context,
   kind: BackupData['kind'],
   rootIds: string[] = [],
-): Promise<WriteContext> {
+): Promise<FileWriteContext> {
   const account = await ctx.account();
   return {
     writer: createWriter(ctx.cma, { src: ctx.src, dst: ctx.dst }),
@@ -295,7 +309,7 @@ export async function startWriting(
 /** Cierre después de escribir: recuadro con respaldo y llamadas, y mensaje final. Devuelve el código de salida. */
 export function finishWriting(
   ctx: SessionContext,
-  { backup, runner }: Pick<WriteContext, 'backup' | 'runner'>,
+  { backup, runner }: Pick<FileWriteContext, 'backup' | 'runner'>,
   { title, lines = [], repeat, done }: { title: string; lines?: string[]; repeat?: string; done: string },
 ): number {
   const failed = runner.failures.length;

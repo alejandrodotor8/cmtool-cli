@@ -4,17 +4,41 @@ _Antes se llamaba `ctf-migrate`._
 
 Migra entries de Contentful entre ambientes (por ejemplo, un banner de `develop` a `qa`), junto con sus hijos. **Todo queda en draft.**
 
+Este repositorio es **`cmtool-cli`**: el comando `cfm`, la app de Mac y el ejecutable de Windows. Toda la lógica (leer, comparar, planear, escribir y respaldar) está en el núcleo, **`cmtool-core`**, que es un paquete de npm aparte. Aquí solo están las preguntas, las tablas y los archivos.
+
+| Repositorio | Paquete de npm | Qué es |
+| --- | --- | --- |
+| `cmtool-core` | `cmtool-core` | El núcleo: toda la lógica, sin pantalla ni terminal. Lo usan el CLI y la web. |
+| **`cmtool-cli`** (este) | `cmtool-cli` | La terminal: el comando `cfm`. |
+| `backoffice-b2c` | — | El back office web (Next.js), en construcción. |
+
+Son tres repositorios independientes: el CLI usa el núcleo como cualquier dependencia de npm, y ninguno necesita la carpeta de otro para instalar, compilar ni correr sus tests.
+
 ## Requisitos
 
-- **Node 22.18 o superior** (recomendado 24). La herramienta siempre corre con Node, que ejecuta TypeScript directo, sin compilar.
-- **Un gestor de paquetes, el que prefieras**: npm (viene con Node), pnpm o bun. El proyecto no obliga a ninguno y no sube lockfiles: cada quien instala con el suyo.
+- **Node 22.18 o superior** (recomendado 24).
+- **Un gestor de paquetes, el que prefieras**: npm (viene con Node), pnpm, yarn 1 o bun. El proyecto no obliga a ninguno y no sube lockfiles: cada quien instala con el suyo.
 - Una **cuenta de Contentful**. Si no encuentra tu sesión, la primera vez te pide un token y lo guarda (ver [Sin el Contentful CLI](#sin-el-contentful-cli)); también sirve `contentful login`.
 
 ¿Para alguien que no va a instalar Node ni el proyecto? Mira [Ejecutables para Mac y Windows](#ejecutables-para-mac-y-windows).
 
-## Instalación (una sola vez)
+## Instalación
 
-### 1. Node y tu gestor de paquetes
+### Desde npm
+
+Cuando `cmtool-cli` esté publicado (ver [PUBLICAR.md](PUBLICAR.md)):
+
+| | npm | pnpm | bun |
+| --- | --- | --- | --- |
+| **Instalar** | `npm install -g cmtool-cli` | `pnpm add -g cmtool-cli` | `bun add -g cmtool-cli` |
+| **Actualizar** | `npm install -g cmtool-cli@latest` | `pnpm add -g cmtool-cli@latest` | `bun add -g cmtool-cli@latest` |
+| **Quitar** | `npm rm -g cmtool-cli` | `pnpm rm -g cmtool-cli` | `bun rm -g cmtool-cli` |
+
+Instala el comando `cfm`. No descarga el núcleo ni las librerías de la terminal, porque ya van dentro del build; solo trae `picocolors`. `cfm-dev` también se instala, pero solo funciona desde el repositorio (ver [Build y desarrollo](#build-y-desarrollo)).
+
+### Desde el código (para desarrollar)
+
+#### 1. Node y tu gestor de paquetes
 
 **macOS**
 
@@ -37,7 +61,7 @@ Cierra y abre la terminal después de instalar.
 
 **Solo pnpm**: la primera vez corre `pnpm setup` y abre una terminal nueva, para que sus comandos globales queden en el PATH.
 
-### 2. Contentful CLI e inicio de sesión (opcional)
+#### 2. Contentful CLI e inicio de sesión (opcional)
 
 Si no lo instalas, la primera vez que abras `cfm` te pide pegar un token ([Sin el Contentful CLI](#sin-el-contentful-cli)).
 
@@ -49,28 +73,39 @@ Se abre el navegador para autorizar. La sesión queda en `~/.contentfulrc.json` 
 
 Después, con cualquiera: `contentful login`.
 
-### 3. La herramienta
+#### 3. La herramienta
 
-Desde la carpeta del proyecto, con tu gestor:
+Desde la carpeta del repositorio, con tu gestor:
 
 | | npm | pnpm | bun |
 | --- | --- | --- | --- |
 | **Instalar dependencias** | `npm install` | `pnpm install` | `bun install` |
 | **Compilar (build)** | `npm run build` | `pnpm build` | `bun run build` |
 | **Instalar los comandos** | `npm link` | `pnpm add -g "link:$PWD"` | `bun link` |
-| **Quitar los comandos** | `npm rm -g cfm` | `pnpm rm -g cfm` | `bun unlink` (desde la carpeta) |
+| **Quitar los comandos** | `npm rm -g cmtool-cli` | `pnpm rm -g cmtool-cli` | `bun unlink` |
 | **Correr el build sin instalar** | `npm start -- --dry-run` | `pnpm start --dry-run` | `bun run start --dry-run` |
 | **Correr el código fuente sin instalar** | `npm run dev -- --dry-run` | `pnpm dev --dry-run` | `bun run dev --dry-run` |
+
+> **Mientras `cmtool-core` no esté publicado en npm**, este repo lo pide enlazado (`"cmtool-core": "link:cmtool-core"` en `package.json`), y eso solo lo entiende bun. Antes de instalar, compila y registra el núcleo una vez desde su repo:
+>
+> ```bash
+> cd ../cmtool-core && bun install && bun run build && bun link
+> cd ../cmtool-cli && bun install
+> ```
+>
+> Cuando el núcleo esté en npm, `package.json` lo pide con su versión y cualquier gestor sirve (ver [PUBLICAR.md](PUBLICAR.md)).
 
 Los comandos son los mismos en macOS y Windows (en PowerShell, `$PWD` también es la carpeta actual).
 
 - **Se instalan dos comandos** (ver [Build y desarrollo](#build-y-desarrollo)): `cfm`, que corre el build, y `cfm-dev`, que corre el código fuente.
-- **El comando es un enlace a esta carpeta, no una copia.** Por eso con pnpm se usa `link:` (en pnpm 10+ ya no existe `pnpm link --global`). `cfm-dev` además lo necesita: Node no ejecuta `.ts` dentro de `node_modules`.
-- **Instala los comandos con un solo gestor.** Si tienes dos instalaciones, gana la que esté primero en el PATH y es fácil confundirse.
+- **El comando es un enlace a la carpeta del repositorio, no una copia.** Por eso con pnpm se usa `link:` (en pnpm 10+ ya no existe `pnpm link --global`). `cfm-dev` además lo necesita: Node no ejecuta `.ts` dentro de `node_modules`.
+- **Instala los comandos de una sola forma.** Si tienes dos instalaciones (por ejemplo, `bun link` desde el repo y `npm install -g cmtool-cli`), gana la que esté primero en el PATH y es fácil confundirse.
+- **yarn 1** también sirve para instalar dependencias y correr los scripts (`yarn install`, `yarn build`, `yarn run check`; ojo: `yarn check` a secas es un comando propio de yarn y no corre el nuestro). Para instalar los comandos, usa `npm link`.
+- **Si lo instalaste antes de la 0.17.0**, el comando apunta a la carpeta del proyecto anterior: quítalo y vuelve a instalarlo desde este repo. Con npm: `npm rm -g cfm`; con pnpm: `pnpm rm -g cfm`; con bun: borra `~/.bun/bin/cfm`, `~/.bun/bin/cfm-dev` y `~/.bun/install/global/node_modules/cfm` (son enlaces).
 
 ### Cambiar de gestor de paquetes
 
-1. Quita el comando con el gestor anterior (fila **Quitar el comando**).
+1. Quita el comando con el gestor anterior (fila **Quitar los comandos**).
 2. Borra lo que instaló:
 
    ```bash
@@ -110,18 +145,18 @@ También puedes definir el token en la terminal; tiene prioridad sobre el archiv
 
 | Comando | Qué corre | Cuándo cambia |
 | --- | --- | --- |
-| `cfm` | el **build**: todo empaquetado en un solo archivo, `dist/cli.js` (arranca más rápido) | solo cuando vuelves a correr el script `build` |
-| `cfm-dev` | el **código fuente** de `src/`, sin compilar | al instante, con cada cambio que guardes |
+| `cfm` | el **build**: el CLI y el núcleo empaquetados en un solo archivo, `dist/cli.js` (arranca más rápido) | solo cuando vuelves a correr el script `build` |
+| `cfm-dev` | el **código fuente** del CLI, sin compilar; el núcleo, compilado, desde `node_modules` | al instante, con cada cambio que guardes en `src/` |
 
 - Usa **`cfm`** para trabajar: no le afectan los cambios a medio hacer ni cambiar de rama en git.
-- Usa **`cfm-dev`** mientras programas: lo indica en la cabecera con *[desarrollo: código fuente]*.
-- **Después de actualizar el código** (cambiar de rama, fusionar, recibir una versión nueva), vuelve a correr el script `build` para que `cfm` use lo nuevo.
+- Usa **`cfm-dev`** mientras programas: lo indica en la cabecera con *[desarrollo: código fuente]*. Solo funciona desde el repositorio: instalado desde npm no hay `src/`, y lo dice.
+- **Después de actualizar el código** (cambiar de rama, fusionar, recibir una versión nueva o actualizar `cmtool-core`), vuelve a correr el script `build` para que `cfm` use lo nuevo.
 - Si corres `cfm` sin haber compilado, te dice que corras el `build` (o que uses `cfm-dev`).
-- Si el código de `src/` es más nuevo que el build, `cfm` **avisa** antes de empezar (y sigue corriendo la versión anterior).
-- **No hace falta volver a instalar los comandos** después de un build: apuntan a esta carpeta y toman el `dist/` nuevo. Solo hay que repetir la instalación si mueves la carpeta, si cambian los comandos en `package.json` o, con npm, si cambias de versión de Node.
-- `dist/` no se sube al repo: cada quien lo genera con su gestor.
-- `pnpm-workspace.yaml` es solo para quien use pnpm: le permite a esbuild (el empaquetador del build) correr su instalación. npm y bun lo ignoran.
-- **Por qué un solo archivo**: el build junta el código y sus dependencias (contentful-management, axios…) con esbuild. Así `cfm` abre ~20 archivos al arrancar en vez de ~440, que era lo que hacía lenta la primera ejecución (con el disco en frío, cada archivo cuenta). `cfm-dev` sigue leyendo los archivos sueltos, así que arranca más lento.
+- Si el código de `src/` o el núcleo instalado son más nuevos que el build, `cfm` **avisa** antes de empezar (y sigue corriendo la versión anterior). Pasa, por ejemplo, si recompilas el núcleo enlazado y no este repo.
+- **No hace falta volver a instalar los comandos** después de un build: apuntan a la carpeta del repo y toman el `dist/` nuevo. Solo hay que repetir la instalación si mueves la carpeta, si cambian los comandos en `package.json` o, con npm, si cambias de versión de Node.
+- `dist/` no se sube al repo: cada quien lo genera con su gestor. Al publicar en npm se genera solo (ver [PUBLICAR.md](PUBLICAR.md)).
+- `pnpm-workspace.yaml` es solo para quien use pnpm: le permite a esbuild (el empaquetador del build) correr su instalación. npm, yarn y bun lo ignoran.
+- **Por qué un solo archivo**: el build junta el código, el núcleo y sus dependencias (contentful-management, axios…) con esbuild. Así `cfm` abre ~20 archivos al arrancar en vez de ~440, que era lo que hacía lenta la primera ejecución (con el disco en frío, cada archivo cuenta). `cfm-dev` sigue leyendo los archivos sueltos, así que arranca más lento.
 - **Mientras ves el menú**, la herramienta ya se conecta con Contentful y trae tus spaces (y los ambientes, si ya se sabe el space). Al elegir, normalmente ya están listos. Con `--verbose` no lo hace, para no mezclar líneas con el menú.
 
 ### Notas
@@ -132,16 +167,16 @@ También puedes definir el token en la terminal; tiene prioridad sobre el archiv
 
 ### Pasarle el proyecto a otra persona
 
-No hay repositorio remoto, así que se comparte como archivo:
+Lo normal es clonar el repositorio. Si todavía no está en un remoto, se comparte como archivo:
 
-- **Con historial de git** (recomendado): `git bundle create cfm.bundle --all`. La otra persona lo clona con `git clone cfm.bundle cfm`.
+- **Con historial de git** (recomendado): `git bundle create cfm.bundle --all`. La otra persona lo clona con `git clone cfm.bundle cmtool-cli`.
 - **Sin historial**: un zip de la carpeta **sin** `node_modules` ni lockfiles.
 
-Después sigue los pasos de instalación con su sistema y su gestor.
+Mientras `cmtool-core` no esté en npm, pásale también el repo del núcleo, en una carpeta al lado. Después sigue los pasos de instalación con su sistema y su gestor.
 
 ### Ejecutables para Mac y Windows
 
-Para quien no va a instalar Node ni el proyecto: una app para Mac y un ejecutable para Windows, que se abren con doble clic. Se generan desde la carpeta del proyecto, en un Mac (la app de Mac solo se arma ahí), con tu gestor: `npm run build:release`, `pnpm build:release`, `yarn build:release` o `bun run build:release`. Compila con bun, así que hace falta tenerlo instalado, aunque instales las dependencias con otro gestor.
+Para quien no va a instalar Node ni el proyecto: una app para Mac y un ejecutable para Windows, que se abren con doble clic. Se generan desde la carpeta del repo, en un Mac (la app de Mac solo se arma ahí), con tu gestor: `npm run build:release`, `pnpm build:release`, `yarn build:release` o `bun run build:release`. Compila con bun, así que hace falta tenerlo instalado, aunque instales las dependencias con otro gestor.
 
 Quedan en `release/` (no se sube al repo):
 
@@ -155,6 +190,7 @@ En los dos:
 
 - **Sesión**: la primera vez pide el token y lo guarda ([Sin el Contentful CLI](#sin-el-contentful-cli)); no hace falta instalar nada más. Es la misma sesión de `cfm` y de `contentful login` (`~/.contentfulrc.json`), y los respaldos también son los mismos (`~/.ctf-migrate/backups`).
 - Cada uno lleva la versión con la que se generó (se ve en el encabezado): después de un cambio, vuelve a generarlos.
+- No se publican en npm: se reparten como archivo.
 
 **Mac (`cfm.app`)**
 
@@ -338,91 +374,67 @@ Cada migración guarda un respaldo en `~/.ctf-migrate/backups/<cuenta>/` (en Win
 - Antes de actualizar una entry existente, guarda cómo estaba (ver `restore`).
 - **Varias cuentas**: cada respaldo registra la cuenta (usuario, email y región) y se guarda en su carpeta. `history` y `restore` solo muestran los de la cuenta con la que iniciaste sesión; `restore` no deja restaurar el respaldo de otra cuenta. Los respaldos anteriores a la 0.6.0, que no registran cuenta, se muestran aparte.
 - Justo antes de escribir vuelve a mirar destino: si algo del árbol apareció, desapareció o se archivó mientras revisabas, o si alguien editó una entry que se iba a actualizar, se detiene sin escribir.
-- Si el árbol pasa de 300 entries, se detiene: seguramente un link está arrastrando una página entera. Los límites están en [src/config.ts](src/config.ts).
+- Si el árbol pasa de 300 entries, se detiene: seguramente un link está arrastrando una página entera. Los límites están en `src/config.ts` de `cmtool-core`.
 
 ## Seguridad
 
-- **Un solo módulo escribe**: [src/contentful/write.ts](src/contentful/write.ts). Queda atado al ambiente destino y no tiene forma de borrar, archivar, despublicar ni escribir en origen. Lo verifica [test/security.test.ts](test/security.test.ts) sobre el código fuente: si alguien agrega una escritura en otro archivo, los tests fallan.
+- **Un solo módulo escribe**: el writer de `cmtool-core` (`src/contentful/write.ts` del núcleo). Queda atado al ambiente destino y no tiene forma de borrar, archivar, despublicar ni escribir en origen; los tests del núcleo lo verifican sobre su código fuente. En este repo, [test/security.test.ts](test/security.test.ts) falla si el CLI llama por su cuenta un método del CMA que escribe.
 - **El token solo va a Contentful**: se lee de `CONTENTFUL_MANAGEMENT_TOKEN` o de `~/.contentfulrc.json` y solo se envía a `api.contentful.com` o `api.eu.contentful.com`. Si el archivo de sesión apunta a otro host, la herramienta se detiene. Los mensajes de error nunca imprimen la request (que lleva el token). El token que pegas no se ve en pantalla, se prueba solo contra esos hosts y se guarda con permiso de lectura solo para tu usuario.
 - **Las imágenes solo se copian desde el CDN de Contentful** (`*.ctfassets.net`, por https).
 - **Nada se escribe antes de confirmar**: todo lo anterior al resumen es solo lectura.
-- **Dependencias**: solo 3 para correr (`contentful-management`, `@clack/prompts`, `picocolors`) y 3 de desarrollo (`typescript`, `@types/node`, `@biomejs/biome`), todas con versión exacta. Ninguna tiene scripts de instalación. El paquete es `private` para que no se publique en npm por error.
+- **El núcleo pone los mismos límites a cualquier herramienta**: su cliente (`createCma`) se niega a mandar el token a un host que no sea de Contentful, y su writer es el único que escribe. Una web o un backend que usen `cmtool-core` tienen las mismas garantías que `cfm`. [test/architecture.test.ts](test/architecture.test.ts) revisa que el CLI hable con Contentful solo a través del núcleo (no importa `contentful-management`) y que use solo sus entradas públicas.
+- **Dependencias**: el paquete publicado solo instala `picocolors` (lo usa `bin/cfm.mjs`). El núcleo (con `contentful-management`) y `@clack/prompts` van dentro de `dist/cli.js`, por eso son dependencias de desarrollo. Para desarrollar, además: `typescript`, `@types/node`, `@biomejs/biome` y `esbuild`. Todas con versión exacta. Solo esbuild tiene script de instalación (descarga su binario), y por eso pnpm necesita `allowBuilds`. El paquete es `private` para que no se publique por error (ver [PUBLICAR.md](PUBLICAR.md)).
 
 ## Cómo está organizado
 
-Cada comando se lee de arriba abajo en [src/commands/](src/commands/). El código está separado por responsabilidad: lo que lee, lo que decide, lo que muestra y lo que escribe.
+Una regla: **toda la lógica está en el núcleo** (`cmtool-core`); el CLI solo pregunta, muestra y guarda archivos. Cada comando se lee de arriba abajo en [src/commands/](src/commands/).
 
 ```text
+package.json         el paquete cmtool-cli: comandos (bin), scripts y dependencias
+pnpm-workspace.yaml  solo para pnpm: deja correr la instalación de esbuild
+tsconfig.json        revisa tipos (no genera archivos)
 bin/
-  cfm.mjs        comando del build: carga dist/cli.js (avisa si el build quedó viejo)
-  stale-build.mjs        compara las fechas de src/ y del build
-  cfm-dev.mjs    comando de desarrollo: carga src/cli.ts sin compilar
-dist/                    build generado (no se sube): un solo archivo, cli.js
-release/                 ejecutables generados (no se suben): cfm.app, cfm-mac.zip y cfm-windows.exe
-assets/icon.svg, icon.png  ícono de la app (el PNG sale del SVG con scripts/render-icon.swift)
-scripts/build.mjs        el build: empaqueta src/ y sus dependencias con esbuild
-scripts/build-release.mjs  la app de Mac y el ejecutable de Windows (bun build --compile), firma y notarización
-scripts/entitlements.plist  permisos de la app firmada con Developer ID
+  cfm.mjs            comando del build: carga dist/cli.js (avisa si el build quedó viejo)
+  cfm-dev.mjs        comando de desarrollo: corre src/ sin compilar (el núcleo, ya compilado)
+  stale-build.mjs    compara las fechas del código (src/ y el núcleo instalado) con la del build
+scripts/
+  build.mjs          el build: empaqueta el CLI, el núcleo y sus dependencias con esbuild
+  build-release.mjs  la app de Mac y el ejecutable de Windows (bun build --compile), firma y notarización
+  entitlements.plist permisos de la app firmada con Developer ID
+  render-icon.swift  assets/icon.svg → assets/icon.png
+assets/              ícono de la app
+dist/, release/      generados (no se suben): el build y las apps
 src/
-  cli.ts                 arranque: corre main y traduce errores a mensajes y códigos de salida
-  exe.ts                 entrada de los ejecutables (la app de Mac se vuelve a abrir en tu terminal)
-  main.ts                --version, --help, menú y despacho al comando
-  cli-args.ts            ÚNICA definición de comandos y flags (de ahí salen el menú, la ayuda y la validación)
-  app.ts                 nombre y versión (de package.json)
-  commands/              un archivo por comando, se lee de arriba abajo
-    registry.ts          qué función corre cada comando
-    context.ts           lo común: sesión, space y ambientes, lecturas una sola vez, confirmar, respaldar, cerrar
+  cli.ts             arranque: corre main y traduce errores a mensajes y códigos de salida
+  exe.ts             entrada de los ejecutables (la app de Mac se vuelve a abrir en tu terminal)
+  main.ts            --version, --help, menú y despacho al comando
+  cli-args.ts        ÚNICA definición de comandos y flags (de ahí salen el menú, la ayuda y la validación)
+  app.ts             nombre del comando y versión (de package.json)
+  session.ts         token y host (sesión del Contentful CLI o variable de entorno)
+  errors.ts          CancelError y BackError (cancelar o volver en una pregunta)
+  commands/          un archivo por comando, se lee de arriba abajo
+    registry.ts      qué función corre cada comando
+    context.ts       lo común: sesión, space y ambientes, lecturas una sola vez, confirmar, respaldar, cerrar
     migrate.ts, migrate-model.ts, migrate-assets.ts, compare-models.ts, compare-entry.ts,
     status.ts, history.ts, restore.ts
-    login.ts             iniciar sesión (pedir y guardar el token) y cerrarla (logout)
-  selection/             cómo se eligen entries (ID, búsqueda, recientes, tag, archivo, faltantes) y assets
-  report/                reportes Markdown (markdown.ts) y cómo se guardan (save.ts)
-  backup.ts              respaldos locales en ~/.ctf-migrate/backups/<cuenta>/
-  config.ts              límites (tamaño del árbol, confirmación, resultados por búsqueda)
-  session.ts             token y host (sesión del CLI o variable de entorno)
-  errors.ts              AbortError, CancelError y formato de errores del CMA
-  analyze.ts             análisis de "migrar entries" (solo lectura)
-  execute.ts             escritura por fases reutilizables: tags, modelo, imágenes, entries
-  contentful/
-    types.ts             tipos de Contentful con nombres cortos
-    client.ts            cliente del CMA; describe cada llamada para --verbose (sin headers)
-    read.ts              lecturas (árbol, búsquedas, modelos, locales, assets, tags, usuario)
-    write.ts             ÚNICO módulo que escribe en Contentful
-  core/                  reglas puras: sin red, sin terminal
-    plan.ts              qué se crea, actualiza, reutiliza; plan de escritura
-    model.ts             comparación de content types (uno o todos) campo por campo
-    model-changes.ts     qué se puede agregar al modelo y qué marcó el usuario
-    editor.ts            apariencia del editor (help text, widget): qué se copia, diferencias, mezcla
-    query.ts             filtros de búsqueda → parámetros de una sola llamada; --since
-    entry-compare.ts     comparación de una entry entre ambientes, valor por valor
-    status.ts            estado de dos ambientes (content types, idiomas, tags)
-    publish-check.ts     campos que se escriben; obligatorios que quedarían vacíos
-    fields.ts            valores de origen → formato de destino (locales, merge, assets)
-    entries.ts           links, hijos, imágenes y título de una entry
-    ids.ts               parseo de IDs/URLs pegados (entries y assets)
-    json.ts              JSON estable para comparar valores
-    restore.ts           qué se restaura y qué cambió después
-    environments.ts      ambiente por ID o alias
-  ui/                    terminal: no decide ni escribe
-    views/               tablas por tema: entries, assets, model, summary, entry-diff, status, history, restore
-    prompts.ts           preguntas genéricas (choose, chooseMany, search, askText…) y específicas
-    text.ts              textos sin color que comparten terminal y reportes
-    table.ts             dibujo de tablas
-    log.ts               mensajes de estado
-    header.ts            presentación, título, cierres
-    browser.ts           abrir una página en el navegador (la de crear tokens)
-    pause.ts             "Presiona Enter para cerrar" del ejecutable de Windows
-    relaunch.ts          la cfm.app abierta desde Finder se abre en la terminal del usuario
-    runner.ts            ejecuta escrituras por fases, con barra de progreso y lista de ✔ / ✖
-    status.ts            spinner para los pasos que llaman a la API
-    api-calls.ts         cuenta las llamadas a la API (y las muestra con --verbose)
+    login.ts         iniciar sesión (pedir y guardar el token) y cerrarla (logout)
+  selection/         cómo se eligen entries (ID, búsqueda, recientes, tag, archivo, faltantes) y assets
+  report/save.ts     dónde se guardan los reportes
+  ui/                terminal: no decide ni escribe
+    views/           tablas por tema: entries, assets, model, summary, entry-diff, status, history, restore
+    prompts.ts       preguntas genéricas (choose, chooseMany, search, askText…) y específicas
+    runner.ts        el runner del núcleo con barra de progreso y lista de ✔ / ✖
+    table.ts, log.ts, header.ts, status.ts, api-calls.ts, navigation.ts
+    browser.ts, pause.ts, relaunch.ts   navegador, pausa en Windows y la app de Mac
+test/                tests del CLI: setup (sin red, HOME temporal), seguridad, arquitectura y uno por módulo
+graphify-out/        el grafo del código, de antes de separar los repositorios
 ```
 
 ## Desarrollo
 
-El código es TypeScript. `cfm-dev` lo ejecuta directo (Node quita los tipos al vuelo): editas un `.ts` y lo corres. `cfm` usa el build, que se regenera con el script `build`.
+El código es TypeScript. `cfm-dev` lo ejecuta directo (Node quita los tipos al vuelo): editas un `.ts` de `src/` y lo corres. `cfm` usa el build, que se regenera con el script `build`.
 
-Con tu gestor (`npm run …`, `pnpm …` o `bun run …`):
+Con tu gestor (`npm run …`, `pnpm …`, `yarn run …` o `bun run …`):
 
 | Script | Qué hace |
 | --- | --- |
@@ -431,38 +443,46 @@ Con tu gestor (`npm run …`, `pnpm …` o `bun run …`):
 | `format` | aplica el formato y los arreglos automáticos de Biome |
 | `test` | tests (`node:test`, sin dependencias extra) |
 | `check` | typecheck + lint + tests; córrelo antes de hacer commit |
-| `build` | empaqueta `src/` y sus dependencias en `dist/cli.js` (lo que corre `cfm`) |
+| `build` | empaqueta el CLI y el núcleo en `dist/cli.js` (lo que corre `cfm`) |
 | `build:release` | genera la app de Mac y el ejecutable de Windows en `release/` (necesita bun instalado, con cualquier gestor; ver [Ejecutables](#ejecutables-para-mac-y-windows)) |
 | `start` | corre el build desde la carpeta, sin el comando global |
 | `dev` | corre el código fuente desde la carpeta, sin el comando global |
 
 Por ejemplo: `npm run check`, `pnpm check` o `bun run check`. Los tests siempre corren con Node (`node --test`), también con bun.
 
-Los tests son **unitarios**: prueban las reglas y utilidades, no hacen migraciones reales. Viven en `test/` y usan objetos armados a mano (`test/fixtures.ts`) y un CMA falso en memoria que registra cada llamada. Además, [test/setup.ts](test/setup.ts) se carga antes de cada archivo de test y garantiza que:
+**Cómo usa el CLI al núcleo.** El CLI importa `cmtool-core` como cualquier paquete de npm (`import { buildPlan } from 'cmtool-core'`), con versión exacta y como dependencia de desarrollo: el build lo mete dentro de `dist/cli.js`. tsc, los tests y `cfm-dev` usan su versión compilada (`dist/`) desde `node_modules`.
+
+Para cambiar el núcleo y probarlo aquí sin publicarlo, **enlázalo** con bun:
+
+```bash
+cd ../cmtool-core && bun run build && bun link   # una vez: registra el núcleo en este equipo
+cd ../cmtool-cli && bun link cmtool-core         # node_modules/cmtool-core apunta al repo del núcleo
+```
+
+Después de cada cambio en el núcleo corre `bun run build` en su repo: `cfm-dev` ya lo ve, y `cfm`, después de `bun run build` aquí (si se te olvida, avisa). Para volver a la versión de npm, `bun install`. Hoy, antes de publicar el núcleo, `package.json` ya lo pide enlazado (`link:cmtool-core`).
+
+**Versiones.** Cada repositorio lleva la suya. Para subirla: `bun pm version 0.18.0 --no-git-tag-version` (o `npm version 0.18.0 --no-git-tag-version`), con su entrada en el [CHANGELOG](CHANGELOG.md). Si el CLI necesita algo nuevo del núcleo, primero se publica el núcleo y después se actualiza aquí: `bun add -d -E cmtool-core@<versión>`.
+
+Los tests son **unitarios**: prueban la terminal y las utilidades del CLI, no hacen migraciones reales. Las reglas de la migración (qué se crea, qué se actualiza, el modelo, la escritura, el respaldo) se prueban en `cmtool-core`. [test/setup.ts](test/setup.ts) se carga antes de cada archivo de test y garantiza que:
 
 - **No hay red**: cualquier conexión (http, https, fetch, sockets) falla, así que ningún test puede llegar a Contentful.
 - **No se toca tu carpeta personal**: los tests ven una carpeta temporal como HOME (sin tu sesión, tu token ni tus respaldos) y escriben solo en carpetas temporales que se borran al terminar.
 
 `isolation.test.ts` verifica que esa protección esté activa. Los tests cubren:
 
-- **Reglas de migración** (`plan.test.ts`): qué se crea, actualiza, reutiliza o no se crea; qué se ofrece agregar al modelo; el plan final.
-- **Transformación de valores** (`fields.test.ts`): locales, merge con la entry existente (sin perder traducciones ni tags de destino) y assets.
-- **Escritura de punta a punta** (`execute.test.ts`): orden de las fases, lo que llega a Contentful y lo que queda en el respaldo.
-- **Modelo, links e IDs** (`model.test.ts`, `entries.test.ts`, `ids.test.ts`).
-- **Seguridad**: el writer solo escribe en destino y solo publica content types (`write.test.ts`); el token solo va a hosts de Contentful (`session.test.ts`); los errores no muestran el token (`errors.test.ts`); los archivos solo se copian desde el CDN de Contentful (`fields.test.ts`).
-- **Lectura del árbol** (`read.test.ts`): por niveles, links rotos y ciclos.
-- **Respaldo y restore** (`backup.test.ts`, `restore.test.ts`, `write.test.ts`): el respaldo se guarda antes de actualizar y, si falla, no se actualiza; detecta cambios posteriores a la migración.
-- **Argumentos y flags** (`cli-args.test.ts`, `decision.test.ts`, `environments.test.ts`, `version.test.ts`): comandos, a qué comandos sirve cada flag, `--since`, `--version`, los flags de decisión, la ayuda generada, que el comando "Repetir" se vuelve a leer igual y el orden de los ambientes.
+- **Argumentos y flags** (`cli-args.test.ts`, `app.test.ts`): comandos, a qué comandos sirve cada flag, `--version`, la ayuda generada, que el comando "Repetir" se vuelve a leer igual y que el núcleo se pide con versión exacta.
 - **Navegación** (`navigation.test.ts`): volver al último paso que preguntó, saltando los resueltos por flags; flujos anidados; Esc vuelve y Ctrl+C sale.
-- **Búsqueda, comparaciones y reportes** (`query.test.ts`, `entry-compare.test.ts`, `status.test.ts`, `model-changes.test.ts`, `report.test.ts`): filtros en una sola llamada, comparación de entries y ambientes, cambios de modelo y reportes Markdown.
-- **Código fuente** (`security.test.ts`): solo el writer escribe, nunca borra/archiva/despublica, y solo publica content types. `client.test.ts`: `--verbose` nunca muestra el token.
-- **Comportamiento** (`entries.test.ts`, `read.test.ts`, `plan.test.ts`, `errors.test.ts`): textos enlazados que no son hijos, límite del árbol, entries archivadas, cambios en destino durante la revisión y conflictos de versión.
-- **Reglas del modelo y publicación** (`model.test.ts`, `publish-check.test.ts`): nombre, obligatorio, localizado y validaciones, y cómo quedan al llevarlas a destino; qué entries quedan con obligatorios vacíos; los campos que solo existen en destino no se tocan.
+- **Sesión** (`session.test.ts`, `login.test.ts`): el token solo va a hosts de Contentful; pegar, probar y guardar el token; cerrar sesión.
+- **Errores** (`errors.test.ts`): cancelar y volver en una pregunta.
+- **Resumen y reportes** (`summary.test.ts`, `report-save.test.ts`): la lista de cambios del modelo y dónde se guardan los reportes.
+- **Windows y la app de Mac** (`pause.test.ts`, `relaunch.test.ts`): la pausa antes de cerrar la ventana y volver a abrirse en tu terminal.
+- **Build viejo** (`stale-build.test.ts`): cuándo avisa `cfm` que el build es más viejo que el código o que el núcleo.
+- **Código fuente** ([test/security.test.ts](test/security.test.ts)): el CLI no escribe en Contentful por su cuenta. [test/architecture.test.ts](test/architecture.test.ts): el CLI solo importa el núcleo, `@clack/prompts` y `picocolors`, y todo lo que importa está en `package.json`.
 
 Reglas para que Node pueda ejecutar los `.ts` sin compilar:
 
-- Los imports llevan la extensión `.ts` (`import { x } from './core/plan.ts'`).
-- Solo sintaxis que se puede borrar: nada de `enum`, `namespace` ni parámetros con `private`/`readonly` en el constructor. Para valores fijos usa un objeto `as const`, como `ACTION` en [src/core/plan.ts](src/core/plan.ts). `tsc` avisa si algo no cumple (`erasableSyntaxOnly`).
+- Los imports del código propio llevan la extensión `.ts` (`import { x } from './commands/context.ts'`). El núcleo, por su nombre de paquete: `import { buildPlan } from 'cmtool-core'`.
+- Solo sintaxis que se puede borrar: nada de `enum`, `namespace` ni parámetros con `private`/`readonly` en el constructor. Para valores fijos usa un objeto `as const`, como `MARK` en [ui/table.ts](src/ui/table.ts#L4). `tsc` avisa si algo no cumple (`erasableSyntaxOnly`).
 - Los tipos se importan con `import type`.
 
 ### Librerías de terminal
@@ -481,9 +501,12 @@ Las tablas (árbol, imágenes, modelo, resumen) son propias ([src/ui/table.ts](s
 
 ### Cómo extenderlo
 
-- **Nuevo comando**: agrégalo a `COMMANDS` (y sus flags a `FLAGS`) en [src/cli-args.ts](src/cli-args.ts), escribe su función en `src/commands/` usando [context.ts](src/commands/context.ts), y regístrala en [registry.ts](src/commands/registry.ts). El menú y la ayuda se actualizan solos; TypeScript avisa si falta registrarlo.
-- **Nueva forma de elegir entries**: un método en [src/selection/entries.ts](src/selection/entries.ts); si es una búsqueda, un filtro en [src/core/query.ts](src/core/query.ts).
-- **Cambiar qué se migra** (por ejemplo, que un hijo existente se actualice): `classifyTree` en [src/core/plan.ts](src/core/plan.ts).
-- **Nuevo tipo de escritura**: un método en [src/contentful/write.ts](src/contentful/write.ts) y su fase en [src/execute.ts](src/execute.ts).
-- **Nueva tabla o columna**: [src/ui/views/](src/ui/views/); si también va al reporte, el texto en [src/ui/text.ts](src/ui/text.ts).
-- **Cada cambio**: entrada en [CHANGELOG.md](CHANGELOG.md) y versión nueva en `package.json`.
+Primero pregúntate de qué repositorio es: **si decide algo o habla con Contentful, va en el núcleo** (`cmtool-core`), y así lo tendrá también la web; si pregunta, muestra o guarda archivos, va aquí.
+
+- **Nuevo comando**: agrégalo a `COMMANDS` (y sus flags a `FLAGS`) en [cli-args.ts](src/cli-args.ts), escribe su función en [commands/](src/commands/) usando [context.ts](src/commands/context.ts), y regístrala en [registry.ts](src/commands/registry.ts). El menú y la ayuda se actualizan solos; TypeScript avisa si falta registrarlo.
+- **Nueva forma de elegir entries**: un método en [selection/entries.ts](src/selection/entries.ts); si es una búsqueda, el filtro va en `src/core/query.ts` del núcleo.
+- **Cambiar qué se migra** (por ejemplo, que un hijo existente se actualice): `classifyTree` en `src/core/plan.ts` del núcleo.
+- **Nuevo tipo de escritura**: un método en `src/contentful/write.ts` y su fase en `src/execute.ts`, en el núcleo.
+- **Nueva tabla o columna**: [ui/views/](src/ui/views/); si también va al reporte, el texto en `src/text.ts` del núcleo.
+- **Algo nuevo del núcleo**: se exporta allá, se publica una versión nueva del núcleo y aquí se actualiza la dependencia.
+- **Cada cambio**: entrada en el [CHANGELOG](CHANGELOG.md) y la versión nueva, en cada repo que cambió.

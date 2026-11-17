@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import { CMA_HOST_NAMES } from 'cmtool-core';
 import { tokenHost } from '../src/commands/login.ts';
-import { CMA_HOST_NAMES } from '../src/session.ts';
 
 const USER = { id: 'u1', email: 'ana@example.com' };
 const rejected = (status: number) => new Error(JSON.stringify({ status, statusText: 'x', message: 'x' }));

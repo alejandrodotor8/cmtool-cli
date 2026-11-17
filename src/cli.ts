@@ -2,9 +2,11 @@
  * Arranque del comando: corre main y traduce los errores a mensajes y códigos de salida.
  * Lo usan los dos comandos de bin/ (el del build y el de desarrollo) y los ejecutables (src/exe.ts).
  */
+
+import { AbortError, formatError, statusOf } from 'cmtool-core';
 import pc from 'picocolors';
 import { APP_NAME } from './app.ts';
-import { AbortError, formatError, isCancel, statusOf } from './errors.ts';
+import { isCancel } from './errors.ts';
 import { main } from './main.ts';
 import { printCancelled, printOutro, type RunMode } from './ui/header.ts';
 import { log } from './ui/log.ts';

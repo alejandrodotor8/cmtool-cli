@@ -1,8 +1,7 @@
 /** `cfm compare-models`: diferencias de modelo entre dos ambientes. Solo lectura. */
+
+import { compareModels, editorDiffsFor, hasDifferences, modelComparisonReport } from 'cmtool-core';
 import { type CliArgs, repeatCommand } from '../cli-args.ts';
-import { editorDiffsFor } from '../core/editor.ts';
-import { compareModels, hasDifferences } from '../core/model.ts';
-import { modelComparisonReport } from '../report/markdown.ts';
 import { offerReport, reportName } from '../report/save.ts';
 import { printTitle } from '../ui/header.ts';
 import { log } from '../ui/log.ts';

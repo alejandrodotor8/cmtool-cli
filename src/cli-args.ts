@@ -2,11 +2,8 @@
  * Comandos y flags: una sola definición de la que salen el menú, la ayuda y la validación.
  */
 import { parseArgs } from 'node:util';
+import { AbortError, type Decision, formatDecision, parseDecision, parseEntryIds, parseSince } from 'cmtool-core';
 import { APP_NAME, VERSION } from './app.ts';
-import { type Decision, formatDecision, parseDecision } from './core/decision.ts';
-import { parseEntryIds } from './core/ids.ts';
-import { parseSince } from './core/query.ts';
-import { AbortError } from './errors.ts';
 
 /** Comandos, en el orden del menú. */
 export const COMMANDS = {

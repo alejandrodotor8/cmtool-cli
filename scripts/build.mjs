@@ -1,5 +1,5 @@
 /**
- * Build de cfm: empaqueta src/ y sus dependencias en un solo archivo, dist/cli.js.
+ * Build de cfm: empaqueta src/, el núcleo (cmtool-core) y sus dependencias en un solo archivo, dist/cli.js.
  *
  * Arrancar leyendo un archivo es mucho más rápido que leer los ~440 sueltos de src/ y
  * node_modules (sobre todo la primera vez, con el disco en frío). Funciona igual con npm,

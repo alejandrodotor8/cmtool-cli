@@ -1,13 +1,24 @@
 {
-  "name": "cfm",
-  "version": "0.16.1",
+  "name": "cmtool-cli",
+  "version": "0.17.0",
   "private": true,
-  "description": "Migra entries de Contentful entre ambientes de forma interactiva, dejándolas en draft",
+  "description": "cfm: migra entries de Contentful entre ambientes desde la terminal, dejándolas en draft (usa cmtool-core)",
+  "keywords": [
+    "contentful",
+    "migration",
+    "environments",
+    "cli"
+  ],
   "type": "module",
   "bin": {
     "cfm": "./bin/cfm.mjs",
     "cfm-dev": "./bin/cfm-dev.mjs"
   },
+  "files": [
+    "bin",
+    "dist",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:release": "node scripts/build-release.mjs",
@@ -17,19 +28,21 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "test": "node --import ./test/setup.ts --test test/*.test.ts",
-    "check": "tsc && biome check . && node --import ./test/setup.ts --test test/*.test.ts"
+    "check": "tsc && biome check . && node --import ./test/setup.ts --test test/*.test.ts",
+    "prepack": "node --run build",
+    "prepublishOnly": "node --run check"
   },
   "engines": {
     "node": ">=22.18"
   },
   "dependencies": {
-    "@clack/prompts": "1.8.1",
-    "contentful-management": "12.19.0",
     "picocolors": "1.1.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
+    "@clack/prompts": "1.8.1",
     "@types/node": "24.19.1",
+    "cmtool-core": "link:cmtool-core",
     "esbuild": "0.25.10",
     "typescript": "7.0.2"
   }

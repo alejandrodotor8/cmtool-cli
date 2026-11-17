@@ -4,15 +4,23 @@
  * Las búsquedas se resuelven en el servidor: una llamada por búsqueda.
  */
 import fs from 'node:fs';
+import {
+  AbortError,
+  contentTypeOf,
+  type Entry,
+  type EntryQuery,
+  entryQueryParams,
+  fetchEntries,
+  isEmptyQuery,
+  LIMITS,
+  listEntries,
+  makeTitleOf,
+  parseEntryIds,
+  readTags,
+  searchEntries,
+} from 'cmtool-core';
 import type { CliArgs } from '../cli-args.ts';
 import type { Context } from '../commands/context.ts';
-import { LIMITS } from '../config.ts';
-import { fetchEntries, listEntries, readTags, searchEntries } from '../contentful/read.ts';
-import type { Entry } from '../contentful/types.ts';
-import { contentTypeOf, makeTitleOf } from '../core/entries.ts';
-import { parseEntryIds } from '../core/ids.ts';
-import { type EntryQuery, entryQueryParams, isEmptyQuery } from '../core/query.ts';
-import { AbortError } from '../errors.ts';
 import { log } from '../ui/log.ts';
 import { goBack, steps } from '../ui/navigation.ts';
 import {

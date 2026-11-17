@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import { AbortError } from 'cmtool-core';
 import { VERSION } from '../src/app.ts';
 import { COMMANDS, FLAGS, parseCliArgs, repeatCommand, usage, validateFlags } from '../src/cli-args.ts';
-import { AbortError } from '../src/errors.ts';
 
 describe('parseCliArgs: comandos', () => {
   test('sin argumentos no hay comando: se elige en el menú', () => {

@@ -3,21 +3,12 @@
  * Contentful y se guarda donde lo guarda `contentful login`, así lo usan los dos. Se pregunta solo
  * si no hay sesión (la primera vez), o con `cfm login` para cambiar el token. `cfm logout` lo quita.
  */
+
+import { CMA_HOST_NAMES, createCma, currentUser, statusOf } from 'cmtool-core';
 import pc from 'picocolors';
 import { APP_NAME } from '../app.ts';
 import type { CliArgs } from '../cli-args.ts';
-import { createCma } from '../contentful/client.ts';
-import { currentUser } from '../contentful/read.ts';
-import { statusOf } from '../errors.ts';
-import {
-  CMA_HOST_NAMES,
-  forgetToken,
-  hasSession,
-  looksLikeToken,
-  savedTokenFile,
-  saveToken,
-  sessionFile,
-} from '../session.ts';
+import { forgetToken, hasSession, looksLikeToken, savedTokenFile, saveToken, sessionFile } from '../session.ts';
 import { openInBrowser } from '../ui/browser.ts';
 import { printCancelled, printOutro, printTitle, shouldAnimate } from '../ui/header.ts';
 import { log } from '../ui/log.ts';

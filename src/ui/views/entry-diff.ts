@@ -1,6 +1,5 @@
+import { type Entry, type FieldComparison, summarizeValue, VALUE, type ValueStatus } from 'cmtool-core';
 import pc from 'picocolors';
-import type { Entry } from '../../contentful/types.ts';
-import { type FieldComparison, summarizeValue, VALUE, type ValueStatus } from '../../core/entry-compare.ts';
 import { log } from '../log.ts';
 import { clip, table } from '../table.ts';
 import { route } from './shared.ts';

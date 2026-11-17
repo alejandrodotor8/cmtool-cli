@@ -2,6 +2,34 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.17.0 — 2026-11-17
+
+### Cambiado
+
+- **El proyecto ahora son tres repositorios independientes.** Ninguno necesita la carpeta de otro para instalar, compilar ni correr sus tests:
+  - **`cmtool-core`**: el núcleo, con toda la lógica (leer, comparar, planear, escribir y respaldar) y sin pantalla. Es un paquete de npm con su propio CHANGELOG.
+  - **`cmtool-cli`** (este): el comando `cfm`, la app de Mac y el ejecutable de Windows. Usa el núcleo como cualquier dependencia de npm. El historial de git de `cfm` sigue aquí.
+  - **`backoffice-b2c`**: el back office web (Next.js), por ahora solo el punto de partida.
+- **`cfm` funciona igual.** El paquete ahora se llama `cmtool-cli` (antes `cfm`). Si ya lo tenías instalado, quítalo y vuelve a instalarlo desde este repo (ver el README).
+- **Listo para publicar en npm** (`npm install -g cmtool-cli`): el paquete lleva `bin/` y el build (`dist/cli.js`, que se genera solo al empaquetar). Solo instala `picocolors`, porque el núcleo y `@clack/prompts` van dentro del build; por eso pasaron a ser dependencias de desarrollo. Sigue siendo `private` hasta que se decida publicar; los pasos están en [PUBLICAR.md](PUBLICAR.md).
+- Mientras el núcleo no esté en npm, se pide enlazado (`link:cmtool-core`, con `bun link`), nunca por versión: si el nombre no está registrado, otra persona podría publicar un paquete con ese nombre y el gestor lo descargaría.
+- `cfm-dev` corre el código fuente del CLI y el núcleo ya compilado, desde `node_modules`. Instalado desde npm, avisa que solo funciona desde el repositorio.
+- `cfm` avisa que el build quedó viejo también cuando el núcleo instalado es más nuevo (por ejemplo, si lo recompilaste enlazado).
+- Los reportes Markdown dicen "Generado el …" en vez de "Generado por cfm el …": ahora los arma el núcleo, que no sabe qué herramienta lo usa.
+- Un conflicto de versión al escribir dice "vuelve a intentarlo" en vez de "vuelve a correr cfm".
+- En la lista de lo escrito, el ID va separado con `·` en vez de en gris.
+
+### Agregado
+
+- `test/architecture.test.ts`: el CLI solo importa el núcleo, `@clack/prompts` y `picocolors` (habla con Contentful solo a través del núcleo), y todo lo que importa está en `package.json`.
+- `test/security.test.ts` revisa que el CLI no llame por su cuenta ningún método del CMA que escribe: eso solo lo hace el writer del núcleo, que tiene sus propios tests.
+- [PUBLICAR.md](PUBLICAR.md): cómo publicar `cmtool-cli` en npm, y cómo lo instala el equipo.
+- yarn 1 probado y documentado (instalar, build, tests y scripts).
+
+### Corregido
+
+- El README decía que ninguna dependencia de desarrollo tiene script de instalación: esbuild sí lo tiene.
+
 ## 0.16.1 — 2026-10-09
 
 ### Cambiado

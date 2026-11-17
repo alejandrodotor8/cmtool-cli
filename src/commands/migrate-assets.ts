@@ -2,11 +2,10 @@
  * `cfm migrate-assets`: copia imágenes y archivos sueltos (sin entries). Los que
  * ya existen en destino se reutilizan; los nuevos quedan en draft.
  */
+
+import { type Asset, applyAssets, fetchAssets, type Locales } from 'cmtool-core';
 import pc from 'picocolors';
 import { type CliArgs, repeatCommand } from '../cli-args.ts';
-import { fetchAssets } from '../contentful/read.ts';
-import type { Asset, Locales } from '../contentful/types.ts';
-import { applyAssets } from '../execute.ts';
 import { selectAssetIds } from '../selection/assets.ts';
 import { printTitle } from '../ui/header.ts';
 import { log } from '../ui/log.ts';

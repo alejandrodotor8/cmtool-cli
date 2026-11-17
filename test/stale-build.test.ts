@@ -31,18 +31,27 @@ describe('buildIsStale', () => {
   });
 
   test('si el build es más nuevo que el código, está al día', () => {
-    assert.equal(buildIsStale(src, built), false);
+    assert.equal(buildIsStale([src], built), false);
   });
 
   test('si un archivo (también en subcarpetas) cambió después del build, está viejo', () => {
     touch(path.join(src, 'core', 'plan.ts'), 3000);
-    assert.equal(buildIsStale(src, built), true);
+    assert.equal(buildIsStale([src], built), true);
   });
 
-  test('solo cuentan los .ts', () => {
+  test('solo cuenta el código (.ts y .js)', () => {
     const notes = path.join(src, 'notas.md');
     fs.writeFileSync(notes, '');
     touch(notes, 3000);
-    assert.equal(buildIsStale(src, built), false);
+    assert.equal(buildIsStale([src], built), false);
+  });
+
+  test('cuenta también el núcleo compilado: si se recompiló cmtool-core, el build está viejo', () => {
+    const core = path.join(dir, 'cmtool-core-dist');
+    fs.mkdirSync(core);
+    fs.writeFileSync(path.join(core, 'index.js'), '');
+    touch(path.join(core, 'index.js'), 3000);
+    assert.equal(buildIsStale([src, core], built), true);
+    assert.equal(buildIsStale([], built), false);
   });
 });

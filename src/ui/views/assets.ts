@@ -1,5 +1,5 @@
+import type { Analysis } from 'cmtool-core';
 import pc from 'picocolors';
-import type { Analysis } from '../../analyze.ts';
 import { log } from '../log.ts';
 import { clip, MARK, table } from '../table.ts';
 import { envColumns, formatBytes } from './shared.ts';

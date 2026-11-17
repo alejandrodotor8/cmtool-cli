@@ -1,8 +1,7 @@
 import path from 'node:path';
+import { BACKUP_KIND_LABEL, type BackupData } from 'cmtool-core';
 import pc from 'picocolors';
-import type { BackupData } from '../../backup.ts';
 import { table } from '../table.ts';
-import { BACKUP_KIND_LABEL } from '../text.ts';
 import { createdParts } from './restore.ts';
 import { formatDate, route } from './shared.ts';
 

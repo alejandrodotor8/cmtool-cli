@@ -383,7 +383,7 @@ Cada migración guarda un respaldo en `~/.ctf-migrate/backups/<cuenta>/` (en Win
 - **Las imágenes solo se copian desde el CDN de Contentful** (`*.ctfassets.net`, por https).
 - **Nada se escribe antes de confirmar**: todo lo anterior al resumen es solo lectura.
 - **El núcleo pone los mismos límites a cualquier herramienta**: su cliente (`createCma`) se niega a mandar el token a un host que no sea de Contentful, y su writer es el único que escribe. Una web o un backend que usen `cmtool-core` tienen las mismas garantías que `cfm`. [test/architecture.test.ts](test/architecture.test.ts) revisa que el CLI hable con Contentful solo a través del núcleo (no importa `contentful-management`) y que use solo sus entradas públicas.
-- **Dependencias**: el paquete publicado solo instala `picocolors` (lo usa `bin/cfm.mjs`). El núcleo (con `contentful-management`) y `@clack/prompts` van dentro de `dist/cli.js`, por eso son dependencias de desarrollo. Para desarrollar, además: `typescript`, `@types/node`, `@biomejs/biome` y `esbuild`. Todas con versión exacta. Solo esbuild tiene script de instalación (descarga su binario), y por eso pnpm necesita `allowBuilds`. El paquete es `private` para que no se publique por error (ver [PUBLICAR.md](PUBLICAR.md)).
+- **Dependencias**: el paquete publicado solo instala `picocolors` (lo usa `bin/cfm.mjs`). El núcleo (con `contentful-management`) y `@clack/prompts` van dentro de `dist/cli.js`, por eso son dependencias de desarrollo. Para desarrollar, además: `typescript`, `@types/node`, `@biomejs/biome` y `esbuild`. Todas con versión exacta. Solo esbuild tiene script de instalación (descarga su binario), y por eso pnpm necesita `allowBuilds`. Lo que se publica en npm (solo `bin/`, `dist/` y el CHANGELOG) lo revisa [test/app.test.ts](test/app.test.ts); ver [PUBLICAR.md](PUBLICAR.md).
 
 ## Cómo está organizado
 
@@ -510,3 +510,7 @@ Primero pregúntate de qué repositorio es: **si decide algo o habla con Content
 - **Nueva tabla o columna**: [ui/views/](src/ui/views/); si también va al reporte, el texto en `src/text.ts` del núcleo.
 - **Algo nuevo del núcleo**: se exporta allá, se publica una versión nueva del núcleo y aquí se actualiza la dependencia.
 - **Cada cambio**: entrada en el [CHANGELOG](CHANGELOG.md) y la versión nueva, en cada repo que cambió.
+
+## Licencia
+
+[MIT](LICENSE) © 2026 Alejandro Dotor.

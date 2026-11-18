@@ -14,11 +14,11 @@ Se hace una sola vez.
    ```
 
    Desde ahí el repo ya no necesita la carpeta del núcleo, y se instala con cualquier gestor (npm, pnpm, yarn o bun). Para seguir probando cambios del núcleo sin publicarlo, usa `bun link cmtool-core` (README, sección *Desarrollo*).
-2. **Decide si el código puede ser público** y **elige una licencia**: lo mismo que en el núcleo. Si el núcleo lleva scope (`@<organización>/cmtool-core`), cambia los imports aquí. Agrega `LICENSE` y el campo `"license"` en `package.json`.
-3. **Comprueba que el nombre siga libre**: `npm view cmtool-cli` debe responder `404`; así estaba el 17 de noviembre de 2026.
-4. **Sube el repositorio** y agrega `repository`, `homepage` y `bugs` en `package.json`, con la dirección del repo. Así los enlaces del README funcionan en la página de npm.
-5. **Quita `"private": true`** de `package.json`. Es el seguro para no publicar por error.
-6. **Inicia sesión**: `npm login`, y comprueba la cuenta con `npm whoami`.
+2. **Comprueba que el nombre siga libre**: `npm view cmtool-cli` debe responder `404`; así estaba el 17 de noviembre de 2026.
+3. **Sube el repositorio** y agrega `repository`, `homepage` y `bugs` en `package.json`, con la dirección del repo. Así los enlaces del README funcionan en la página de npm.
+4. **Inicia sesión**: `npm login`, y comprueba la cuenta con `npm whoami`.
+
+**Ya está decidido y hecho** (17 de noviembre de 2026): el paquete es **público y sin scope**, con licencia **MIT** a nombre de Alejandro Dotor ([LICENSE](LICENSE)), y ya no tiene `"private": true`. Así que `npm publish` desde esta carpeta **publica de verdad**. En lugar de ese seguro, [test/app.test.ts](test/app.test.ts) falla si cambia lo que se sube o si falta la licencia, y `prepublishOnly` no deja publicar si un test falla.
 
 ## Qué lleva el paquete
 
@@ -27,7 +27,7 @@ Se hace una sola vez.
 | `bin/cfm.mjs`, `bin/stale-build.mjs` | el comando `cfm` |
 | `bin/cfm-dev.mjs` | se instala, pero solo funciona desde el repositorio, y lo dice |
 | `dist/cli.js` | el build: el CLI, el núcleo y sus dependencias en un solo archivo. Se genera solo al empaquetar (`prepack`) |
-| `README.md`, `CHANGELOG.md`, `package.json` | lo que se ve en la página de npm |
+| `README.md`, `CHANGELOG.md`, `LICENSE`, `package.json` | lo que se ve en la página de npm |
 
 Solo instala `picocolors`. No lleva `src/`, los tests ni el grafo. **La app de Mac y el `.exe` no van en npm**: se reparten como archivo (README, sección *Ejecutables para Mac y Windows*).
 
@@ -41,7 +41,7 @@ Solo instala `picocolors`. No lleva `src/`, los tests ni el grafo. **La app de M
    ```
 
 3. **Revisa que todo pase**: `bun run check`.
-4. **Mira qué se va a publicar**: `npm pack --dry-run`. Deben salir 7 archivos, unos 190 kB: los tres de `bin/`, `dist/cli.js`, `README.md`, `CHANGELOG.md` y `package.json`, más `LICENSE` si lo agregaste.
+4. **Mira qué se va a publicar**: `npm pack --dry-run`. Deben salir 8 archivos, unos 191 kB: los tres de `bin/`, `dist/cli.js`, `README.md`, `CHANGELOG.md`, `LICENSE` y `package.json`.
 5. **Pruébalo instalado como lo recibe otra persona**, sin tocar tu `cfm`:
 
    ```bash
@@ -80,6 +80,6 @@ Con Node 22.18 o superior, en macOS o Windows:
 
 ## Si algo sale mal
 
-Los errores de `npm publish` son los mismos que en el núcleo: `private`, nombre ajeno (`403`), versión repetida, código de verificación (`EOTP`) y sesión (`ENEEDAUTH`). La tabla con qué hacer en cada caso está en el `PUBLICAR.md` de `cmtool-core`.
+Los errores de `npm publish` son los mismos que en el núcleo: nombre ajeno (`403`), versión repetida, código de verificación (`EOTP`) y sesión (`ENEEDAUTH`). La tabla con qué hacer en cada caso está en el `PUBLICAR.md` de `cmtool-core`.
 
 Uno es propio del CLI: **`npm install` falla con `EUNSUPPORTEDPROTOCOL` / `Unsupported URL Type "link:"`**. El repo todavía pide el núcleo enlazado. Ese formato solo lo entiende bun: haz el paso 1 de *Antes de la primera vez*.

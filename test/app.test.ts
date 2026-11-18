@@ -19,3 +19,13 @@ test('el núcleo se pide con versión exacta (o enlazado, antes de publicarlo), 
   // Versión exacta (nunca un rango): se sabe qué núcleo va en cada versión de cfm.
   assert.match(pkg.devDependencies['cmtool-core'], /^(\d+\.\d+\.\d+|link:cmtool-core)$/);
 });
+
+// El paquete es público (ya no tiene "private"): esto cuida qué sube a npm.
+test('el paquete publica solo bin/, el build y el CHANGELOG, con licencia MIT', () => {
+  const root = path.join(import.meta.dirname, '..');
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  assert.deepEqual(pkg.files, ['bin', 'dist', 'CHANGELOG.md']);
+  for (const file of Object.values(pkg.bin) as string[]) assert.match(file, /^\.\/bin\//);
+  assert.equal(pkg.license, 'MIT');
+  assert.match(fs.readFileSync(path.join(root, 'LICENSE'), 'utf8'), /^MIT License\n\nCopyright \(c\) \d{4} \S/);
+});

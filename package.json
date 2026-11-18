@@ -1,7 +1,6 @@
 {
   "name": "cmtool-cli",
   "version": "0.17.0",
-  "private": true,
   "description": "cfm: migra entries de Contentful entre ambientes desde la terminal, dejándolas en draft (usa cmtool-core)",
   "keywords": [
     "contentful",
@@ -9,6 +8,8 @@
     "environments",
     "cli"
   ],
+  "license": "MIT",
+  "author": "Alejandro Dotor",
   "type": "module",
   "bin": {
     "cfm": "./bin/cfm.mjs",

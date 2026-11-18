@@ -7,23 +7,45 @@ Se publica **solo, con GitHub Actions, al subir una etiqueta de versión** (`v0.
 | Workflow | Cuándo corre | Qué hace |
 | --- | --- | --- |
 | [ci.yml](.github/workflows/ci.yml) | cada push a `main` y cada pull request | `check` (tipos, lint y tests), `build` y `npm pack --dry-run` |
-| [release.yml](.github/workflows/release.yml) | al subir una etiqueta `vX.Y.Z`, o al crear un Release en GitHub con una etiqueta nueva | revisa que la etiqueta sea la versión de `package.json`, y `npm publish --provenance --access public` |
+| [release.yml](.github/workflows/release.yml) | al subir una etiqueta `vX.Y.Z`, o al crear un Release en GitHub con una etiqueta nueva | revisa que la etiqueta sea la versión de `package.json` y, si esa versión no está ya en npm, `npm publish` con trusted publishing |
 
 `npm publish` corre antes `prepublishOnly` (el `check`) y `prepack` (el `build`, así que `dist/cli.js` siempre sale del código actual). El paquete es **público y sin scope**, con licencia **MIT** a nombre de Alejandro Dotor ([LICENSE](LICENSE)). [test/app.test.ts](test/app.test.ts) falla si cambia lo que se sube o si falta la licencia.
 
 ## Configuración (una sola vez)
 
-1. **El núcleo, desde npm.** La Action instala las dependencias desde npm, así que `package.json` tiene que pedir el núcleo con su versión exacta (`"cmtool-core": "0.17.0"`), no `link:cmtool-core`. Si todavía dice `link:`, cámbialo cuando el núcleo esté publicado:
+**El núcleo, desde npm.** La Action instala las dependencias desde npm, así que `package.json` tiene que pedir el núcleo con su versión exacta (`"cmtool-core": "0.17.0"`), no `link:cmtool-core`. Si todavía dice `link:`, cámbialo cuando el núcleo esté publicado:
+
+```bash
+bun add -d -E cmtool-core@0.17.0
+bun run check && bun run build
+```
+
+Para probar cambios del núcleo sin publicarlo, `bun link cmtool-core` enlaza la carpeta local (README, sección *Desarrollo*). No hagas commit con `link:`: la Action fallaría.
+
+La Action publica con **trusted publishing**: npm confía en este workflow (`release.yml`, environment `prod`, repo `alejandrodotor8/cmtool-cli`) y no hace falta ningún token. Pero npm solo deja configurarlo **para un paquete que ya existe**, así que la primera versión se publica a mano:
+
+1. **La primera versión, desde tu terminal**, en la carpeta de este repo y con la versión de la etiqueta (`v0.17.0`):
 
    ```bash
-   bun add -d -E cmtool-core@0.17.0
-   bun run check && bun run build
+   npm login          # y comprueba con npm whoami
+   npm publish        # corre check y build antes de subir; npm te pide tu verificación en dos pasos
    ```
 
-   Para probar cambios del núcleo sin publicarlo, `bun link cmtool-core` enlaza la carpeta local (README, sección *Desarrollo*). No hagas commit con `link:`: la Action fallaría.
-2. **El token de npm** como secreto `NPM_TOKEN` del environment `prod` de este repo, igual que en el núcleo: *Settings* → *Environments* → `prod` → *Add environment secret*. Puede ser el mismo token, si su permiso cubre `cmtool-cli`.
-3. **Mejor, sin token: *trusted publishing*.** Después de la primera publicación, en npmjs.com → `cmtool-cli` → *Settings* → *Trusted Publisher* → *GitHub Actions*: usuario `alejandrodotor8`, repositorio `cmtool-cli`, workflow `release.yml`, environment `prod`. Después puedes borrar el secreto.
-4. **El push, desde este equipo**, entra con la llave SSH de `alejandrodotor8`: el remoto es `git@github-alejandrodotor8:alejandrodotor8/cmtool-cli.git`, con el alias de `~/.ssh/config`.
+2. **Sube la etiqueta de esa versión** (`git push origin v0.17.0`). La Action ve que ya está en npm y no hace nada.
+3. **Justo antes de publicar la segunda versión, registra la Action como trusted publisher** (pide tu verificación en dos pasos):
+
+   ```bash
+   npm trust github cmtool-cli --file release.yml --repo alejandrodotor8/cmtool-cli --env prod --allow-publish
+   npm trust list cmtool-cli   # para revisarlo
+   ```
+
+   **No lo hagas antes:** npm borra un trusted publisher nuevo si no publica nada en los 2 días siguientes. Regístralo y, ese mismo día, sube la etiqueta de la versión nueva. Desde ahí la Action publica sola, siempre.
+
+   Es lo mismo que en npmjs.com → `cmtool-cli` → *Settings* → *Trusted Publisher* → *GitHub Actions*, con *Allowed actions*: `npm publish`. **`--allow-publish` es necesario**: sin él, npm solo deja que el workflow prepare la publicación (`npm stage publish`) y que tú la apruebes.
+
+No uses un token con *bypass 2FA*: npm ya no deja que esos tokens publiquen directo (responde `EOTP`), y van a perder ese permiso del todo. Si ya creaste uno para esto, bórralo en npmjs.com (*Access Tokens*) y el secreto `NPM_TOKEN` del environment `prod` en GitHub: el workflow ya no lo usa.
+
+**El push, desde este equipo**, entra con la llave SSH de `alejandrodotor8`: el remoto es `git@github-alejandrodotor8:alejandrodotor8/cmtool-cli.git`, con el alias de `~/.ssh/config` (que no usa el agente, para no entrar con la llave de Pragma). En otro equipo basta `git@github.com:alejandrodotor8/cmtool-cli.git` con tu llave.
 
 ## Qué lleva el paquete
 
@@ -60,7 +82,7 @@ npm install -g --prefix /tmp/prueba-cfm /tmp/cmtool-cli-0.18.0.tgz
 
 `--prefix` lo instala en esa carpeta y no en tu sistema. En Windows (PowerShell), usa `$env:TEMP` en lugar de `/tmp`; el comando queda en `$env:TEMP\prueba-cfm\cfm.cmd`.
 
-Si la Action no está disponible, puedes publicar desde tu terminal: `npm login` y `npm publish`.
+Si la Action no está disponible, puedes publicar desde tu terminal: `npm login` y `npm publish`. Después sube la etiqueta igual: la Action verá que ya está publicada.
 
 ## Cómo lo instala el equipo
 
@@ -76,6 +98,6 @@ Con Node 22.18 o superior, en macOS o Windows:
 
 ## Si algo sale mal
 
-Los errores de la Action son los mismos que en el núcleo: etiqueta que no coincide con la versión, token que falta o venció (`ENEEDAUTH`, `E401`), permiso del token o trusted publisher (`E404`), nombre ajeno o versión repetida (`403`). La tabla con qué hacer en cada caso está en el `PUBLICAR.md` de `cmtool-core`. Después de corregir, *Re-run jobs* vuelve a correr la publicación.
+Los errores de la Action son los mismos que en el núcleo: etiqueta que no coincide con la versión, trusted publisher que falta o no coincide (`ENEEDAUTH`, `E401`, `E404`), que solo permite `stage` (`E403`), o un token en vez de trusted publishing (`EOTP`). La tabla con qué hacer en cada caso está en el `PUBLICAR.md` de `cmtool-core`. Después de corregir, *Re-run jobs* vuelve a correr la publicación; si la versión ya está en npm, no hace nada.
 
 Uno es propio del CLI: **la instalación falla con `link:cmtool-core`** (en la Action o con npm, `EUNSUPPORTEDPROTOCOL`). `package.json` todavía pide el núcleo enlazado: haz el paso 1 de la configuración.

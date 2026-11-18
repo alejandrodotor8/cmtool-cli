@@ -21,6 +21,7 @@ Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamie
 
 ### Agregado
 
+- **Se publica solo, con GitHub Actions**: [ci.yml](.github/workflows/ci.yml) revisa cada push y pull request, y [release.yml](.github/workflows/release.yml) publica en npm al subir una etiqueta `vX.Y.Z` (si coincide con la versión), con *provenance*. Repositorio: [github.com/alejandrodotor8/cmtool-cli](https://github.com/alejandrodotor8/cmtool-cli).
 - `test/architecture.test.ts`: el CLI solo importa el núcleo, `@clack/prompts` y `picocolors` (habla con Contentful solo a través del núcleo), y todo lo que importa está en `package.json`.
 - `test/security.test.ts` revisa que el CLI no llame por su cuenta ningún método del CMA que escribe: eso solo lo hace el writer del núcleo, que tiene sus propios tests.
 - [PUBLICAR.md](PUBLICAR.md): cómo publicar `cmtool-cli` en npm, y cómo lo instala el equipo.

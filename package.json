@@ -10,6 +10,14 @@
   ],
   "license": "MIT",
   "author": "Alejandro Dotor",
+  "homepage": "https://github.com/alejandrodotor8/cmtool-cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alejandrodotor8/cmtool-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alejandrodotor8/cmtool-cli/issues"
+  },
   "type": "module",
   "bin": {
     "cfm": "./bin/cfm.mjs",

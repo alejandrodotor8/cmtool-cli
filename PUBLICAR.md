@@ -1,24 +1,29 @@
 # Publicar cmtool-cli en npm
 
-`cmtool-cli` usa el núcleo, `cmtool-core`, y lo lleva dentro de su build. Por eso **primero se publica el núcleo** (con el `PUBLICAR.md` de su repo) y después el CLI. Esta guía no se incluye en el paquete: npm solo sube lo que dice `files` en `package.json`.
+Se publica **solo, con GitHub Actions, al subir una etiqueta de versión** (`v0.18.0`), igual que el núcleo. `cmtool-cli` lleva el núcleo (`cmtool-core`) dentro de su build, así que **primero se publica el núcleo** y después el CLI. Esta guía no se incluye en el paquete: npm solo sube lo que dice `files` en `package.json`.
 
-## Antes de la primera vez
+## Cómo funciona
 
-Se hace una sola vez.
+| Workflow | Cuándo corre | Qué hace |
+| --- | --- | --- |
+| [ci.yml](.github/workflows/ci.yml) | cada push a `main` y cada pull request | `check` (tipos, lint y tests), `build` y `npm pack --dry-run` |
+| [release.yml](.github/workflows/release.yml) | al subir una etiqueta `vX.Y.Z`, o al crear un Release en GitHub con una etiqueta nueva | revisa que la etiqueta sea la versión de `package.json`, y `npm publish --provenance --access public` |
 
-1. **Pide el núcleo desde npm, no enlazado.** Mientras el núcleo no esté en npm, `package.json` lo pide así: `"cmtool-core": "link:cmtool-core"`. Eso apunta a la carpeta del núcleo en tu equipo. Cuando ya esté publicado, cámbialo por su versión exacta:
+`npm publish` corre antes `prepublishOnly` (el `check`) y `prepack` (el `build`, así que `dist/cli.js` siempre sale del código actual). El paquete es **público y sin scope**, con licencia **MIT** a nombre de Alejandro Dotor ([LICENSE](LICENSE)). [test/app.test.ts](test/app.test.ts) falla si cambia lo que se sube o si falta la licencia.
+
+## Configuración (una sola vez)
+
+1. **El núcleo, desde npm.** La Action instala las dependencias desde npm, así que `package.json` tiene que pedir el núcleo con su versión exacta (`"cmtool-core": "0.17.0"`), no `link:cmtool-core`. Si todavía dice `link:`, cámbialo cuando el núcleo esté publicado:
 
    ```bash
    bun add -d -E cmtool-core@0.17.0
    bun run check && bun run build
    ```
 
-   Desde ahí el repo ya no necesita la carpeta del núcleo, y se instala con cualquier gestor (npm, pnpm, yarn o bun). Para seguir probando cambios del núcleo sin publicarlo, usa `bun link cmtool-core` (README, sección *Desarrollo*).
-2. **Comprueba que el nombre siga libre**: `npm view cmtool-cli` debe responder `404`; así estaba el 17 de noviembre de 2026.
-3. **Sube el repositorio** y agrega `repository`, `homepage` y `bugs` en `package.json`, con la dirección del repo. Así los enlaces del README funcionan en la página de npm.
-4. **Inicia sesión**: `npm login`, y comprueba la cuenta con `npm whoami`.
-
-**Ya está decidido y hecho** (17 de noviembre de 2026): el paquete es **público y sin scope**, con licencia **MIT** a nombre de Alejandro Dotor ([LICENSE](LICENSE)), y ya no tiene `"private": true`. Así que `npm publish` desde esta carpeta **publica de verdad**. En lugar de ese seguro, [test/app.test.ts](test/app.test.ts) falla si cambia lo que se sube o si falta la licencia, y `prepublishOnly` no deja publicar si un test falla.
+   Para probar cambios del núcleo sin publicarlo, `bun link cmtool-core` enlaza la carpeta local (README, sección *Desarrollo*). No hagas commit con `link:`: la Action fallaría.
+2. **El token de npm** como secreto `NPM_TOKEN` del environment `prod` de este repo, igual que en el núcleo: *Settings* → *Environments* → `prod` → *Add environment secret*. Puede ser el mismo token, si su permiso cubre `cmtool-cli`.
+3. **Mejor, sin token: *trusted publishing*.** Después de la primera publicación, en npmjs.com → `cmtool-cli` → *Settings* → *Trusted Publisher* → *GitHub Actions*: usuario `alejandrodotor8`, repositorio `cmtool-cli`, workflow `release.yml`, environment `prod`. Después puedes borrar el secreto.
+4. **El push, desde este equipo**, entra con la llave SSH de `alejandrodotor8`: el remoto es `git@github-alejandrodotor8:alejandrodotor8/cmtool-cli.git`, con el alias de `~/.ssh/config`.
 
 ## Qué lleva el paquete
 
@@ -26,10 +31,10 @@ Se hace una sola vez.
 | --- | --- |
 | `bin/cfm.mjs`, `bin/stale-build.mjs` | el comando `cfm` |
 | `bin/cfm-dev.mjs` | se instala, pero solo funciona desde el repositorio, y lo dice |
-| `dist/cli.js` | el build: el CLI, el núcleo y sus dependencias en un solo archivo. Se genera solo al empaquetar (`prepack`) |
+| `dist/cli.js` | el build: el CLI, el núcleo y sus dependencias en un solo archivo |
 | `README.md`, `CHANGELOG.md`, `LICENSE`, `package.json` | lo que se ve en la página de npm |
 
-Solo instala `picocolors`. No lleva `src/`, los tests ni el grafo. **La app de Mac y el `.exe` no van en npm**: se reparten como archivo (README, sección *Ejecutables para Mac y Windows*).
+Son 8 archivos, unos 191 kB, y solo instala `picocolors`. No lleva `src/`, los tests ni el grafo. **La app de Mac y el `.exe` no van en npm**: se reparten como archivo (README, sección *Ejecutables para Mac y Windows*).
 
 ## Cada versión
 
@@ -41,30 +46,21 @@ Solo instala `picocolors`. No lleva `src/`, los tests ni el grafo. **La app de M
    ```
 
 3. **Revisa que todo pase**: `bun run check`.
-4. **Mira qué se va a publicar**: `npm pack --dry-run`. Deben salir 8 archivos, unos 191 kB: los tres de `bin/`, `dist/cli.js`, `README.md`, `CHANGELOG.md`, `LICENSE` y `package.json`.
-5. **Pruébalo instalado como lo recibe otra persona**, sin tocar tu `cfm`:
+4. **Commit y push a `main`** (corre el CI): `git commit -am "Versión 0.18.0: …" && git push`.
+5. **Publica subiendo la etiqueta**: `git tag v0.18.0 && git push origin v0.18.0`. La Action *Publicar en npm* aparece en la pestaña *Actions*.
+6. **Verifica**: `npm view cmtool-cli version`.
 
-   ```bash
-   npm pack --pack-destination /tmp
-   npm install -g --prefix /tmp/prueba-cfm /tmp/cmtool-cli-0.18.0.tgz
-   /tmp/prueba-cfm/bin/cfm --version
-   ```
+Para probar el paquete instalado como lo recibe otra persona, sin tocar tu `cfm`:
 
-   `--prefix` lo instala en esa carpeta y no en tu sistema, así que tu `cfm` (el de `bun link`) no cambia. En Windows (PowerShell), usa `$env:TEMP` en lugar de `/tmp`, y el comando queda en `$env:TEMP\prueba-cfm\cfm.cmd`.
-6. **Publica**:
+```bash
+npm pack --pack-destination /tmp
+npm install -g --prefix /tmp/prueba-cfm /tmp/cmtool-cli-0.18.0.tgz
+/tmp/prueba-cfm/bin/cfm --version
+```
 
-   ```bash
-   npm publish
-   ```
+`--prefix` lo instala en esa carpeta y no en tu sistema. En Windows (PowerShell), usa `$env:TEMP` en lugar de `/tmp`; el comando queda en `$env:TEMP\prueba-cfm\cfm.cmd`.
 
-   `prepublishOnly` corre el `check`, así que si un test falla no se publica. `prepack` corre el `build`, así que `dist/cli.js` siempre sale del código actual. `bun publish` también sirve.
-7. **Verifica** (`npm view cmtool-cli version`) y **guarda la versión en git**:
-
-   ```bash
-   git commit -am "Versión 0.18.0: …"
-   git tag v0.18.0
-   git push && git push --tags
-   ```
+Si la Action no está disponible, puedes publicar desde tu terminal: `npm login` y `npm publish`.
 
 ## Cómo lo instala el equipo
 
@@ -80,6 +76,6 @@ Con Node 22.18 o superior, en macOS o Windows:
 
 ## Si algo sale mal
 
-Los errores de `npm publish` son los mismos que en el núcleo: nombre ajeno (`403`), versión repetida, código de verificación (`EOTP`) y sesión (`ENEEDAUTH`). La tabla con qué hacer en cada caso está en el `PUBLICAR.md` de `cmtool-core`.
+Los errores de la Action son los mismos que en el núcleo: etiqueta que no coincide con la versión, token que falta o venció (`ENEEDAUTH`, `E401`), permiso del token o trusted publisher (`E404`), nombre ajeno o versión repetida (`403`). La tabla con qué hacer en cada caso está en el `PUBLICAR.md` de `cmtool-core`. Después de corregir, *Re-run jobs* vuelve a correr la publicación.
 
-Uno es propio del CLI: **`npm install` falla con `EUNSUPPORTEDPROTOCOL` / `Unsupported URL Type "link:"`**. El repo todavía pide el núcleo enlazado. Ese formato solo lo entiende bun: haz el paso 1 de *Antes de la primera vez*.
+Uno es propio del CLI: **la instalación falla con `link:cmtool-core`** (en la Action o con npm, `EUNSUPPORTEDPROTOCOL`). `package.json` todavía pide el núcleo enlazado: haz el paso 1 de la configuración.

@@ -54,5 +54,8 @@
     "cmtool-core": "0.17.0",
     "esbuild": "0.25.10",
     "typescript": "7.0.2"
-  }
+  },
+  "trustedDependencies": [
+    "esbuild"
+  ]
 }

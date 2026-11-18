@@ -30,6 +30,7 @@ Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamie
 ### Corregido
 
 - El README decía que ninguna dependencia de desarrollo tiene script de instalación: esbuild sí lo tiene.
+- Con bun 1.4 (el que instala GitHub Actions), `bun install` agregaba esbuild a `trustedDependencies` en `package.json`, en una sola línea, y el lint fallaba. Ahora `package.json` ya lo trae. No cambia lo que se instala: bun 1.3 ya confiaba en esbuild y corría su script.
 
 ## 0.16.1 — 2026-10-09
 

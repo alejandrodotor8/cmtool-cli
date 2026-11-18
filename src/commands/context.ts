@@ -6,32 +6,20 @@
 import {
   AbortError,
   type Account,
-  allPicks,
-  applyDecision,
   type BackupData,
-  type Cma,
   type ContentType,
-  createCma,
-  createWriter,
-  currentUser,
+  connect,
   type Decision,
-  type EditorInterface,
   type Environment,
-  type Loaders,
-  listEnvironments,
-  listSpaces,
+  type Envs,
   looksLikeProduction,
-  type ModelOption,
+  type MigrationTree,
+  type ModelChoices,
   type ModelPick,
-  pickKey,
-  readContentTypes,
-  readEditorInterfaces,
-  readLocales,
-  remember,
   resolveEnvironment,
   type Space,
-  type UpdateCandidate,
-  type WriteContext,
+  type SpaceConnection,
+  type WriteTools,
 } from 'cmtool-core';
 import { startBackup } from 'cmtool-core/node';
 import pc from 'picocolors';
@@ -48,36 +36,27 @@ import { withStatus } from '../ui/status.ts';
 import { renderRepeat } from '../ui/views/summary.ts';
 
 /**
- * Sesión, contador de llamadas a la API, si se muestran animaciones, un cliente sin space
- * y lo que se lee una sola vez por ejecución: spaces, ambientes de cada space y la cuenta.
+ * Sesión, contador de llamadas a la API, si se muestran animaciones y la conexión con
+ * Contentful, que lee una sola vez por ejecución lo que se vuelve a pedir (spaces, ambientes,
+ * modelos…).
  */
 function createSession(args: Pick<CliArgs, 'verbose'>) {
   const session = loadSession();
   const api = trackApiCalls(args.verbose);
   const animate = shouldAnimate(args.verbose);
-  const client = createCma(session, undefined, api.onRequest);
-  const cmaFor = remember(async (spaceId) => createCma(session, spaceId, api.onRequest));
-  const spaces = remember(() => listSpaces(client));
-  const environments = remember(async (spaceId) => listEnvironments(await cmaFor(spaceId)));
-  const user = remember(() => currentUser(client));
+  const contentful = connect(session, { onRequest: api.onRequest });
   let account: Promise<Account> | undefined;
   return {
     session,
     api,
     animate,
-    client,
-    cmaFor,
-    spaces: () => spaces(''),
-    environments,
-    user: () => user(''),
+    contentful,
+    /** La cuenta, con su mensaje la primera vez que se pide. */
     account: (): Promise<Account> => {
       account ??= withStatus(
         'Verificando tu cuenta…',
         animate,
-        async () => {
-          const found = await user('');
-          return { userId: found.id, email: found.email, host: session.host };
-        },
+        () => contentful.account(),
         (a) => `Cuenta: ${a.email ?? a.userId}`,
       );
       return account;
@@ -107,54 +86,48 @@ export function prefetch(args: Pick<CliArgs, 'verbose' | 'command' | 'space'>): 
   } catch {
     return; // sin sesión: el comando lo explica
   }
+  const { contentful } = base;
   if (args.command === 'history' || args.command === 'restore') {
-    base.user().catch(() => {});
+    contentful.account().catch(() => {});
     return;
   }
-  base
+  contentful
     .spaces()
     .then((found) => {
       const preferred = args.space ?? base.session.defaultSpaceId;
       const id = found.length === 1 ? found[0]?.sys.id : found.find((s) => s.sys.id === preferred)?.sys.id;
-      if (id) return base.environments(id);
+      if (id) return contentful.space(id).environments();
     })
     .catch(() => {});
 }
 
 export type SessionContext = ReturnType<typeof openSession>;
 
-export interface Context extends SessionContext, Loaders {
-  /** Apariencia del editor de todos los content types de un ambiente (1 llamada, memorizada). */
-  editorInterfaces: (env: string) => Promise<Map<string, EditorInterface>>;
-  cma: Cma;
+/** Space, origen y destino elegidos, con la sesión. Las lecturas del space ya quedan guardadas en `space`. */
+export interface Context extends SessionContext, Envs {
+  space: SpaceConnection;
   spaceId: string;
-  src: string;
-  dst: string;
   dstEnv: Environment;
 }
 
-/** Aplica una decisión pasada por flag y avisa lo que ya no está disponible. */
-function decide(available: string[], decision: Decision, flag: string): Set<string> {
-  const { chosen, unknown } = applyDecision(available, decision);
+/** Cuenta lo que eligió un flag y avisa lo que ya no está disponible. */
+function reportFlag(flag: string, chosen: number, available: number, unknown: string[]): void {
   if (unknown.length) log.warn(`--${flag}: ya no hay nada que hacer con ${unknown.join(', ')}.`);
-  log.info(`--${flag}: ${chosen.length} de ${available.length}, sin preguntar`);
-  return new Set(chosen);
+  log.info(`--${flag}: ${chosen} de ${available}, sin preguntar`);
 }
 
 /** `--update`: qué entries existentes actualizar, sin preguntar. */
-export const updatesFromFlag = (candidates: UpdateCandidate[], decision: Decision): string[] => [
-  ...decide(
-    candidates.map((c) => c.id),
-    decision,
-    'update',
-  ),
-];
+export function updatesFromFlag(tree: MigrationTree, decision: Decision): Set<string> {
+  const { chosen, unknown } = tree.applyUpdateDecision(decision);
+  reportFlag('update', chosen.size, tree.candidates.length, unknown);
+  return chosen;
+}
 
 /** `--model`: qué cambios de modelo aplicar, sin preguntar. */
-export function modelPicksFromFlag(options: ModelOption[], decision: Decision): ModelPick[] {
-  const available = allPicks(options);
-  const keys = decide(available.map(pickKey), decision, 'model');
-  return available.filter((pick) => keys.has(pickKey(pick)));
+export function modelPicksFromFlag(choices: ModelChoices, decision: Decision): ModelPick[] {
+  const { picked, unknown } = choices.apply(decision);
+  reportFlag('model', picked.length, choices.all.length, unknown);
+  return picked;
 }
 
 /** Ambiente pasado por flag (ID o alias); si no existe, se detiene. */
@@ -171,19 +144,18 @@ function requireEnvironment(envs: Environment[], name: string): string {
  */
 export function contextSteps(args: CliArgs): { steps: Step[]; ctx: () => Context } {
   const base = openSession(args);
-  const { session, animate } = base;
+  const { session, animate, contentful } = base;
   let spaceId = '';
   let src = '';
   let dst = '';
-  let cma: Cma | undefined;
   let context: Context | undefined;
 
-  // Lo que se lee queda en la sesión: volver atrás no repite llamadas.
+  // Lo que se lee queda en la conexión: volver atrás no repite llamadas.
   const environments = (id: string) =>
     withStatus(
       'Leyendo ambientes…',
       animate,
-      () => base.environments(id),
+      () => contentful.space(id).environments(),
       (found) => `${found.length} ambientes`,
     );
 
@@ -192,7 +164,7 @@ export function contextSteps(args: CliArgs): { steps: Step[]; ctx: () => Context
       const found = await withStatus(
         'Conectando con Contentful…',
         animate,
-        () => base.spaces(),
+        () => contentful.spaces(),
         (list) => `Conectado · ${list.length} space(s)`,
       );
       if (!found.length) throw new AbortError('Tu usuario no tiene acceso a ningún space.');
@@ -202,7 +174,6 @@ export function contextSteps(args: CliArgs): { steps: Step[]; ctx: () => Context
       spaceId =
         args.space ??
         (found.length === 1 ? (found[0] as Space).sys.id : await pickSpace(found, session.defaultSpaceId));
-      cma = await base.cmaFor(spaceId);
     },
     async () => {
       const envs = await environments(spaceId);
@@ -219,7 +190,7 @@ export function contextSteps(args: CliArgs): { steps: Step[]; ctx: () => Context
       const envs = await environments(spaceId);
       dst = args.to ? requireEnvironment(envs, args.to) : await pickDestination(envs, src);
       if (src === dst) throw new AbortError('Origen y destino son el mismo ambiente.');
-      context = buildContext(base, { cma: cma as Cma, spaceId, src, dst, envs });
+      context = buildContext(base, { spaceId, src, dst, envs });
     },
   ];
   return {
@@ -241,18 +212,15 @@ export async function openContext(args: CliArgs): Promise<Context> {
 /** Contexto a partir de sus partes (también lo usa restore, que toma space y ambientes del respaldo). */
 export function buildContext(
   base: SessionContext,
-  { cma, spaceId, src, dst, envs }: { cma: Cma; spaceId: string; src: string; dst: string; envs: Environment[] },
+  { spaceId, src, dst, envs }: { spaceId: string; src: string; dst: string; envs: Environment[] },
 ): Context {
   return {
     ...base,
-    cma,
+    space: base.contentful.space(spaceId),
     spaceId,
     src,
     dst,
     dstEnv: envs.find((e) => e.id === dst) ?? { id: dst, aliases: [] },
-    contentTypes: remember((env) => readContentTypes(cma, env)),
-    locales: remember((env) => readLocales(cma, env)),
-    editorInterfaces: remember((env) => readEditorInterfaces(cma, env)),
   };
 }
 
@@ -261,25 +229,9 @@ export function loadModels(ctx: Context): Promise<[Map<string, ContentType>, Map
   return withStatus(
     'Leyendo modelos…',
     ctx.animate,
-    () => Promise.all([ctx.contentTypes(ctx.src), ctx.contentTypes(ctx.dst)]),
+    () => Promise.all([ctx.space.contentTypes(ctx.src), ctx.space.contentTypes(ctx.dst)]),
     ([src, dst]) => `${src.size} content types en ${ctx.src} · ${dst.size} en ${ctx.dst}`,
   );
-}
-
-/** Apariencia del editor de origen y destino (2 llamadas la primera vez). */
-export function loadEditors(ctx: Context): Promise<[Map<string, EditorInterface>, Map<string, EditorInterface>]> {
-  return withStatus(
-    'Leyendo la apariencia del editor…',
-    ctx.animate,
-    () => Promise.all([ctx.editorInterfaces(ctx.src), ctx.editorInterfaces(ctx.dst)]),
-    () => 'Apariencia del editor leída',
-  );
-}
-
-/** Los content types pasados con --content-type tienen que existir en origen o destino. */
-export function requireContentTypes(ids: string[] | undefined, ...models: Map<string, ContentType>[]): void {
-  const unknown = (ids ?? []).filter((id) => !models.some((m) => m.has(id)));
-  if (unknown.length) throw new AbortError(`Estos content types no existen: ${unknown.join(', ')}`);
 }
 
 /** Pregunta antes de escribir (con la confirmación reforzada en producción). `false` si el usuario no sigue. */
@@ -289,18 +241,17 @@ export async function confirmWriting(ctx: Context, question: string): Promise<bo
   return false;
 }
 
-/** Contexto de escritura del CLI: el respaldo va a un archivo, y su ruta se muestra al terminar. */
-export type FileWriteContext = WriteContext & { backup: ReturnType<typeof startBackup> };
+/** Con qué escribe el CLI: el respaldo va a un archivo (su ruta se muestra al terminar) y el avance, a la terminal. */
+export type FileWriteTools = WriteTools & { backup: ReturnType<typeof startBackup> };
 
-/** Respaldo (en la carpeta de la cuenta), writer y runner para empezar a escribir en destino. */
+/** Respaldo (en la carpeta de la cuenta) y runner para empezar a escribir. El writer lo pone cada migración. */
 export async function startWriting(
   ctx: Context,
   kind: BackupData['kind'],
   rootIds: string[] = [],
-): Promise<FileWriteContext> {
+): Promise<FileWriteTools> {
   const account = await ctx.account();
   return {
-    writer: createWriter(ctx.cma, { src: ctx.src, dst: ctx.dst }),
     backup: startBackup({ kind, account, spaceId: ctx.spaceId, src: ctx.src, dst: ctx.dst, rootIds }),
     runner: createRunner({ animate: ctx.animate }),
   };
@@ -309,7 +260,7 @@ export async function startWriting(
 /** Cierre después de escribir: recuadro con respaldo y llamadas, y mensaje final. Devuelve el código de salida. */
 export function finishWriting(
   ctx: SessionContext,
-  { backup, runner }: Pick<FileWriteContext, 'backup' | 'runner'>,
+  { backup, runner }: FileWriteTools,
   { title, lines = [], repeat, done }: { title: string; lines?: string[]; repeat?: string; done: string },
 ): number {
   const failed = runner.failures.length;

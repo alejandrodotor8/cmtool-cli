@@ -10,33 +10,13 @@
 
 import {
   AbortError,
-  type Analysis,
-  allPicks,
-  analyzeTree,
-  brokenHyperlinks,
-  buildPlan,
-  cache,
-  changesSinceAnalysis,
-  completeAnalysis,
-  contentTypeOf,
-  defaultUpdates,
-  editorDiffsFor,
-  executePlan,
-  hasModelChanges,
-  isWrite,
+  entryMigration,
   LIMITS,
-  type ModelOption,
+  type MigrationPlan,
+  type MigrationReview,
+  type MigrationTree,
+  type ModelChoices,
   type ModelPick,
-  modelOptions,
-  type Plan,
-  pickKey,
-  requiredGaps,
-  type TreeAnalysis,
-  toDecision,
-  type UpdateCandidate,
-  updateCandidates,
-  withActions,
-  writtenContentTypes,
 } from 'cmtool-core';
 import pc from 'picocolors';
 import { APP_NAME } from '../app.ts';
@@ -58,7 +38,6 @@ import {
   finishDryRun,
   finishReading,
   finishWriting,
-  loadEditors,
   modelPicksFromFlag,
   startWriting,
   updatesFromFlag,
@@ -68,18 +47,16 @@ export async function migrate(args: CliArgs): Promise<number> {
   printTitle('Migrar entries', { dryRun: args.dryRun, note: 'entries e imágenes quedan en draft' });
 
   const context = contextSteps(args);
-  const trees = cache<TreeAnalysis>();
-  const analyses = cache<Analysis>();
   let ctx: Context;
   let rootIds: string[] = [];
-  let tree: TreeAnalysis;
-  let candidates: UpdateCandidate[] = [];
+  // Cada etapa sale de la anterior (ver entryMigration en cmtool-core). Volver atrás no repite lecturas.
+  let tree: MigrationTree;
   let toUpdate = new Set<string>();
-  let analysis: Analysis;
+  let review: MigrationReview;
   let withAssets: boolean | undefined;
-  let options: ModelOption[] = [];
+  let choices: ModelChoices | undefined;
   let picked: ModelPick[] = [];
-  let plan: Plan;
+  let plan: MigrationPlan;
 
   /** El comando que repite esta migración con todo lo que se eligió. */
   const repeat = () =>
@@ -88,14 +65,9 @@ export async function migrate(args: CliArgs): Promise<number> {
       src: ctx.src,
       dst: ctx.dst,
       ids: rootIds,
-      update: candidates.length
-        ? toDecision(
-            candidates.map((c) => c.id),
-            toUpdate,
-          )
-        : undefined,
+      update: tree.updateDecision(toUpdate),
       assets: withAssets,
-      model: options.length ? toDecision(allPicks(options).map(pickKey), picked.map(pickKey)) : undefined,
+      model: choices?.all.length ? choices.decisionFor(picked) : undefined,
     });
 
   const code = await steps([
@@ -107,33 +79,28 @@ export async function migrate(args: CliArgs): Promise<number> {
       if (!rootIds.length) return finishReading(ctx, 'No se eligió ninguna entry.');
     },
 
-    // 2. Árbol: qué existe en destino y qué cambió; decidir qué actualizar de lo que ya existe
+    // 2. El árbol: qué existe en destino y qué cambió; decidir qué actualizar de lo que ya existe
     async () => {
       const { src, dst } = ctx;
-      tree = await trees(`${ctx.spaceId}|${src}|${dst}|${rootIds.join(',')}`, () =>
-        withStatus(
-          `Analizando ${src} ──▶ ${dst}…`,
-          ctx.animate,
-          (status) => analyzeTree(ctx.cma, { src, dst, rootIds }, status.update, ctx),
-          (t) => `Árbol listo · ${t.tree.entries.size} entries · ${ctx.api.count} llamadas`,
-        ),
+      tree = await withStatus(
+        `Analizando ${src} ──▶ ${dst}…`,
+        ctx.animate,
+        (status) => entryMigration(ctx.space, ctx).analyze(rootIds, status.update),
+        (t) => `Árbol listo · ${t.analysis.tree.entries.size} entries · ${ctx.api.count} llamadas`,
       );
-      candidates = updateCandidates(tree);
-      toUpdate = defaultUpdates(candidates);
-      renderEntryTree(withActions(tree, toUpdate));
-      if (!candidates.length) return;
+      toUpdate = tree.defaultUpdates();
+      renderEntryTree(tree.preview(toUpdate));
+      if (!tree.candidates.length) return;
 
-      const chosen = new Set(
-        args.update
-          ? updatesFromFlag(candidates, args.update)
-          : await askEntryUpdates(candidates, { titleOf: (id) => titleOfId(tree, id), src, dst }),
-      );
+      const chosen = args.update
+        ? updatesFromFlag(tree, args.update)
+        : new Set(await askEntryUpdates(tree.candidates, { titleOf: (id) => titleOfId(tree, id), src, dst }));
       const changedChoice = chosen.size !== toUpdate.size || [...chosen].some((id) => !toUpdate.has(id));
       toUpdate = chosen;
-      if (changedChoice) renderEntryTree(withActions(tree, toUpdate), 'Entries con tu elección');
+      if (changedChoice) renderEntryTree(tree.preview(toUpdate), 'Entries con tu elección');
     },
     async () => {
-      const writes = [...withActions(tree, toUpdate).actions.values()].filter(isWrite).length;
+      const writes = tree.writes(toUpdate);
       if (!args.dryRun && writes > LIMITS.confirmWritesAbove && !(await confirmLargeMigration(writes, ctx.dst))) {
         printCancelled();
         return 0;
@@ -142,15 +109,13 @@ export async function migrate(args: CliArgs): Promise<number> {
 
     // 3. Imágenes y modelo de lo que se escribe
     async () => {
-      const key = `${ctx.spaceId}|${ctx.src}|${ctx.dst}|${rootIds.join(',')}|${[...toUpdate].sort().join(',')}`;
-      analysis = await analyses(key, () =>
-        withStatus(
-          'Revisando modelo, imágenes y tags…',
-          ctx.animate,
-          (status) => completeAnalysis(ctx.cma, tree, toUpdate, status.update, ctx),
-          (a) => `Análisis listo · ${a.diffs.size} content types · ${ctx.api.count} llamadas`,
-        ),
+      review = await withStatus(
+        'Revisando modelo, imágenes y tags…',
+        ctx.animate,
+        (status) => tree.review(toUpdate, status.update),
+        (r) => `Análisis listo · ${r.analysis.diffs.size} content types · ${ctx.api.count} llamadas`,
       );
+      const { analysis } = review;
       withAssets = undefined;
       if (!analysis.assets.ids.length) return;
       renderAssets(analysis);
@@ -164,30 +129,31 @@ export async function migrate(args: CliArgs): Promise<number> {
       }
     },
     async () => {
+      const { analysis } = review;
+      choices = await withStatus(
+        'Leyendo la apariencia del editor…',
+        ctx.animate,
+        () => review.modelChoices(),
+        () => 'Apariencia del editor leída',
+      );
       const usedBy = (ctId: string) =>
-        [...analysis.tree.entries.values()]
-          .filter((e) => contentTypeOf(e) === ctId)
-          .map((e) => analysis.titleOf(e) + (isWrite(analysis.actions.get(e.sys.id)) ? '' : ' (reutilizada)'));
-      const [srcEditors, dstEditors] = await loadEditors(ctx);
-      const editorDiffs = editorDiffsFor(analysis.diffs.values(), srcEditors, dstEditors);
+        review.entriesOf(ctId).map(({ title, written }) => title + (written ? '' : ' (reutilizada)'));
       renderModelDiffs(
         analysis.diffs.values(),
-        { src: ctx.src, dst: ctx.dst, dstDefault: analysis.locales.dst.default, editorDiffs },
+        { src: ctx.src, dst: ctx.dst, dstDefault: analysis.locales.dst.default, editorDiffs: choices.editorDiffs },
         usedBy,
       );
-      options = modelOptions(analysis.diffs.values(), writtenContentTypes(analysis), editorDiffs);
-      if (!options.length) picked = [];
-      else picked = args.model ? modelPicksFromFlag(options, args.model) : await askModelChanges(options, ctx.dst);
+      if (!choices.all.length) picked = [];
+      else
+        picked = args.model ? modelPicksFromFlag(choices, args.model) : await askModelChanges(choices.options, ctx.dst);
     },
 
     // 4. Resumen (con el comando para repetirlo) y confirmación
     async () => {
-      plan = buildPlan(analysis, { withAssets: withAssets ?? false, picked });
-      if (!plan.entries.length && !hasModelChanges(plan) && !plan.tagsToCreate.length) {
-        return finishReading(ctx, `No hay nada que crear ni actualizar en ${ctx.dst}.`);
-      }
-      renderSummary(analysis, plan, { gaps: requiredGaps(analysis, plan), hyperlinks: brokenHyperlinks(analysis) });
-      renderModelPicks(options, picked, ctx.dst);
+      plan = review.plan({ withAssets: withAssets ?? false, picked });
+      if (plan.isEmpty) return finishReading(ctx, `No hay nada que crear ni actualizar en ${ctx.dst}.`);
+      renderSummary(review.analysis, plan.plan, { gaps: plan.gaps, hyperlinks: plan.brokenHyperlinks });
+      renderModelPicks(choices?.options ?? [], picked, ctx.dst);
       if (args.dryRun) return finishDryRun(ctx, ['Para migrar de verdad:', pc.cyan(repeat())]);
       renderRepeat(repeat());
       const question = `¿Migrar a ${pc.bold(ctx.dst)}? ${pc.dim('(entries e imágenes en draft)')}`;
@@ -200,7 +166,7 @@ export async function migrate(args: CliArgs): Promise<number> {
       const changed = await withStatus(
         `Verificando que ${ctx.dst} no cambió…`,
         ctx.animate,
-        () => changesSinceAnalysis(ctx.cma, analysis),
+        () => plan.changesInDestination(),
         (list) => (list.length ? `${ctx.dst} cambió` : `${ctx.dst} sigue igual`),
       );
       if (changed.length) {
@@ -211,7 +177,7 @@ export async function migrate(args: CliArgs): Promise<number> {
       }
 
       const write = await startWriting(ctx, 'migrate', rootIds);
-      await executePlan(plan, analysis, () => ctx.editorInterfaces(ctx.src), write);
+      await plan.execute(write);
       return finishWriting(ctx, write, {
         title: 'Migración lista',
         lines: rootIds.map((id) =>
@@ -226,7 +192,7 @@ export async function migrate(args: CliArgs): Promise<number> {
 }
 
 /** Título de una entry del árbol por su ID. */
-function titleOfId(tree: TreeAnalysis, id: string): string {
-  const entry = tree.tree.entries.get(id);
-  return entry ? tree.titleOf(entry) : id;
+function titleOfId({ analysis }: MigrationTree, id: string): string {
+  const entry = analysis.tree.entries.get(id);
+  return entry ? analysis.titleOf(entry) : id;
 }

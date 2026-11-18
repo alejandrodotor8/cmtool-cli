@@ -4,24 +4,7 @@
  * Nunca borra campos ni cambia su ID o tipo.
  */
 
-import {
-  allPicks,
-  applyModelChanges,
-  type ContentType,
-  changesStructure,
-  compareModels,
-  type EditorInterface,
-  editorDiffsFor,
-  hasModelChanges,
-  type ModelChanges,
-  type ModelOption,
-  type ModelPick,
-  modelChangesFrom,
-  modelOptions,
-  notAddedFields,
-  pickKey,
-  toDecision,
-} from 'cmtool-core';
+import { type ModelPick, type ModelPlan, type ModelReview, modelMigration } from 'cmtool-core';
 import pc from 'picocolors';
 import { APP_NAME } from '../app.ts';
 import { type CliArgs, repeatCommand } from '../cli-args.ts';
@@ -29,6 +12,7 @@ import { printTitle } from '../ui/header.ts';
 import { log } from '../ui/log.ts';
 import { steps } from '../ui/navigation.ts';
 import { askModelChanges } from '../ui/prompts.ts';
+import { withStatus } from '../ui/status.ts';
 import { renderModelDiffs, renderModelOverview } from '../ui/views/model.ts';
 import { modelSummary, renderModelPicks, renderRepeat } from '../ui/views/summary.ts';
 import {
@@ -38,10 +22,7 @@ import {
   finishDryRun,
   finishReading,
   finishWriting,
-  loadEditors,
-  loadModels,
   modelPicksFromFlag,
-  requireContentTypes,
   startWriting,
 } from './context.ts';
 
@@ -52,12 +33,10 @@ export async function migrateModel(args: CliArgs): Promise<number> {
   printTitle('Migrar modelo', { dryRun: args.dryRun, note: 'solo el modelo, sin contenido' });
   const context = contextSteps(args);
   let ctx: Context;
-  let srcCTs: Map<string, ContentType>;
-  let dstCTs: Map<string, ContentType>;
-  let srcEditors: Map<string, EditorInterface>;
-  let options: ModelOption[] = [];
+  // Las etapas salen de modelMigration (cmtool-core): comparar → elegir → plan → escribir.
+  let review: ModelReview;
   let picked: ModelPick[] = [];
-  let changes: ModelChanges;
+  let plan: ModelPlan;
 
   const repeat = () =>
     repeatCommand('migrate-model', {
@@ -65,54 +44,51 @@ export async function migrateModel(args: CliArgs): Promise<number> {
       src: ctx.src,
       dst: ctx.dst,
       contentTypes: args.contentTypes,
-      model: toDecision(allPicks(options).map(pickKey), picked.map(pickKey)),
+      model: review.choices.decisionFor(picked),
     });
 
   const code = await steps([
     ...context.steps,
     async () => {
       ctx = context.ctx();
-      [srcCTs, dstCTs] = await loadModels(ctx);
-      requireContentTypes(args.contentTypes, srcCTs, dstCTs);
-      let dstEditors: Map<string, EditorInterface>;
-      [srcEditors, dstEditors] = await loadEditors(ctx);
-      const diffs = compareModels(srcCTs, dstCTs, args.contentTypes).diffs;
-      const editorDiffs = editorDiffsFor(diffs, srcEditors, dstEditors);
-      options = modelOptions(diffs, undefined, editorDiffs);
-      const candidates = options.map((o) => o.diff);
-      if (!candidates.length) {
+      review = await withStatus(
+        'Leyendo modelos…',
+        ctx.animate,
+        (status) => modelMigration(ctx.space, ctx).analyze({ contentTypes: args.contentTypes }, status.update),
+        ({ models }) => `${models.src.size} content types en ${ctx.src} · ${models.dst.size} en ${ctx.dst}`,
+      );
+      const { choices } = review;
+      if (review.isUpToDate) {
         return finishReading(ctx, `El modelo de ${ctx.dst} ya tiene todo lo de ${ctx.src}, con la misma apariencia.`);
       }
 
-      const view = { src: ctx.src, dst: ctx.dst, dstDefault: (await ctx.locales(ctx.dst)).default, editorDiffs };
+      const candidates = choices.options.map((o) => o.diff);
+      const dstDefault = (await ctx.space.locales(ctx.dst)).default;
+      const view = { src: ctx.src, dst: ctx.dst, dstDefault, editorDiffs: choices.editorDiffs };
       renderModelOverview({ diffs: candidates, onlyInDst: [] }, view);
       if (candidates.length <= DETAIL_LIMIT) renderModelDiffs(candidates, view);
       else log.info(`Para ver el detalle campo por campo: ${APP_NAME} compare-models --content-type <id>`);
 
-      picked = args.model ? modelPicksFromFlag(options, args.model) : await askModelChanges(options, ctx.dst);
-      changes = modelChangesFrom(picked, srcCTs);
-      if (!hasModelChanges(changes)) return finishReading(ctx, `El modelo de ${ctx.dst} queda como está.`);
+      picked = args.model ? modelPicksFromFlag(choices, args.model) : await askModelChanges(choices.options, ctx.dst);
+      plan = review.plan(picked);
+      if (plan.isEmpty) return finishReading(ctx, `El modelo de ${ctx.dst} queda como está.`);
     },
     async () => {
       log.step('Resumen');
-      renderModelPicks(options, picked, ctx.dst);
-      log.block(`${pc.bold('Modelo')}  ${modelSummary(changes)}`);
-      const notAdded = notAddedFields(
-        options.map((o) => o.diff),
-        changes.fieldsToAdd,
-      );
-      if (notAdded.length) log.info(`Quedan sin agregar: ${notAdded.join(', ')}`);
+      renderModelPicks(review.choices.options, picked, ctx.dst);
+      log.block(`${pc.bold('Modelo')}  ${modelSummary(plan.changes)}`);
+      if (plan.notAdded.length) log.info(`Quedan sin agregar: ${plan.notAdded.join(', ')}`);
       if (args.dryRun) return finishDryRun(ctx, ['Para aplicarlo de verdad:', pc.cyan(repeat())]);
       renderRepeat(repeat());
       if (!(await confirmWriting(ctx, `¿Aplicar estos cambios al modelo de ${pc.bold(ctx.dst)}?`))) return 0;
     },
     async () => {
       const write = await startWriting(ctx, 'model');
-      await applyModelChanges(changes, new Map(dstCTs), async () => srcEditors, write);
+      await plan.execute(write);
       return finishWriting(ctx, write, {
         title: 'Modelo actualizado',
         repeat: repeat(),
-        done: changesStructure(changes)
+        done: plan.changesStructure
           ? 'Listo. Los cambios del modelo quedaron publicados (Contentful lo exige para usarlos).'
           : 'Listo. La apariencia del editor quedó copiada.',
       });

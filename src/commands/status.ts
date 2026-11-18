@@ -25,10 +25,10 @@ export async function status(args: CliArgs): Promise<number> {
         ctx.animate,
         () =>
           Promise.all([
-            ctx.locales(ctx.src),
-            ctx.locales(ctx.dst),
-            readTags(ctx.cma, ctx.src),
-            readTags(ctx.cma, ctx.dst),
+            ctx.space.locales(ctx.src),
+            ctx.space.locales(ctx.dst),
+            readTags(ctx.space.cma, ctx.src),
+            readTags(ctx.space.cma, ctx.dst),
           ]),
         () => 'Idiomas y tags revisados',
       );

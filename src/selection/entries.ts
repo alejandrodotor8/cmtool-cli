@@ -110,7 +110,7 @@ async function byMethod(ctx: Context, method: Method): Promise<string[]> {
       let contentType = '';
       await steps([
         async () => {
-          contentType = await pickContentType((await ctx.contentTypes(ctx.src)).values());
+          contentType = await pickContentType((await ctx.space.contentTypes(ctx.src)).values());
         },
         async () => {
           ids = await searchAndPick(ctx, { contentTypes: [contentType] }, { textRequired: false });
@@ -175,7 +175,7 @@ async function pickTag(ctx: Context): Promise<string> {
   const tags = await withStatus(
     `Leyendo tags de ${ctx.src}…`,
     ctx.animate,
-    () => readTags(ctx.cma, ctx.src),
+    () => readTags(ctx.space.cma, ctx.src),
     (found) => `${found.size} tag(s)`,
   );
   if (!tags.size) throw new AbortError(`${ctx.src} no tiene tags.`);
@@ -213,8 +213,8 @@ async function searchAndPick(
 
 /** Opciones para elegir entries: título, content type, ID y fecha de última edición. */
 async function entryChoices(ctx: Context, entries: Entry[]): Promise<Choice<string>[]> {
-  const cts = await ctx.contentTypes(ctx.src);
-  const titleOf = makeTitleOf(cts, (await ctx.locales(ctx.src)).default);
+  const cts = await ctx.space.contentTypes(ctx.src);
+  const titleOf = makeTitleOf(cts, (await ctx.space.locales(ctx.src)).default);
   return entries.map((e) => ({
     value: e.sys.id,
     label: clip(titleOf(e), 50),
@@ -231,7 +231,7 @@ async function pickFromSearch(
   const results = await withStatus(
     `Buscando en ${ctx.src}…`,
     ctx.animate,
-    () => searchEntries(ctx.cma, ctx.src, entryQueryParams(query, LIMITS.searchResults)),
+    () => searchEntries(ctx.space.cma, ctx.src, entryQueryParams(query, LIMITS.searchResults)),
     (found) => `${found.length} resultado(s)`,
   );
   if (!results.length) return [];
@@ -247,7 +247,7 @@ async function pickFromSearch(
  * páginas (con tope) y verifica en destino solo esos IDs.
  */
 async function missingInDst(ctx: Context, contentType: string | undefined, since: string | undefined) {
-  const cts = await ctx.contentTypes(ctx.src);
+  const cts = await ctx.space.contentTypes(ctx.src);
   let ids: string[] = [];
   let ctId = contentType ?? '';
   await steps([
@@ -268,7 +268,7 @@ async function pickMissing(ctx: Context, ctId: string, since: string | undefined
     `Leyendo ${ctId} en ${ctx.src}…`,
     ctx.animate,
     () =>
-      listEntries(ctx.cma, ctx.src, entryQueryParams({ contentTypes: [ctId], since }, LIMITS.missingPageSize), {
+      listEntries(ctx.space.cma, ctx.src, entryQueryParams({ contentTypes: [ctId], since }, LIMITS.missingPageSize), {
         pageSize: LIMITS.missingPageSize,
         max: LIMITS.missingMaxEntries,
       }),
@@ -279,7 +279,7 @@ async function pickMissing(ctx: Context, ctId: string, since: string | undefined
     ctx.animate,
     () =>
       fetchEntries(
-        ctx.cma,
+        ctx.space.cma,
         ctx.dst,
         srcEntries.map((e) => e.sys.id),
       ),

@@ -49,7 +49,7 @@ async function searchAssetsAndPick(ctx: Context, text: string, { preselect }: { 
   const results = await withStatus(
     `Buscando en ${ctx.src}…`,
     ctx.animate,
-    () => searchAssets(ctx.cma, ctx.src, text, LIMITS.searchResults),
+    () => searchAssets(ctx.space.cma, ctx.src, text, LIMITS.searchResults),
     (found) => `${found.length} resultado(s)`,
   );
   if (!results.length) {

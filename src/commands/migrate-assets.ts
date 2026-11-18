@@ -3,7 +3,7 @@
  * ya existen en destino se reutilizan; los nuevos quedan en draft.
  */
 
-import { type Asset, applyAssets, fetchAssets, type Locales } from 'cmtool-core';
+import { type AssetReview, assetMigration } from 'cmtool-core';
 import pc from 'picocolors';
 import { type CliArgs, repeatCommand } from '../cli-args.ts';
 import { selectAssetIds } from '../selection/assets.ts';
@@ -28,8 +28,7 @@ export async function migrateAssets(args: CliArgs): Promise<number> {
   const context = contextSteps(args);
   let ctx: Context;
   let ids: string[] = [];
-  let toCreate: Asset[] = [];
-  let dstLocales: Locales;
+  let review: AssetReview;
   const repeat = () => repeatCommand('migrate-assets', { spaceId: ctx.spaceId, src: ctx.src, dst: ctx.dst, ids });
 
   const code = await steps([
@@ -40,35 +39,21 @@ export async function migrateAssets(args: CliArgs): Promise<number> {
       if (!ids.length) return finishReading(ctx, 'No se eligió ningún archivo.');
     },
     async () => {
-      const [srcAssets, dstAssets, srcLocales, dstLocalesRead] = await withStatus(
+      review = await withStatus(
         'Revisando los archivos en ambos ambientes…',
         ctx.animate,
-        () =>
-          Promise.all([
-            fetchAssets(ctx.cma, ctx.src, ids),
-            fetchAssets(ctx.cma, ctx.dst, ids),
-            ctx.locales(ctx.src),
-            ctx.locales(ctx.dst),
-          ]),
-        ([, dst]) => `${dst.size} de ${ids.length} ya existen en ${ctx.dst}`,
+        (status) => assetMigration(ctx.space, ctx).analyze(ids, status.update),
+        ({ assets }) => `${assets.existing.size} de ${ids.length} ya existen en ${ctx.dst}`,
       );
-      dstLocales = dstLocalesRead;
-      const existing = new Set(dstAssets.keys());
-      const missing = ids.filter((id) => !existing.has(id) && srcAssets.has(id));
-      renderAssets({
-        src: ctx.src,
-        dst: ctx.dst,
-        assets: { ids, src: srcAssets, existing, missing },
-        locales: { src: srcLocales },
-      });
-      if (!missing.length) return finishReading(ctx, `Nada que copiar: ya existen en ${ctx.dst}.`);
-      toCreate = missing.flatMap((id) => srcAssets.get(id) ?? []);
+      renderAssets(review);
+      if (review.isEmpty) return finishReading(ctx, `Nada que copiar: ya existen en ${ctx.dst}.`);
+      const { toCreate, assets } = review;
 
       log.step('Resumen');
       log.block(
         [
           `${pc.bold('Se crean')}        ${pc.green(`${toCreate.length} archivo(s) en ${ctx.dst}`)} ${pc.dim('(en draft)')}`,
-          `${pc.bold('Se reutilizan')}   ${existing.size} que ya existen`,
+          `${pc.bold('Se reutilizan')}   ${assets.existing.size} que ya existen`,
         ].join('\n'),
       );
       if (args.dryRun) return finishDryRun(ctx, ['Para copiarlos de verdad:', pc.cyan(repeat())]);
@@ -77,7 +62,7 @@ export async function migrateAssets(args: CliArgs): Promise<number> {
     },
     async () => {
       const write = await startWriting(ctx, 'assets');
-      await applyAssets(toCreate, dstLocales, write);
+      await review.execute(write);
       return finishWriting(ctx, write, {
         title: 'Archivos copiados',
         repeat: repeat(),

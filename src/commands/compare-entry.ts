@@ -28,10 +28,10 @@ export async function compareEntry(args: CliArgs): Promise<number> {
         ctx.animate,
         () =>
           Promise.all([
-            fetchEntries(ctx.cma, ctx.src, ids),
-            fetchEntries(ctx.cma, ctx.dst, ids),
-            ctx.contentTypes(ctx.src),
-            ctx.locales(ctx.src),
+            fetchEntries(ctx.space.cma, ctx.src, ids),
+            fetchEntries(ctx.space.cma, ctx.dst, ids),
+            ctx.space.contentTypes(ctx.src),
+            ctx.space.locales(ctx.src),
           ]),
         ([src, dst]) => `${src.size} en ${ctx.src} · ${dst.size} en ${ctx.dst}`,
       );

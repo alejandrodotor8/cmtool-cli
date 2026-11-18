@@ -1,6 +1,8 @@
 # Publicar cmtool-cli en npm
 
-Se publica **solo, con GitHub Actions, al subir una etiqueta de versión** (`v0.18.0`), igual que el núcleo. `cmtool-cli` lleva el núcleo (`cmtool-core`) dentro de su build, así que **primero se publica el núcleo** y después el CLI. Esta guía no se incluye en el paquete: npm solo sube lo que dice `files` en `package.json`.
+Se publica **solo, con GitHub Actions, al subir una etiqueta de versión** (`v0.18.0`), igual que el núcleo. `cmtool-cli` lleva el núcleo (`cmtool-core`) dentro de su build, así que **primero se publica el núcleo** y después el CLI.
+
+**El núcleo y el CLI llevan siempre la misma versión:** `cfm` 0.18.0 lleva el núcleo 0.18.0. Cada versión se publica en los dos, aunque uno no haya cambiado, y [test/app.test.ts](test/app.test.ts) falla si `package.json` pide otra versión del núcleo. Esta guía no se incluye en el paquete: npm solo sube lo que dice `files` en `package.json`.
 
 ## Cómo funciona
 
@@ -36,6 +38,8 @@ La Action publica con **trusted publishing**: npm confía en este workflow (`rel
 
    **No lo hagas antes:** npm borra un trusted publisher nuevo si no publica nada en los 2 días siguientes. Regístralo y, ese mismo día, sube la etiqueta de la versión nueva. Desde ahí la Action publica sola, siempre.
 
+   Para `cmtool-cli` ya está hecho: se registró el 17 de noviembre de 2026, y la 0.17.1 la publicó la Action.
+
    Es lo mismo que en npmjs.com → `cmtool-cli` → *Settings* → *Trusted Publisher* → *GitHub Actions*, con *Allowed actions*: `npm publish`. **`--allow-publish` es necesario**: sin él, npm solo deja que el workflow prepare la publicación (`npm stage publish`) y que tú la apruebes.
 
 No uses un token con *bypass 2FA*: npm ya no deja que esos tokens publiquen directo (responde `EOTP`), y van a perder ese permiso del todo. Si ya creaste uno para esto, bórralo en npmjs.com (*Access Tokens*) y el secreto `NPM_TOKEN` del environment `prod` en GitHub: el workflow ya no lo usa.
@@ -50,11 +54,11 @@ No uses un token con *bypass 2FA*: npm ya no deja que esos tokens publiquen dire
 | `dist/cli.js` | el build: el CLI, el núcleo y sus dependencias en un solo archivo |
 | `README.md`, `CHANGELOG.md`, `LICENSE`, `package.json` | lo que se ve en la página de npm |
 
-Son 7 archivos, unos 191 kB, y solo instala `picocolors`. No lleva `src/`, `scripts/` (ahí está el script `dev`, que corre el código fuente), los tests ni el grafo. `bin/` se publica entero, así que ahí solo va lo que usa `cfm`; [test/app.test.ts](test/app.test.ts) lo revisa. **La app de Mac y el `.exe` no van en npm**: se reparten como archivo (README, sección *Ejecutables para Mac y Windows*).
+Son 7 archivos, unos 183 kB, y solo instala `picocolors`. No lleva `src/`, `scripts/` (ahí está el script `dev`, que corre el código fuente), los tests ni el grafo. `bin/` se publica entero, así que ahí solo va lo que usa `cfm`; [test/app.test.ts](test/app.test.ts) lo revisa. **La app de Mac y el `.exe` no van en npm**: se reparten como archivo (README, sección *Ejecutables para Mac y Windows*).
 
 ## Cada versión
 
-1. **Si cambió el núcleo**, publícalo primero y actualízalo aquí: `bun add -d -E cmtool-core@<versión>`.
+1. **Publica primero el núcleo con la misma versión** (aunque no haya cambiado) y actualízalo aquí: `bun add -d -E cmtool-core@<versión>`.
 2. **CHANGELOG y versión.** Agrega una entrada en [CHANGELOG.md](CHANGELOG.md) y sube la versión: menor si es una funcionalidad, de parche si es una corrección.
 
    ```bash

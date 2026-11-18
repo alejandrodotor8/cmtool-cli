@@ -2,6 +2,22 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+Desde la 0.18.0, `cmtool-cli` y `cmtool-core` llevan siempre la misma versión: `cfm` 0.18.0 lleva adentro el núcleo 0.18.0.
+
+## 0.18.0 — 2026-11-18
+
+### Cambiado
+
+- **Usa la API nueva del núcleo** (`cmtool-core` 0.18.0): la conexión (`connect`) y las migraciones por etapas. Los comandos ya no encadenan funciones sueltas del núcleo: `migrate` importa 8 nombres del núcleo en vez de 28, y `migrate-model` 3 en vez de 16. El contexto de los comandos lleva el space de la conexión, que ya guarda lo que lee, en vez de memorizar cada lectura a mano.
+- `restore` escribe a través del núcleo (`backupRestore`), como las demás migraciones. Cada entry restaurada se lista como "título · ID", igual que en las otras fases.
+- `compare-models` usa la misma etapa de análisis que `migrate-model`.
+- **El README es para quien usa `cfm`:** instalar, iniciar sesión, migrar, deshacer y qué garantiza, en ese orden, con una tabla de problemas comunes. Lo de programarlo (desde el código, build, tests, estructura y ejecutables) pasó a [DESARROLLO.md](DESARROLLO.md), que no va en el paquete.
+- [app.test.ts](test/app.test.ts) revisa que el núcleo se pida con la misma versión que el CLI.
+
+### Corregido
+
+- El README todavía decía "cuando `cmtool-cli` esté publicado" y "mientras `cmtool-core` no esté en npm".
+
 ## 0.17.1 — 2026-11-17
 
 ### Corregido

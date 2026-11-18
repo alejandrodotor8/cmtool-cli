@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * cfm: corre la versión compilada (dist/). Se genera con el script `build`
- * y no cambia hasta que vuelvas a compilar. Para correr el código fuente, usa cfm-dev.
+ * y no cambia hasta que vuelvas a compilar. Para correr el código fuente, usa el script `dev`.
  */
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -18,7 +18,7 @@ const srcDirs = ['../src', '../node_modules/cmtool-core/dist'].map((dir) =>
 
 if (!existsSync(entry)) {
   console.error(
-    `cfm: todavía no hay build. En la carpeta del proyecto corre el script "build"\n(${BUILD_HINT}), o usa cfm-dev para correr el código fuente.`,
+    `cfm: todavía no hay build. En la carpeta del proyecto corre el script "build"\n(${BUILD_HINT}), o el script "dev" para correr el código fuente.`,
   );
   process.exit(1);
 }
@@ -32,7 +32,7 @@ if (
 ) {
   console.error(
     pc.yellow('⚠ El build es más viejo que el código (src/ o cmtool-core): estás corriendo una versión anterior.\n') +
-      pc.dim(`  Para usar los cambios, corre el script "build" (${BUILD_HINT}) o usa cfm-dev.`),
+      pc.dim(`  Para usar los cambios, corre el script "build" (${BUILD_HINT}) o usa el script "dev".`),
   );
 }
 

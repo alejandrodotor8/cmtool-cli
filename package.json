@@ -1,6 +1,6 @@
 {
   "name": "cmtool-cli",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "description": "cfm: migra entries de Contentful entre ambientes desde la terminal, dejándolas en draft (usa cmtool-core)",
   "keywords": [
     "contentful",
@@ -20,8 +20,7 @@
   },
   "type": "module",
   "bin": {
-    "cfm": "./bin/cfm.mjs",
-    "cfm-dev": "./bin/cfm-dev.mjs"
+    "cfm": "./bin/cfm.mjs"
   },
   "files": [
     "bin",
@@ -32,7 +31,7 @@
     "build": "node scripts/build.mjs",
     "build:release": "node scripts/build-release.mjs",
     "start": "node bin/cfm.mjs",
-    "dev": "node bin/cfm-dev.mjs",
+    "dev": "node scripts/dev.mjs",
     "typecheck": "tsc",
     "lint": "biome check .",
     "format": "biome check --write .",

@@ -2,6 +2,13 @@
 
 Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamiento sube la versión menor (0.3.0 → 0.4.0); una corrección, la de parche (0.4.0 → 0.4.1).
 
+## 0.17.1 — 2026-11-17
+
+### Corregido
+
+- **El paquete de npm ya no instala `cfm-dev`.** Es solo para desarrollar: corre el código fuente, que no va en el paquete. Instalado desde npm no servía, solo avisaba. Ahora se corre con el script `dev` (`bun run dev`, desde la carpeta del repo), que está en [scripts/dev.mjs](scripts/dev.mjs) y no se publica. Instalado con `bun link` o `npm link` desde el repo, ahora también trae solo `cfm`. **Si instalaste la 0.17.0**, quítala y vuelve a instalarla para que `cfm-dev` desaparezca: `bun rm -g cmtool-cli && bun add -g cmtool-cli` (con npm, `npm rm -g cmtool-cli && npm install -g cmtool-cli`).
+- [app.test.ts](test/app.test.ts) revisa que el paquete tenga un solo comando (`cfm`), y que `bin/`, que se publica entero, solo lleve lo que usa `cfm`.
+
 ## 0.17.0 — 2026-11-17
 
 ### Cambiado

@@ -8,8 +8,8 @@ test('APP_NAME es el comando de package.json (cfm) y VERSION, su versión', () =
   const pkg = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'package.json'), 'utf8'));
   assert.equal(APP_NAME, 'cfm');
   assert.equal(VERSION, pkg.version);
-  assert.ok(pkg.bin[APP_NAME], 'package.json bin debe tener el comando');
-  assert.ok(pkg.bin[`${APP_NAME}-dev`], 'y su versión -dev');
+  // Un solo comando. Correr el código fuente es el script "dev" (scripts/), que no se publica.
+  assert.deepEqual(pkg.bin, { cfm: './bin/cfm.mjs' });
 });
 
 test('el núcleo se pide de npm con versión exacta, y solo para el build', () => {
@@ -26,7 +26,8 @@ test('el paquete publica solo bin/, el build y el CHANGELOG, con licencia MIT', 
   const root = path.join(import.meta.dirname, '..');
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   assert.deepEqual(pkg.files, ['bin', 'dist', 'CHANGELOG.md']);
-  for (const file of Object.values(pkg.bin) as string[]) assert.match(file, /^\.\/bin\//);
+  // bin/ se publica entero: solo lleva lo que usa cfm, nada de desarrollo.
+  assert.deepEqual(fs.readdirSync(path.join(root, 'bin')).sort(), ['cfm.mjs', 'stale-build.mjs']);
   assert.equal(pkg.license, 'MIT');
   assert.match(fs.readFileSync(path.join(root, 'LICENSE'), 'utf8'), /^MIT License\n\nCopyright \(c\) \d{4} \S/);
 });

@@ -6,7 +6,7 @@
     "moduleResolution": "nodenext",
     "types": ["node"],
 
-    // Node ejecuta los .ts quitando los tipos (cfm-dev y los tests); el build los empaqueta con esbuild.
+    // Node ejecuta los .ts quitando los tipos (el script dev y los tests); el build los empaqueta con esbuild.
     // Este tsconfig solo revisa: no genera archivos.
     "noEmit": true,
     "allowImportingTsExtensions": true,

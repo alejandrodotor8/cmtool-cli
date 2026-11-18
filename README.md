@@ -34,7 +34,7 @@ Cuando `cmtool-cli` esté publicado (ver [PUBLICAR.md](PUBLICAR.md)):
 | **Actualizar** | `npm install -g cmtool-cli@latest` | `pnpm add -g cmtool-cli@latest` | `bun add -g cmtool-cli@latest` |
 | **Quitar** | `npm rm -g cmtool-cli` | `pnpm rm -g cmtool-cli` | `bun rm -g cmtool-cli` |
 
-Instala el comando `cfm`. No descarga el núcleo ni las librerías de la terminal, porque ya van dentro del build; solo trae `picocolors`. `cfm-dev` también se instala, pero solo funciona desde el repositorio (ver [Build y desarrollo](#build-y-desarrollo)).
+Instala el comando `cfm`. No descarga el núcleo ni las librerías de la terminal, porque ya van dentro del build; solo trae `picocolors`.
 
 ### Desde el código (para desarrollar)
 
@@ -81,8 +81,8 @@ Desde la carpeta del repositorio, con tu gestor:
 | --- | --- | --- | --- |
 | **Instalar dependencias** | `npm install` | `pnpm install` | `bun install` |
 | **Compilar (build)** | `npm run build` | `pnpm build` | `bun run build` |
-| **Instalar los comandos** | `npm link` | `pnpm add -g "link:$PWD"` | `bun link` |
-| **Quitar los comandos** | `npm rm -g cmtool-cli` | `pnpm rm -g cmtool-cli` | `bun unlink` |
+| **Instalar el comando** | `npm link` | `pnpm add -g "link:$PWD"` | `bun link` |
+| **Quitar el comando** | `npm rm -g cmtool-cli` | `pnpm rm -g cmtool-cli` | `bun unlink` |
 | **Correr el build sin instalar** | `npm start -- --dry-run` | `pnpm start --dry-run` | `bun run start --dry-run` |
 | **Correr el código fuente sin instalar** | `npm run dev -- --dry-run` | `pnpm dev --dry-run` | `bun run dev --dry-run` |
 
@@ -90,15 +90,15 @@ Desde la carpeta del repositorio, con tu gestor:
 
 Los comandos son los mismos en macOS y Windows (en PowerShell, `$PWD` también es la carpeta actual).
 
-- **Se instalan dos comandos** (ver [Build y desarrollo](#build-y-desarrollo)): `cfm`, que corre el build, y `cfm-dev`, que corre el código fuente.
-- **El comando es un enlace a la carpeta del repositorio, no una copia.** Por eso con pnpm se usa `link:` (en pnpm 10+ ya no existe `pnpm link --global`). `cfm-dev` además lo necesita: Node no ejecuta `.ts` dentro de `node_modules`.
-- **Instala los comandos de una sola forma.** Si tienes dos instalaciones (por ejemplo, `bun link` desde el repo y `npm install -g cmtool-cli`), gana la que esté primero en el PATH y es fácil confundirse.
-- **yarn 1** también sirve para instalar dependencias y correr los scripts (`yarn install`, `yarn build`, `yarn run check`; ojo: `yarn check` a secas es un comando propio de yarn y no corre el nuestro). Para instalar los comandos, usa `npm link`.
+- **Se instala un solo comando, `cfm`**, que corre el build. Para correr el código fuente, usa el script `dev` desde la carpeta del repo (ver [Build y desarrollo](#build-y-desarrollo)).
+- **El comando es un enlace a la carpeta del repositorio, no una copia.** Por eso con pnpm se usa `link:` (en pnpm 10+ ya no existe `pnpm link --global`).
+- **Instala `cfm` de una sola forma.** Si tienes dos instalaciones (por ejemplo, `bun link` desde el repo y `npm install -g cmtool-cli`), gana la que esté primero en el PATH y es fácil confundirse.
+- **yarn 1** también sirve para instalar dependencias y correr los scripts (`yarn install`, `yarn build`, `yarn run check`; ojo: `yarn check` a secas es un comando propio de yarn y no corre el nuestro). Para instalar el comando, usa `npm link`.
 - **Si lo instalaste antes de la 0.17.0**, el comando apunta a la carpeta del proyecto anterior: quítalo y vuelve a instalarlo desde este repo. Con npm: `npm rm -g cfm`; con pnpm: `pnpm rm -g cfm`; con bun: borra `~/.bun/bin/cfm`, `~/.bun/bin/cfm-dev` y `~/.bun/install/global/node_modules/cfm` (son enlaces).
 
 ### Cambiar de gestor de paquetes
 
-1. Quita el comando con el gestor anterior (fila **Quitar los comandos**).
+1. Quita el comando con el gestor anterior (fila **Quitar el comando**).
 2. Borra lo que instaló:
 
    ```bash
@@ -139,17 +139,17 @@ También puedes definir el token en la terminal; tiene prioridad sobre el archiv
 | Comando | Qué corre | Cuándo cambia |
 | --- | --- | --- |
 | `cfm` | el **build**: el CLI y el núcleo empaquetados en un solo archivo, `dist/cli.js` (arranca más rápido) | solo cuando vuelves a correr el script `build` |
-| `cfm-dev` | el **código fuente** del CLI, sin compilar; el núcleo, compilado, desde `node_modules` | al instante, con cada cambio que guardes en `src/` |
+| el script `dev` | el **código fuente** del CLI, sin compilar; el núcleo, compilado, desde `node_modules`. Solo desde la carpeta del repo | al instante, con cada cambio que guardes en `src/` |
 
 - Usa **`cfm`** para trabajar: no le afectan los cambios a medio hacer ni cambiar de rama en git.
-- Usa **`cfm-dev`** mientras programas: lo indica en la cabecera con *[desarrollo: código fuente]*. Solo funciona desde el repositorio: instalado desde npm no hay `src/`, y lo dice.
+- Usa **el script `dev`** mientras programas, con las mismas opciones de `cfm`: `bun run dev migrate --dry-run` (con npm, `npm run dev -- migrate --dry-run`). Lo indica en la cabecera con *[desarrollo: código fuente]*. No es un comando ni va en el paquete de npm: está en [scripts/dev.mjs](scripts/dev.mjs), que no se publica.
 - **Después de actualizar el código** (cambiar de rama, fusionar, recibir una versión nueva o actualizar `cmtool-core`), vuelve a correr el script `build` para que `cfm` use lo nuevo.
-- Si corres `cfm` sin haber compilado, te dice que corras el `build` (o que uses `cfm-dev`).
+- Si corres `cfm` sin haber compilado, te dice que corras el `build` (o que uses el script `dev`).
 - Si el código de `src/` o el núcleo instalado son más nuevos que el build, `cfm` **avisa** antes de empezar (y sigue corriendo la versión anterior). Pasa, por ejemplo, si recompilas el núcleo enlazado y no este repo.
-- **No hace falta volver a instalar los comandos** después de un build: apuntan a la carpeta del repo y toman el `dist/` nuevo. Solo hay que repetir la instalación si mueves la carpeta, si cambian los comandos en `package.json` o, con npm, si cambias de versión de Node.
+- **No hace falta volver a instalar el comando** después de un build: apunta a la carpeta del repo y toman el `dist/` nuevo. Solo hay que repetir la instalación si mueves la carpeta, si cambia `bin` en `package.json` o, con npm, si cambias de versión de Node.
 - `dist/` no se sube al repo: cada quien lo genera con su gestor. Al publicar en npm se genera solo (ver [PUBLICAR.md](PUBLICAR.md)).
 - `pnpm-workspace.yaml` es solo para quien use pnpm: le permite a esbuild (el empaquetador del build) correr su instalación. npm, yarn y bun lo ignoran.
-- **Por qué un solo archivo**: el build junta el código, el núcleo y sus dependencias (contentful-management, axios…) con esbuild. Así `cfm` abre ~20 archivos al arrancar en vez de ~440, que era lo que hacía lenta la primera ejecución (con el disco en frío, cada archivo cuenta). `cfm-dev` sigue leyendo los archivos sueltos, así que arranca más lento.
+- **Por qué un solo archivo**: el build junta el código, el núcleo y sus dependencias (contentful-management, axios…) con esbuild. Así `cfm` abre ~20 archivos al arrancar en vez de ~440, que era lo que hacía lenta la primera ejecución (con el disco en frío, cada archivo cuenta). El script `dev` sigue leyendo los archivos sueltos, así que arranca más lento.
 - **Mientras ves el menú**, la herramienta ya se conecta con Contentful y trae tus spaces (y los ambientes, si ya se sabe el space). Al elegir, normalmente ya están listos. Con `--verbose` no lo hace, para no mezclar líneas con el menú.
 
 ### Notas
@@ -388,9 +388,9 @@ pnpm-workspace.yaml  solo para pnpm: deja correr la instalación de esbuild
 tsconfig.json        revisa tipos (no genera archivos)
 bin/
   cfm.mjs            comando del build: carga dist/cli.js (avisa si el build quedó viejo)
-  cfm-dev.mjs        comando de desarrollo: corre src/ sin compilar (el núcleo, ya compilado)
   stale-build.mjs    compara las fechas del código (src/ y el núcleo instalado) con la del build
-scripts/
+scripts/             no se publica en npm
+  dev.mjs            el script dev: corre src/ sin compilar (el núcleo, ya compilado)
   build.mjs          el build: empaqueta el CLI, el núcleo y sus dependencias con esbuild
   build-release.mjs  la app de Mac y el ejecutable de Windows (bun build --compile), firma y notarización
   entitlements.plist permisos de la app firmada con Developer ID
@@ -425,7 +425,7 @@ graphify-out/        el grafo del código, de antes de separar los repositorios
 
 ## Desarrollo
 
-El código es TypeScript. `cfm-dev` lo ejecuta directo (Node quita los tipos al vuelo): editas un `.ts` de `src/` y lo corres. `cfm` usa el build, que se regenera con el script `build`.
+El código es TypeScript. El script `dev` lo ejecuta directo (Node quita los tipos al vuelo): editas un `.ts` de `src/` y lo corres. `cfm` usa el build, que se regenera con el script `build`.
 
 Con tu gestor (`npm run …`, `pnpm …`, `yarn run …` o `bun run …`):
 
@@ -443,7 +443,7 @@ Con tu gestor (`npm run …`, `pnpm …`, `yarn run …` o `bun run …`):
 
 Por ejemplo: `npm run check`, `pnpm check` o `bun run check`. Los tests siempre corren con Node (`node --test`), también con bun.
 
-**Cómo usa el CLI al núcleo.** El CLI importa `cmtool-core` como cualquier paquete de npm (`import { buildPlan } from 'cmtool-core'`), con versión exacta y como dependencia de desarrollo: el build lo mete dentro de `dist/cli.js`. tsc, los tests y `cfm-dev` usan su versión compilada (`dist/`) desde `node_modules`.
+**Cómo usa el CLI al núcleo.** El CLI importa `cmtool-core` como cualquier paquete de npm (`import { buildPlan } from 'cmtool-core'`), con versión exacta y como dependencia de desarrollo: el build lo mete dentro de `dist/cli.js`. tsc, los tests y el script `dev` usan su versión compilada (`dist/`) desde `node_modules`.
 
 Para cambiar el núcleo y probarlo aquí sin publicarlo, **enlázalo** con bun:
 
@@ -452,7 +452,7 @@ cd ../cmtool-core && bun run build && bun link   # una vez: registra el núcleo 
 cd ../cmtool-cli && bun link cmtool-core         # node_modules/cmtool-core apunta al repo del núcleo
 ```
 
-`bun link cmtool-core` no cambia `package.json`: sigue pidiendo la versión de npm. Después de cada cambio en el núcleo corre `bun run build` en su repo: `cfm-dev` ya lo ve, y `cfm`, después de `bun run build` aquí (si se te olvida, avisa). Para volver a la versión de npm, `bun install --force`: `bun install` a secas deja el enlace. No uses `bun link --save`: escribe `link:cmtool-core` en `package.json`, que npm no entiende, y `bun run check` falla.
+`bun link cmtool-core` no cambia `package.json`: sigue pidiendo la versión de npm. Después de cada cambio en el núcleo corre `bun run build` en su repo: el script `dev` ya lo ve, y `cfm`, después de `bun run build` aquí (si se te olvida, avisa). Para volver a la versión de npm, `bun install --force`: `bun install` a secas deja el enlace. No uses `bun link --save`: escribe `link:cmtool-core` en `package.json`, que npm no entiende, y `bun run check` falla.
 
 **Versiones.** Cada repositorio lleva la suya. Para subirla: `bun pm version 0.18.0 --no-git-tag-version` (o `npm version 0.18.0 --no-git-tag-version`), con su entrada en el [CHANGELOG](CHANGELOG.md). Si el CLI necesita algo nuevo del núcleo, primero se publica el núcleo y después se actualiza aquí: `bun add -d -E cmtool-core@<versión>`.
 
@@ -486,7 +486,7 @@ La interfaz usa **[@clack/prompts](https://bomb.sh/docs/clack/packages/prompts/)
 | --- | --- | --- |
 | **@clack/prompts** | ✔ Se usa | Cubre todas las preguntas y los indicadores de progreso con un solo estilo; 4 dependencias pequeñas, sin scripts de instalación. |
 | commander | ✖ | `parseArgs` de Node ya maneja los comandos y flags, con mensajes en español y tests. Commander sumaría una dependencia y mensajes en inglés sin mejorar la experiencia. |
-| Ink | ✖ | React para la terminal, pensado para pantallas completas. Trae 20+ dependencias más React y usa JSX, que Node no ejecuta sin compilar (rompería `cfm-dev`). El flujo es un asistente paso a paso: lo que hace clack. |
+| Ink | ✖ | React para la terminal, pensado para pantallas completas. Trae 20+ dependencias más React y usa JSX, que Node no ejecuta sin compilar (rompería el script `dev`). El flujo es un asistente paso a paso: lo que hace clack. |
 | consola | ✖ | Sus logs duplican los de clack y sus prompts están hechos sobre clack: dos estilos para lo mismo. |
 | listr2 | ✖ | Para árboles de tareas en paralelo. Las escrituras van una por una a propósito; la barra de progreso de clack lo cubre con el mismo estilo, y listr2 tomaría el control de la pantalla. |
 

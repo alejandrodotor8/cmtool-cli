@@ -46,12 +46,11 @@ No uses un token con *bypass 2FA*: npm ya no deja que esos tokens publiquen dire
 
 | Archivo | Para qué |
 | --- | --- |
-| `bin/cfm.mjs`, `bin/stale-build.mjs` | el comando `cfm` |
-| `bin/cfm-dev.mjs` | se instala, pero solo funciona desde el repositorio, y lo dice |
+| `bin/cfm.mjs`, `bin/stale-build.mjs` | el comando `cfm`, el único que instala |
 | `dist/cli.js` | el build: el CLI, el núcleo y sus dependencias en un solo archivo |
 | `README.md`, `CHANGELOG.md`, `LICENSE`, `package.json` | lo que se ve en la página de npm |
 
-Son 8 archivos, unos 191 kB, y solo instala `picocolors`. No lleva `src/`, los tests ni el grafo. **La app de Mac y el `.exe` no van en npm**: se reparten como archivo (README, sección *Ejecutables para Mac y Windows*).
+Son 7 archivos, unos 191 kB, y solo instala `picocolors`. No lleva `src/`, `scripts/` (ahí está el script `dev`, que corre el código fuente), los tests ni el grafo. `bin/` se publica entero, así que ahí solo va lo que usa `cfm`; [test/app.test.ts](test/app.test.ts) lo revisa. **La app de Mac y el `.exe` no van en npm**: se reparten como archivo (README, sección *Ejecutables para Mac y Windows*).
 
 ## Cada versión
 

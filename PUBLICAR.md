@@ -13,14 +13,7 @@ Se publica **solo, con GitHub Actions, al subir una etiqueta de versión** (`v0.
 
 ## Configuración (una sola vez)
 
-**El núcleo, desde npm.** La Action instala las dependencias desde npm, así que `package.json` tiene que pedir el núcleo con su versión exacta (`"cmtool-core": "0.17.0"`), no `link:cmtool-core`. Si todavía dice `link:`, cámbialo cuando el núcleo esté publicado:
-
-```bash
-bun add -d -E cmtool-core@0.17.0
-bun run check && bun run build
-```
-
-Para probar cambios del núcleo sin publicarlo, `bun link cmtool-core` enlaza la carpeta local (README, sección *Desarrollo*). No hagas commit con `link:`: la Action fallaría.
+**El núcleo, desde npm.** La Action instala las dependencias desde npm, así que `package.json` pide el núcleo con su versión exacta (`"cmtool-core": "0.17.0"`), nunca `link:cmtool-core`: npm no lo entiende y la Action fallaría. [test/app.test.ts](test/app.test.ts) lo revisa. Para probar cambios del núcleo sin publicarlo, `bun link cmtool-core` enlaza la carpeta local sin tocar `package.json` (README, sección *Build y desarrollo*).
 
 La Action publica con **trusted publishing**: npm confía en este workflow (`release.yml`, environment `prod`, repo `alejandrodotor8/cmtool-cli`) y no hace falta ningún token. Pero npm solo deja configurarlo **para un paquete que ya existe**, así que la primera versión se publica a mano:
 
@@ -30,6 +23,8 @@ La Action publica con **trusted publishing**: npm confía en este workflow (`rel
    npm login          # y comprueba con npm whoami
    npm publish        # corre check y build antes de subir; npm te pide tu verificación en dos pasos
    ```
+
+   Mientras confirmas la verificación, npm puede mostrar una versión `0.0.0-stage` ("Temporary Holding Version"). Es un aviso de npm, no tu paquete: al aprobar, la versión real queda como `latest`. Con el núcleo pasó así y tardó un par de minutos. Compruébalo con `npm view cmtool-cli version`.
 
 2. **Sube la etiqueta de esa versión** (`git push origin v0.17.0`). La Action ve que ya está en npm y no hace nada.
 3. **Justo antes de publicar la segunda versión, registra la Action como trusted publisher** (pide tu verificación en dos pasos):
@@ -100,4 +95,4 @@ Con Node 22.18 o superior, en macOS o Windows:
 
 Los errores de la Action son los mismos que en el núcleo: etiqueta que no coincide con la versión, trusted publisher que falta o no coincide (`ENEEDAUTH`, `E401`, `E404`), que solo permite `stage` (`E403`), o un token en vez de trusted publishing (`EOTP`). La tabla con qué hacer en cada caso está en el `PUBLICAR.md` de `cmtool-core`. Después de corregir, *Re-run jobs* vuelve a correr la publicación; si la versión ya está en npm, no hace nada.
 
-Uno es propio del CLI: **la instalación falla con `link:cmtool-core`** (en la Action o con npm, `EUNSUPPORTEDPROTOCOL`). `package.json` todavía pide el núcleo enlazado: haz el paso 1 de la configuración.
+Uno es propio del CLI: **la instalación falla con `link:cmtool-core`** (en la Action o con npm, `EUNSUPPORTEDPROTOCOL`). `package.json` pide el núcleo enlazado, por ejemplo después de `bun link --save`. Vuelve a la versión exacta: `bun add -d -E cmtool-core@<versión>`. `bun run check` lo detecta antes del commit.

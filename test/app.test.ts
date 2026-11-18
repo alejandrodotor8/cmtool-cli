@@ -12,12 +12,13 @@ test('APP_NAME es el comando de package.json (cfm) y VERSION, su versión', () =
   assert.ok(pkg.bin[`${APP_NAME}-dev`], 'y su versión -dev');
 });
 
-test('el núcleo se pide con versión exacta (o enlazado, antes de publicarlo), y solo para el build', () => {
+test('el núcleo se pide de npm con versión exacta, y solo para el build', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, '..', 'package.json'), 'utf8'));
   // El build lleva el núcleo dentro de dist/cli.js: quien instala cfm no lo descarga.
   assert.equal(pkg.dependencies['cmtool-core'], undefined);
-  // Versión exacta (nunca un rango): se sabe qué núcleo va en cada versión de cfm.
-  assert.match(pkg.devDependencies['cmtool-core'], /^(\d+\.\d+\.\d+|link:cmtool-core)$/);
+  // Versión exacta: se sabe qué núcleo va en cada versión de cfm. Ni un rango ni link:
+  // (bun link --save lo deja así), que npm no entiende y haría fallar la Action.
+  assert.match(pkg.devDependencies['cmtool-core'], /^\d+\.\d+\.\d+$/);
 });
 
 // El paquete es público (ya no tiene "private"): esto cuida qué sube a npm.

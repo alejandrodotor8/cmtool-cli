@@ -86,14 +86,7 @@ Desde la carpeta del repositorio, con tu gestor:
 | **Correr el build sin instalar** | `npm start -- --dry-run` | `pnpm start --dry-run` | `bun run start --dry-run` |
 | **Correr el código fuente sin instalar** | `npm run dev -- --dry-run` | `pnpm dev --dry-run` | `bun run dev --dry-run` |
 
-> **Mientras `cmtool-core` no esté publicado en npm**, este repo lo pide enlazado (`"cmtool-core": "link:cmtool-core"` en `package.json`), y eso solo lo entiende bun. Antes de instalar, compila y registra el núcleo una vez desde su repo:
->
-> ```bash
-> cd ../cmtool-core && bun install && bun run build && bun link
-> cd ../cmtool-cli && bun install
-> ```
->
-> Cuando el núcleo esté en npm, `package.json` lo pide con su versión y cualquier gestor sirve (ver [PUBLICAR.md](PUBLICAR.md)).
+`npm install` (o el de tu gestor) descarga el núcleo, `cmtool-core`, desde npm: no hace falta tener su repositorio.
 
 Los comandos son los mismos en macOS y Windows (en PowerShell, `$PWD` también es la carpeta actual).
 
@@ -459,7 +452,7 @@ cd ../cmtool-core && bun run build && bun link   # una vez: registra el núcleo 
 cd ../cmtool-cli && bun link cmtool-core         # node_modules/cmtool-core apunta al repo del núcleo
 ```
 
-Después de cada cambio en el núcleo corre `bun run build` en su repo: `cfm-dev` ya lo ve, y `cfm`, después de `bun run build` aquí (si se te olvida, avisa). Para volver a la versión de npm, `bun install`. Hoy, antes de publicar el núcleo, `package.json` ya lo pide enlazado (`link:cmtool-core`).
+`bun link cmtool-core` no cambia `package.json`: sigue pidiendo la versión de npm. Después de cada cambio en el núcleo corre `bun run build` en su repo: `cfm-dev` ya lo ve, y `cfm`, después de `bun run build` aquí (si se te olvida, avisa). Para volver a la versión de npm, `bun install --force`: `bun install` a secas deja el enlace. No uses `bun link --save`: escribe `link:cmtool-core` en `package.json`, que npm no entiende, y `bun run check` falla.
 
 **Versiones.** Cada repositorio lleva la suya. Para subirla: `bun pm version 0.18.0 --no-git-tag-version` (o `npm version 0.18.0 --no-git-tag-version`), con su entrada en el [CHANGELOG](CHANGELOG.md). Si el CLI necesita algo nuevo del núcleo, primero se publica el núcleo y después se actualiza aquí: `bun add -d -E cmtool-core@<versión>`.
 

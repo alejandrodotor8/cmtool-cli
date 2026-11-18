@@ -4,6 +4,12 @@ Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamie
 
 Desde la 0.18.0, `cmtool-cli` y `cmtool-core` llevan siempre la misma versión: `cfm` 0.18.0 lleva adentro el núcleo 0.18.0.
 
+## 0.19.0 — 2026-11-18
+
+### Cambiado
+
+- Usa `cmtool-core` 0.19.0. La tabla de imágenes toma el nombre y el detalle de cada archivo del núcleo (`describeAsset`, `assetDetailText`), así el CLI y la web del dashboard muestran lo mismo. Un asset sin título en el idioma por defecto ahora muestra el de otro idioma antes que el nombre del archivo.
+
 ## 0.18.0 — 2026-11-18
 
 ### Cambiado

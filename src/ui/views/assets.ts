@@ -1,8 +1,8 @@
-import type { Analysis } from 'cmtool-core';
+import { type Analysis, assetDetailText, describeAsset } from 'cmtool-core';
 import pc from 'picocolors';
 import { log } from '../log.ts';
 import { clip, MARK, table } from '../table.ts';
-import { envColumns, formatBytes } from './shared.ts';
+import { envColumns } from './shared.ts';
 
 /** Lo que necesita la tabla de imágenes (sirve para "migrar entries" y "migrar imágenes"). */
 export type AssetsView = Pick<Analysis, 'src' | 'dst' | 'assets'> & { locales: Pick<Analysis['locales'], 'src'> };
@@ -26,15 +26,9 @@ export function renderAssets({ src, dst, assets, locales }: AssetsView): void {
         inDst ? pc.dim('se reutiliza') : pc.red(`no existe en ${src}`),
       ];
     }
-    const files = asset.fields.file ?? {};
-    const file = (locale ? files[locale] : undefined) ?? Object.values(files)[0];
-    const name = (locale ? asset.fields.title?.[locale] : undefined) ?? file?.fileName ?? '(sin nombre)';
-    const img = file?.details?.image as { width: number; height: number } | undefined;
-    const detail = [file?.contentType, img && `${img.width}×${img.height}`, formatBytes(file?.details?.size)]
-      .filter(Boolean)
-      .join(' · ');
+    const info = describeAsset(asset, locale);
     const status = inDst ? pc.green('ya existe → se reutiliza') : pc.yellow(`falta en ${dst}`);
-    return [clip(name), pc.dim(id), pc.dim(detail), MARK.yes, dstMark, status];
+    return [clip(info.name), pc.dim(id), pc.dim(assetDetailText(info)), MARK.yes, dstMark, status];
   });
 
   table({

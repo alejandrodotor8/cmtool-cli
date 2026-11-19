@@ -4,6 +4,12 @@ Cada cambio sube la versión: una funcionalidad nueva o un cambio de comportamie
 
 Desde la 0.18.0, `cmtool-cli` y `cmtool-core` llevan siempre la misma versión: `cfm` 0.18.0 lleva adentro el núcleo 0.18.0.
 
+## 0.20.0 — 2026-11-18
+
+### Cambiado
+
+- Usa `cmtool-core` 0.20.0. En `cfm compare-entry`, el resumen de un rich text ya no parte las palabras que tienen un formato en una parte, y muestra las entries embebidas como `[→ id]`.
+
 ## 0.19.0 — 2026-11-18
 
 ### Cambiado
